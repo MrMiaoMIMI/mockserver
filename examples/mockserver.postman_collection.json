@@ -1,0 +1,1192 @@
+{
+  "info": {
+    "_postman_id": "d9b9c0be-189b-4c56-9f78-4a2b2b5f7a10",
+    "name": "Mockserver Local Debug",
+    "description": "Import this collection into Postman to debug the local mockserver admin and runtime APIs. Default base_url is http://127.0.0.1:8080. If admin auth is disabled, leave admin_token empty.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8080",
+      "type": "string"
+    },
+    {
+      "key": "admin_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "operator",
+      "value": "postman-local",
+      "type": "string"
+    },
+    {
+      "key": "trace_id",
+      "value": "postman-trace-001",
+      "type": "string"
+    },
+    {
+      "key": "ruleset_id",
+      "value": "http-default",
+      "type": "string"
+    },
+    {
+      "key": "rule_id",
+      "value": "debug-api",
+      "type": "string"
+    },
+    {
+      "key": "snapshot_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "webhook_url",
+      "value": "https://postman-echo.com/post",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{admin_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!pm.variables.get('trace_id')) {",
+          "  pm.variables.set('trace_id', 'postman-' + Date.now());",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('HTTP status is 2xx or expected mock miss', function () {",
+          "  pm.expect(pm.response.code).to.be.oneOf([200, 201, 204, 404]);",
+          "});"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "01 Draft Ruleset",
+      "item": [
+        {
+          "name": "Upsert draft ruleset - template_response",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Mockserver-Operator",
+                "value": "{{operator}}"
+              },
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"http default\",\n  \"enabled\": true,\n  \"protocol\": \"http\",\n  \"namespace\": \"default\",\n  \"selector\": {\n    \"all\": [\n      {\n        \"field\": \"request.host\",\n        \"op\": \"eq\",\n        \"value\": \"demo.com\"\n      },\n      {\n        \"field\": \"request.path\",\n        \"op\": \"prefix\",\n        \"value\": \"/api/\"\n      }\n    ]\n  },\n  \"rules\": [\n    {\n      \"id\": \"{{rule_id}}\",\n      \"enabled\": true,\n      \"priority\": 100,\n      \"when\": {\n        \"all\": [\n          {\n            \"field\": \"request.method\",\n            \"op\": \"eq\",\n            \"value\": \"GET\"\n          },\n          {\n            \"field\": \"request.path\",\n            \"op\": \"eq\",\n            \"value\": \"/api/v1/debug\"\n          },\n          {\n            \"field\": \"request.query.q1[*]\",\n            \"op\": \"contains\",\n            \"value\": \"qv1\"\n          }\n        ]\n      },\n      \"action\": {\n        \"type\": \"template_response\",\n        \"status\": 200,\n        \"headers\": {\n          \"content-type\": [\n            \"application/json\"\n          ]\n        },\n        \"body_template\": \"{\\\"message\\\":\\\"hello {{ query . \\\\\\\"q1\\\\\\\" }}\\\",\\\"path\\\":\\\"{{ field . \\\\\\\"request.path\\\\\\\" }}\\\"}\"\n      }\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/rulesets",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "rulesets"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data && json.data.id) { pm.collectionVariables.set('ruleset_id', json.data.id); }",
+                  "pm.test('upsert success envelope', function () { pm.expect(json.code).to.eql(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List draft rulesets",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/rulesets",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "rulesets"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get draft ruleset",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/rulesets/{{ruleset_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "rulesets",
+                "{{ruleset_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Validate draft ruleset",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/rulesets/{{ruleset_id}}/validate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "rulesets",
+                "{{ruleset_id}}",
+                "validate"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Simulate",
+      "item": [
+        {
+          "name": "Simulate draft - full explain",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": {\n    \"protocol\": \"http\",\n    \"namespace\": \"default\",\n    \"request\": {\n      \"method\": \"GET\",\n      \"scheme\": \"http\",\n      \"host\": \"demo.com\",\n      \"path\": \"/api/v1/debug\",\n      \"query\": {\n        \"q1\": [\"qv1\"]\n      },\n      \"headers\": {\n        \"x-debug\": [\"1\"]\n      }\n    },\n    \"meta\": {\n      \"trace_id\": \"{{trace_id}}\"\n    }\n  },\n  \"explain_only\": false,\n  \"explain_max_depth\": 8,\n  \"explain_summary\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/rulesets/{{ruleset_id}}/simulate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "rulesets",
+                "{{ruleset_id}}",
+                "simulate"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Simulate draft - explain only summary",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": {\n    \"protocol\": \"http\",\n    \"namespace\": \"default\",\n    \"request\": {\n      \"method\": \"GET\",\n      \"host\": \"demo.com\",\n      \"path\": \"/api/v1/debug\",\n      \"query\": {\n        \"q1\": [\"qv1\"]\n      }\n    }\n  },\n  \"explain_only\": true,\n  \"explain_max_depth\": 2,\n  \"explain_summary\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/rulesets/{{ruleset_id}}/simulate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "rulesets",
+                "{{ruleset_id}}",
+                "simulate"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Simulate draft - selector miss",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": {\n    \"protocol\": \"http\",\n    \"namespace\": \"default\",\n    \"request\": {\n      \"method\": \"POST\",\n      \"host\": \"wrong.example\",\n      \"path\": \"/not-match\"\n    }\n  },\n  \"explain_only\": true,\n  \"explain_max_depth\": 3,\n  \"explain_summary\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/rulesets/{{ruleset_id}}/simulate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "rulesets",
+                "{{ruleset_id}}",
+                "simulate"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Publish And Runtime",
+      "item": [
+        {
+          "name": "Publish draft ruleset",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Mockserver-Operator",
+                "value": "{{operator}}"
+              },
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"publish from Postman collection\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/rulesets/{{ruleset_id}}/publish",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "rulesets",
+                "{{ruleset_id}}",
+                "publish"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "const snapshotId = json.data && json.data.snapshot && json.data.snapshot.snapshot_id;",
+                  "if (snapshotId) { pm.collectionVariables.set('snapshot_id', snapshotId); }",
+                  "pm.test('publish returned snapshot', function () { pm.expect(snapshotId).to.be.a('string').and.not.empty; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Runtime match - GET debug API",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Host",
+                "value": "demo.com"
+              },
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mockserver/runtime/default/http/api/v1/debug?q1=qv1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "runtime",
+                "default",
+                "http",
+                "api",
+                "v1",
+                "debug"
+              ],
+              "query": [
+                {
+                  "key": "q1",
+                  "value": "qv1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Runtime miss - wrong path",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Host",
+                "value": "demo.com"
+              },
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mockserver/runtime/default/http/api/v1/missing?q1=qv1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "runtime",
+                "default",
+                "http",
+                "api",
+                "v1",
+                "missing"
+              ],
+              "query": [
+                {
+                  "key": "q1",
+                  "value": "qv1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Simulate current published",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": {\n    \"protocol\": \"http\",\n    \"namespace\": \"default\",\n    \"request\": {\n      \"method\": \"GET\",\n      \"host\": \"demo.com\",\n      \"path\": \"/api/v1/debug\",\n      \"query\": {\n        \"q1\": [\"qv1\"]\n      }\n    }\n  },\n  \"explain_only\": false,\n  \"explain_max_depth\": 4,\n  \"explain_summary\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/published/simulate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "published",
+                "simulate"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Published Snapshots And Rollback",
+      "item": [
+        {
+          "name": "List published rulesets",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/published/rulesets",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "published",
+                "rulesets"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get published ruleset",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/published/rulesets/{{ruleset_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "published",
+                "rulesets",
+                "{{ruleset_id}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "const snapshotId = json.data && json.data.snapshot_id;",
+                  "if (snapshotId) { pm.collectionVariables.set('snapshot_id', snapshotId); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List published snapshots",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/published/rulesets/{{ruleset_id}}/snapshots",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "published",
+                "rulesets",
+                "{{ruleset_id}}",
+                "snapshots"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "const firstSnapshotId = json.data && json.data.items && json.data.items[0] && json.data.items[0].snapshot_id;",
+                  "if (firstSnapshotId) { pm.collectionVariables.set('snapshot_id', firstSnapshotId); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rollback preview",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"snapshot_id\": \"{{snapshot_id}}\",\n  \"event\": {\n    \"protocol\": \"http\",\n    \"namespace\": \"default\",\n    \"request\": {\n      \"method\": \"GET\",\n      \"host\": \"demo.com\",\n      \"path\": \"/api/v1/debug\",\n      \"query\": {\n        \"q1\": [\"qv1\"]\n      }\n    }\n  },\n  \"explain_only\": true,\n  \"explain_max_depth\": 2,\n  \"explain_summary\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/published/rulesets/{{ruleset_id}}/rollback/preview",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "published",
+                "rulesets",
+                "{{ruleset_id}}",
+                "rollback",
+                "preview"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Rollback to snapshot",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Mockserver-Operator",
+                "value": "{{operator}}"
+              },
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"snapshot_id\": \"{{snapshot_id}}\",\n  \"reason\": \"rollback from Postman collection\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/published/rulesets/{{ruleset_id}}/rollback",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "published",
+                "rulesets",
+                "{{ruleset_id}}",
+                "rollback"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Rule CRUD",
+      "item": [
+        {
+          "name": "Add draft rule - static_response",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Mockserver-Operator",
+                "value": "{{operator}}"
+              },
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rule\": {\n    \"id\": \"static-api\",\n    \"name\": \"static api\",\n    \"enabled\": true,\n    \"priority\": 90,\n    \"when\": {\n      \"all\": [\n        {\n          \"field\": \"request.method\",\n          \"op\": \"eq\",\n          \"value\": \"GET\"\n        },\n        {\n          \"field\": \"request.path\",\n          \"op\": \"eq\",\n          \"value\": \"/api/v1/static\"\n        }\n      ]\n    },\n    \"action\": {\n      \"type\": \"static_response\",\n      \"status\": 200,\n      \"headers\": {\n        \"content-type\": [\"application/json\"]\n      },\n      \"body\": {\n        \"message\": \"static ok\"\n      }\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/rulesets/{{ruleset_id}}/rules",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "rulesets",
+                "{{ruleset_id}}",
+                "rules"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update draft rule - static_response",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Mockserver-Operator",
+                "value": "{{operator}}"
+              },
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rule\": {\n    \"id\": \"static-api\",\n    \"name\": \"static api updated\",\n    \"enabled\": true,\n    \"priority\": 95,\n    \"when\": {\n      \"all\": [\n        {\n          \"field\": \"request.method\",\n          \"op\": \"eq\",\n          \"value\": \"GET\"\n        },\n        {\n          \"field\": \"request.path\",\n          \"op\": \"eq\",\n          \"value\": \"/api/v1/static\"\n        }\n      ]\n    },\n    \"action\": {\n      \"type\": \"static_response\",\n      \"status\": 200,\n      \"headers\": {\n        \"content-type\": [\"application/json\"]\n      },\n      \"body\": {\n        \"message\": \"static updated\"\n      }\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/rulesets/{{ruleset_id}}/rules/static-api",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "rulesets",
+                "{{ruleset_id}}",
+                "rules",
+                "static-api"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Set draft rule priority",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Mockserver-Operator",
+                "value": "{{operator}}"
+              },
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priority\": 80\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/rulesets/{{ruleset_id}}/rules/static-api/priority",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "rulesets",
+                "{{ruleset_id}}",
+                "rules",
+                "static-api",
+                "priority"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Disable draft rule",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Mockserver-Operator",
+                "value": "{{operator}}"
+              },
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/rulesets/{{ruleset_id}}/rules/static-api/disable",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "rulesets",
+                "{{ruleset_id}}",
+                "rules",
+                "static-api",
+                "disable"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Enable draft rule",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Mockserver-Operator",
+                "value": "{{operator}}"
+              },
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/rulesets/{{ruleset_id}}/rules/static-api/enable",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "rulesets",
+                "{{ruleset_id}}",
+                "rules",
+                "static-api",
+                "enable"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete draft rule",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-Mockserver-Operator",
+                "value": "{{operator}}"
+              },
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/rulesets/{{ruleset_id}}/rules/static-api",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "rulesets",
+                "{{ruleset_id}}",
+                "rules",
+                "static-api"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Advanced Action Examples",
+      "item": [
+        {
+          "name": "Upsert sequence_response ruleset",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Mockserver-Operator",
+                "value": "{{operator}}"
+              },
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"sequence-demo\",\n  \"name\": \"sequence demo\",\n  \"enabled\": true,\n  \"protocol\": \"http\",\n  \"namespace\": \"default\",\n  \"selector\": {\n    \"all\": [\n      {\n        \"field\": \"request.host\",\n        \"op\": \"eq\",\n        \"value\": \"demo.com\"\n      },\n      {\n        \"field\": \"request.path\",\n        \"op\": \"prefix\",\n        \"value\": \"/api/sequence\"\n      }\n    ]\n  },\n  \"rules\": [\n    {\n      \"id\": \"sequence-status\",\n      \"enabled\": true,\n      \"priority\": 100,\n      \"when\": {\n        \"field\": \"request.path\",\n        \"op\": \"eq\",\n        \"value\": \"/api/sequence/status\"\n      },\n      \"action\": {\n        \"type\": \"sequence_response\",\n        \"sequence_strategy\": \"last\",\n        \"sequence\": [\n          {\n            \"status\": 200,\n            \"headers\": {\n              \"content-type\": [\n                \"application/json\"\n              ]\n            },\n            \"body\": {\n              \"state\": \"pending\",\n              \"step\": 1\n            }\n          },\n          {\n            \"status\": 200,\n            \"headers\": {\n              \"content-type\": [\n                \"application/json\"\n              ]\n            },\n            \"body\": {\n              \"state\": \"running\",\n              \"step\": 2\n            }\n          },\n          {\n            \"status\": 200,\n            \"headers\": {\n              \"content-type\": [\n                \"application/json\"\n              ]\n            },\n            \"body\": {\n              \"state\": \"done\",\n              \"step\": 3\n            }\n          }\n        ]\n      }\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/rulesets",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "rulesets"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Publish sequence_response ruleset",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Mockserver-Operator",
+                "value": "{{operator}}"
+              },
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"publish sequence demo\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/rulesets/sequence-demo/publish",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "rulesets",
+                "sequence-demo",
+                "publish"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Runtime sequence_response - call repeatedly",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Host",
+                "value": "demo.com"
+              },
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mockserver/runtime/default/http/api/sequence/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "runtime",
+                "default",
+                "http",
+                "api",
+                "sequence",
+                "status"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Upsert webhook_response ruleset",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Mockserver-Operator",
+                "value": "{{operator}}"
+              },
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"webhook-demo\",\n  \"name\": \"webhook demo\",\n  \"enabled\": true,\n  \"protocol\": \"http\",\n  \"namespace\": \"default\",\n  \"selector\": {\n    \"all\": [\n      {\n        \"field\": \"request.host\",\n        \"op\": \"eq\",\n        \"value\": \"demo.com\"\n      },\n      {\n        \"field\": \"request.path\",\n        \"op\": \"prefix\",\n        \"value\": \"/api/webhook\"\n      }\n    ]\n  },\n  \"rules\": [\n    {\n      \"id\": \"webhook-action\",\n      \"enabled\": true,\n      \"priority\": 100,\n      \"when\": {\n        \"field\": \"request.path\",\n        \"op\": \"eq\",\n        \"value\": \"/api/webhook/echo\"\n      },\n      \"action\": {\n        \"type\": \"webhook_response\",\n        \"webhook\": {\n          \"url\": \"{{webhook_url}}\",\n          \"method\": \"POST\",\n          \"timeout_ms\": 3000,\n          \"headers\": {\n            \"content-type\": [\n              \"application/json\"\n            ],\n            \"x-from\": [\n              \"mockserver-postman\"\n            ]\n          }\n        }\n      }\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/rulesets",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "rulesets"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Validate webhook_response ruleset",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/rulesets/webhook-demo/validate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "rulesets",
+                "webhook-demo",
+                "validate"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Publish webhook_response ruleset",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Mockserver-Operator",
+                "value": "{{operator}}"
+              },
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"publish webhook demo\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/rulesets/webhook-demo/publish",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "rulesets",
+                "webhook-demo",
+                "publish"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Runtime webhook_response",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Host",
+                "value": "demo.com"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hello\": \"webhook\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mockserver/runtime/default/http/api/webhook/echo",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "runtime",
+                "default",
+                "http",
+                "api",
+                "webhook",
+                "echo"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Metrics",
+      "item": [
+        {
+          "name": "Runtime metrics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Trace-ID",
+                "value": "{{trace_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mockserver/api/v1/admin/metrics/runtime",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mockserver",
+                "api",
+                "v1",
+                "admin",
+                "metrics",
+                "runtime"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "name": "http cel",
+  "enabled": true,
+  "protocol": "http",
+  "namespace": "default",
+  "selector": {
+    "all": [
+      {
+        "field": "request.path",
+        "op": "prefix",
+        "value": "/api/"
+      }
+    ]
+  },
+  "rules": [
+    {
+      "id": "score-gate",
+      "name": "Score gate CEL response",
+      "enabled": true,
+      "priority": 100,
+      "when": {
+        "all": [
+          {
+            "field": "request.body.user.id",
+            "op": "eq",
+            "value": "u-1"
+          },
+          {
+            "expr": "request.headers[\"x-env\"][0] == \"test\" && request.body.score >= 90"
+          }
+        ]
+      },
+      "action": {
+        "type": "cel_response",
+        "status": 200,
+        "headers": {
+          "content-type": ["application/json"]
+        },
+        "body_expression": "{\"user_id\": request.body.user.id, \"score\": request.body.score, \"path\": request.path}"
+      }
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Triage"
+  short_description: "Guided Triage workflows"
+  default_prompt: "Use $triage for triage tasks."

@@ -1,0 +1,171 @@
+package controller_test
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"testing"
+	"time"
+
+	"github.com/MrMiaoMIMI/goshared/db/dbhelper"
+	"github.com/MrMiaoMIMI/goshared/db/dbspi"
+
+	"mockserver/internal/config"
+	"mockserver/internal/controller"
+	"mockserver/internal/dao"
+	modeldo "mockserver/internal/model/do"
+	"mockserver/internal/observability"
+	"mockserver/internal/router"
+	"mockserver/internal/service"
+	"mockserver/internal/view"
+)
+
+func TestAdminRuntimeFlowWithMySQLRepository(t *testing.T) {
+	dsn := os.Getenv("MOCKSERVER_MYSQL_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set MOCKSERVER_MYSQL_TEST_DSN to run MySQL integration test")
+	}
+
+	ctx := context.Background()
+	db, err := dao.NewDB(ctx, config.Config{
+		DBDriver:     "mysql",
+		DBDSN:        dsn,
+		DBInitSchema: true,
+	})
+	if err != nil {
+		t.Fatalf("NewDB() error = %v", err)
+	}
+	manager := db.GetManager()
+
+	id := fmt.Sprintf("mysql-e2e-%d", time.Now().UnixMilli())
+	cleanupMySQLRuleset(t, ctx, manager, id)
+	namespaceID := ""
+	t.Cleanup(func() {
+		cleanupMySQLRuleset(t, ctx, manager, id)
+		if namespaceID != "" {
+			cleanupMySQLRuleset(t, ctx, manager, namespaceID)
+		}
+	})
+
+	handler := newMySQLBackedHandler(db.GetRuleSetRepository(), db.GetNamespaceRepository())
+	namespaceResp := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/namespaces", map[string]any{
+		"name": id,
+		"ruleset_miss_action": map[string]any{
+			"type":     "response",
+			"response": map[string]any{"status": 404, "body": map[string]any{"message": "no mock ruleset matched"}},
+		},
+		"rule_miss_action": map[string]any{
+			"type":     "response",
+			"response": map[string]any{"status": 404, "body": map[string]any{"message": "no mock rule matched"}},
+		},
+	}, http.StatusOK)
+	var namespaceEnvelope struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(readBody(t, namespaceResp), &namespaceEnvelope); err != nil {
+		t.Fatalf("decode namespace response: %v", err)
+	}
+	namespaceID = namespaceEnvelope.Data.ID
+	if namespaceID == "" {
+		t.Fatalf("expected generated namespace id")
+	}
+
+	upsertBody := map[string]any{
+		"id":        id,
+		"name":      "mysql e2e",
+		"enabled":   true,
+		"protocol":  "http",
+		"namespace": namespaceID,
+		"selector":  httpPathSelectorBody("/api/v1/mysql-e2e"),
+		"rules": []map[string]any{
+			{
+				"id":       "mysql-e2e-rule",
+				"name":     "Mysql E2e Rule",
+				"enabled":  true,
+				"priority": 100,
+				"when": map[string]any{
+					"all": []map[string]any{
+						{"field": "request.method", "op": "eq", "value": "GET"},
+						{"field": "request.path", "op": "eq", "value": "/api/v1/mysql-e2e"},
+					},
+				},
+				"action": map[string]any{
+					"type":   "static_response",
+					"status": 202,
+					"body":   map[string]any{"store": "mysql"},
+				},
+			},
+		},
+	}
+
+	doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/rulesets", upsertBody, http.StatusOK)
+	publishResp := doJSONWithHeaders(t, handler, http.MethodPost, "/mockserver/api/v1/admin/rulesets/"+id+"/publish", map[string]any{
+		"reason": "mysql e2e publish",
+	}, map[string]string{
+		"X-Mockserver-Operator": "mysql-e2e@example.com",
+		"X-Trace-ID":            "trace-mysql-e2e",
+	}, http.StatusOK)
+	publishBody := readBody(t, publishResp)
+	assertBytesContain(t, publishBody, `"action":"publish"`)
+	assertBytesContain(t, publishBody, `"operator":"mysql-e2e@example.com"`)
+	assertBytesContain(t, publishBody, `"reason":"mysql e2e publish"`)
+
+	runtimePath := "/mockserver/runtime/" + namespaceID + "/http/api/v1/mysql-e2e"
+	runtimeResp := doJSON(t, handler, http.MethodGet, runtimePath, nil, http.StatusAccepted)
+	assertBytesContain(t, readBody(t, runtimeResp), `"store":"mysql"`)
+
+	reloadedDB, err := dao.NewDB(ctx, config.Config{
+		DBDriver: "mysql",
+		DBDSN:    dsn,
+	})
+	if err != nil {
+		t.Fatalf("reload NewDB() error = %v", err)
+	}
+	reloadedHandler := newMySQLBackedHandler(reloadedDB.GetRuleSetRepository(), reloadedDB.GetNamespaceRepository())
+	reloadedRuntimeResp := doJSON(t, reloadedHandler, http.MethodGet, runtimePath, nil, http.StatusAccepted)
+	assertBytesContain(t, readBody(t, reloadedRuntimeResp), `"store":"mysql"`)
+
+	publishedResp := doJSON(t, reloadedHandler, http.MethodGet, "/mockserver/api/v1/admin/published/rulesets/"+id, nil, http.StatusOK)
+	publishedBody := readBody(t, publishedResp)
+	assertBytesContain(t, publishedBody, `"id":"`+id+`"`)
+	assertBytesContain(t, publishedBody, `"trace_id":"trace-mysql-e2e"`)
+}
+
+func newMySQLBackedHandler(ruleSetRepository dao.RuleSetRepository, namespaceRepository dao.NamespaceRepository) http.Handler {
+	namespaceService := service.NewNamespaceService(namespaceRepository)
+	ruleSetService := service.NewRuleSetService(ruleSetRepository, namespaceService)
+	runtimeService := service.NewRuntimeService(ruleSetRepository, namespaceRepository, namespaceService)
+	ruleSetView := view.NewRuleSetView(ruleSetService)
+	namespaceView := view.NewNamespaceView(namespaceService)
+	runtimeView := view.NewRuntimeView(runtimeService)
+	runtimeMetrics := observability.NewRuntimeMetrics()
+	adminController := controller.NewAdminController(ruleSetView, namespaceView)
+	runtimeController := controller.NewRuntimeController(runtimeView, runtimeMetrics)
+	metricsController := controller.NewMetricsController(runtimeMetrics)
+	return router.New(adminController, runtimeController, router.AdminAuthConfig{}, metricsController)
+}
+
+func cleanupMySQLRuleset(t *testing.T, ctx context.Context, manager dbspi.Manager, id string) {
+	t.Helper()
+	tableStore := dbhelper.NewTableStore(&modeldo.RuleSetDraft{}, dbhelper.WithManager(manager))
+	sqlStore, ok := dbhelper.AsSQLTableStore(tableStore)
+	if !ok {
+		t.Fatalf("table store does not support raw SQL")
+	}
+	if err := sqlStore.Exec(ctx, "DELETE FROM mockserver_published_rule_set_tab WHERE ruleset_id = ?", id); err != nil {
+		t.Fatalf("cleanup current published %s: %v", id, err)
+	}
+	if err := sqlStore.Exec(ctx, "DELETE FROM mockserver_published_snapshot_tab WHERE ruleset_id = ?", id); err != nil {
+		t.Fatalf("cleanup published snapshots %s: %v", id, err)
+	}
+	if err := sqlStore.Exec(ctx, "DELETE FROM mockserver_rule_set_draft_tab WHERE ruleset_id = ?", id); err != nil {
+		t.Fatalf("cleanup draft %s: %v", id, err)
+	}
+	if err := sqlStore.Exec(ctx, "DELETE FROM mockserver_namespace_tab WHERE namespace_id = ?", id); err != nil {
+		t.Fatalf("cleanup namespace %s: %v", id, err)
+	}
+}

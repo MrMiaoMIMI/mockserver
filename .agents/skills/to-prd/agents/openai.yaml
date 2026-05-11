@@ -1,0 +1,4 @@
+interface:
+  display_name: "To PRD"
+  short_description: "Guided To PRD workflows"
+  default_prompt: "Use $to-prd for to prd tasks."

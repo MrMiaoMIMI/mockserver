@@ -1,0 +1,55 @@
+{
+  "name": "http default",
+  "enabled": true,
+  "protocol": "http",
+  "namespace": "default",
+  "selector": {
+    "all": [
+      {
+        "field": "request.host",
+        "op": "eq",
+        "value": "demo.com"
+      },
+      {
+        "field": "request.path",
+        "op": "prefix",
+        "value": "/api/"
+      }
+    ]
+  },
+  "rules": [
+    {
+      "id": "debug-api",
+      "name": "GET debug API response",
+      "enabled": true,
+      "priority": 100,
+      "when": {
+        "all": [
+          {
+            "field": "request.method",
+            "op": "eq",
+            "value": "GET"
+          },
+          {
+            "field": "request.path",
+            "op": "eq",
+            "value": "/api/v1/debug"
+          },
+          {
+            "field": "request.query.q1[*]",
+            "op": "contains",
+            "value": "qv1"
+          }
+        ]
+      },
+      "action": {
+        "type": "template_response",
+        "status": 200,
+        "headers": {
+          "content-type": ["application/json"]
+        },
+        "body_template": "{\"message\":\"hello {{ query . \"q1\" }}\",\"path\":\"{{ field . \"request.path\" }}\"}"
+      }
+    }
+  ]
+}

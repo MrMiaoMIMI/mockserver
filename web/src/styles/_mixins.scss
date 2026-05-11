@@ -1,0 +1,13 @@
+@mixin panel {
+  background: var(--ms-bg-base);
+  border: 1px solid var(--ms-border-light);
+  border-radius: var(--ms-radius-lg);
+  box-shadow: var(--ms-shadow-xs);
+}
+
+@mixin toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ms-space-3);
+}

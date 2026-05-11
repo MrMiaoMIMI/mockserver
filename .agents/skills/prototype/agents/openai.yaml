@@ -1,0 +1,4 @@
+interface:
+  display_name: "Prototype"
+  short_description: "Guided Prototype workflows"
+  default_prompt: "Use $prototype for prototype tasks."

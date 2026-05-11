@@ -1,0 +1,4 @@
+interface:
+  display_name: "TDD"
+  short_description: "Guided TDD workflows"
+  default_prompt: "Use $tdd for tdd tasks."

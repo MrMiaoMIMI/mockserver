@@ -1,0 +1,6 @@
+interface:
+  display_name: "Zoom Out"
+  short_description: "Guided Zoom Out workflows"
+  default_prompt: "Use $zoom-out for zoom out tasks."
+policy:
+  allow_implicit_invocation: false

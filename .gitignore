@@ -1,0 +1,23 @@
+# Log
+*.log
+
+# MacOS
+.DS_Store
+
+# IDEs
+.vscode/
+.idea/
+
+# Build binary
+bin/
+gobin*
+__debug_bin*
+web/dist/
+web/node_modules/
+
+# Others
+.artifacts/
+.playwright-cli/
+.gocache/
+.gomodcache/
+output/

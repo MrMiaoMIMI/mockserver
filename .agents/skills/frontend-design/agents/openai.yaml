@@ -1,0 +1,4 @@
+interface:
+  display_name: "Frontend Design"
+  short_description: "Guided Frontend Design workflows"
+  default_prompt: "Use $frontend-design for frontend design tasks."

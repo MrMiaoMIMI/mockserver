@@ -1,0 +1,4 @@
+interface:
+  display_name: "To Issues"
+  short_description: "Guided To Issues workflows"
+  default_prompt: "Use $to-issues for to issues tasks."
