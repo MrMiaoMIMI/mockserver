@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"strings"
 
-	"mockserver/mocksdk"
+	"github.com/MrMiaoMIMI/mockserver/mocksdk"
 )
 
 func NormalizeHTTPRequest(r *http.Request, namespace string) (mocksdk.Event, error) {

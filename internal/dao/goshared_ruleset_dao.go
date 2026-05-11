@@ -7,8 +7,8 @@ import (
 	"github.com/MrMiaoMIMI/goshared/db/dbhelper"
 	"github.com/MrMiaoMIMI/goshared/db/dbspi"
 
-	modeldo "mockserver/internal/model/do"
-	modelfmo "mockserver/internal/model/fmo"
+	modeldo "github.com/MrMiaoMIMI/mockserver/internal/model/do"
+	modelfmo "github.com/MrMiaoMIMI/mockserver/internal/model/fmo"
 )
 
 type gosharedRuleSetTableDAO struct {

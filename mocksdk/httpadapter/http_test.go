@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"mockserver/mocksdk"
+	"github.com/MrMiaoMIMI/mockserver/mocksdk"
 )
 
 func TestNormalizeHTTPRequestPreservesRequestShapeAndBodyReplay(t *testing.T) {

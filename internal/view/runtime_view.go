@@ -3,8 +3,8 @@ package view
 import (
 	"context"
 
-	"mockserver/internal/model/bo"
-	"mockserver/internal/service"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
+	"github.com/MrMiaoMIMI/mockserver/internal/service"
 )
 
 type RuntimeView interface {

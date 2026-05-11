@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	"mockserver/internal/model/bo"
-	"mockserver/internal/model/eo"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/eo"
 )
 
 func NormalizeHTTPRequest(r *http.Request, namespace string) (bo.Event, error) {

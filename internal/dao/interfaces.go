@@ -6,8 +6,8 @@ import (
 
 	"github.com/MrMiaoMIMI/goshared/db/dbspi"
 
-	"mockserver/internal/model/bo"
-	modeldo "mockserver/internal/model/do"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
+	modeldo "github.com/MrMiaoMIMI/mockserver/internal/model/do"
 )
 
 var (

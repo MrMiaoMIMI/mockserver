@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"sort"
 
-	"mockserver/internal/model/bo"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
 )
 
 func summarizeRollbackDiff(current bo.PublishedRuleSetSnapshot, target bo.PublishedRuleSetSnapshot) bo.RollbackDiffSummary {

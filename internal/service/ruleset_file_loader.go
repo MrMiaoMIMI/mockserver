@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"mockserver/internal/model/bo"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
 )
 
 func LoadRuleSetFiles(ctx context.Context, ruleSetService RuleSetService, path string) error {

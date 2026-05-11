@@ -12,13 +12,13 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
 
-	"mockserver/internal/config"
-	"mockserver/internal/controller"
-	"mockserver/internal/dao"
-	"mockserver/internal/observability"
-	"mockserver/internal/router"
-	"mockserver/internal/service"
-	"mockserver/internal/view"
+	"github.com/MrMiaoMIMI/mockserver/internal/config"
+	"github.com/MrMiaoMIMI/mockserver/internal/controller"
+	"github.com/MrMiaoMIMI/mockserver/internal/dao"
+	"github.com/MrMiaoMIMI/mockserver/internal/observability"
+	"github.com/MrMiaoMIMI/mockserver/internal/router"
+	"github.com/MrMiaoMIMI/mockserver/internal/service"
+	"github.com/MrMiaoMIMI/mockserver/internal/view"
 )
 
 func run(ctx context.Context, cfg config.Config) error {

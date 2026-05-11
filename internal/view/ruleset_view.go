@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
-	"mockserver/internal/model/bo"
-	"mockserver/internal/model/request"
-	"mockserver/internal/model/response"
-	"mockserver/internal/service"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/request"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/response"
+	"github.com/MrMiaoMIMI/mockserver/internal/service"
 )
 
 type RuleSetView interface {

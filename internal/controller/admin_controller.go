@@ -10,11 +10,11 @@ import (
 	"github.com/MrMiaoMIMI/goshared/util/serverresp"
 	"github.com/gin-gonic/gin"
 
-	"mockserver/internal/model/bo"
-	"mockserver/internal/model/request"
-	"mockserver/internal/model/response"
-	"mockserver/internal/view"
-	"mockserver/mockprotocol"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/request"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/response"
+	"github.com/MrMiaoMIMI/mockserver/internal/view"
+	"github.com/MrMiaoMIMI/mockserver/mockprotocol"
 )
 
 type AdminController struct {

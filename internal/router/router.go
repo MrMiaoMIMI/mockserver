@@ -16,7 +16,7 @@ import (
 	"github.com/MrMiaoMIMI/goshared/util/serverresp"
 	"github.com/gin-gonic/gin"
 
-	"mockserver/internal/controller"
+	"github.com/MrMiaoMIMI/mockserver/internal/controller"
 )
 
 type traceKey string

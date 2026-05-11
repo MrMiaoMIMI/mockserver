@@ -3,7 +3,7 @@ package cacheadapter
 import (
 	"strings"
 
-	"mockserver/mocksdk"
+	"github.com/MrMiaoMIMI/mockserver/mocksdk"
 )
 
 const Protocol = "cache"

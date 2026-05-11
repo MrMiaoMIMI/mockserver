@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"mockserver/internal/config"
+	"github.com/MrMiaoMIMI/mockserver/internal/config"
 )
 
 func TestNewDBRequiresDSN(t *testing.T) {

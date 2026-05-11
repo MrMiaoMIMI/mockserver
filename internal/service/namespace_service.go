@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"mockserver/internal/dao"
-	"mockserver/internal/model/bo"
+	"github.com/MrMiaoMIMI/mockserver/internal/dao"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
 )
 
 type namespaceService struct {

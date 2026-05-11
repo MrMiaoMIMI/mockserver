@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"mockserver/internal/model/bo"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
 )
 
 type pathSegment struct {

@@ -9,8 +9,8 @@ import (
 	"github.com/MrMiaoMIMI/goshared/db/dbhelper"
 	"github.com/MrMiaoMIMI/goshared/db/dbspi"
 
-	"mockserver/internal/config"
-	modeldo "mockserver/internal/model/do"
+	"github.com/MrMiaoMIMI/mockserver/internal/config"
+	modeldo "github.com/MrMiaoMIMI/mockserver/internal/model/do"
 )
 
 type dbImpl struct {

@@ -10,9 +10,9 @@ import (
 
 	"github.com/google/cel-go/cel"
 
-	"mockserver/internal/model/bo"
-	"mockserver/internal/model/eo"
-	"mockserver/mockprotocol"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/eo"
+	"github.com/MrMiaoMIMI/mockserver/mockprotocol"
 )
 
 const maxRegexPatternLength = 512

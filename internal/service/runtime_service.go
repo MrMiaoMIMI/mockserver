@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"mockserver/internal/dao"
-	"mockserver/internal/engine"
-	"mockserver/internal/model/bo"
-	"mockserver/internal/model/eo"
+	"github.com/MrMiaoMIMI/mockserver/internal/dao"
+	"github.com/MrMiaoMIMI/mockserver/internal/engine"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/eo"
 )
 
 type runtimeService struct {

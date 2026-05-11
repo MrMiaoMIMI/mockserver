@@ -5,7 +5,7 @@ import (
 
 	"github.com/MrMiaoMIMI/goshared/logger"
 
-	"mockserver/internal/config"
+	"github.com/MrMiaoMIMI/mockserver/internal/config"
 )
 
 func main() {

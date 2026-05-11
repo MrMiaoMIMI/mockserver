@@ -4,8 +4,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
 
-	"mockserver/internal/config"
-	"mockserver/internal/controller"
+	"github.com/MrMiaoMIMI/mockserver/internal/config"
+	"github.com/MrMiaoMIMI/mockserver/internal/controller"
 )
 
 var Module = fx.Module("router",

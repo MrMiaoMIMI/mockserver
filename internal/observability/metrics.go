@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"mockserver/internal/model/bo"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
 )
 
 const maxRecentRuntimeRequests = 80

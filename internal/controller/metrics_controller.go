@@ -4,7 +4,7 @@ import (
 	"github.com/MrMiaoMIMI/goshared/util/serverresp"
 	"github.com/gin-gonic/gin"
 
-	"mockserver/internal/observability"
+	"github.com/MrMiaoMIMI/mockserver/internal/observability"
 )
 
 type MetricsController struct {

@@ -12,13 +12,13 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"mockserver/internal/controller"
-	"mockserver/internal/observability"
-	"mockserver/internal/router"
-	"mockserver/internal/service"
-	"mockserver/internal/view"
-	"mockserver/mocksdk"
-	"mockserver/mocksdk/cacheadapter"
+	"github.com/MrMiaoMIMI/mockserver/internal/controller"
+	"github.com/MrMiaoMIMI/mockserver/internal/observability"
+	"github.com/MrMiaoMIMI/mockserver/internal/router"
+	"github.com/MrMiaoMIMI/mockserver/internal/service"
+	"github.com/MrMiaoMIMI/mockserver/internal/view"
+	"github.com/MrMiaoMIMI/mockserver/mocksdk"
+	"github.com/MrMiaoMIMI/mockserver/mocksdk/cacheadapter"
 )
 
 func TestAdminPublishAndRuntimeFlow(t *testing.T) {

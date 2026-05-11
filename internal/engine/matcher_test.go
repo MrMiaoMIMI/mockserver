@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"mockserver/internal/model/bo"
-	"mockserver/internal/model/eo"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/eo"
 )
 
 func TestCompileAndMatchTemplateRule(t *testing.T) {

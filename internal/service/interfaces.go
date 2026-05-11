@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 
-	"mockserver/internal/model/bo"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
 )
 
 type RuleSetService interface {

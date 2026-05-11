@@ -1,6 +1,6 @@
 package request
 
-import "mockserver/internal/model/bo"
+import "github.com/MrMiaoMIMI/mockserver/internal/model/bo"
 
 type UpsertRuleSetRequest struct {
 	ID        string      `json:"id,omitempty"`

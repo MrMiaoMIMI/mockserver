@@ -9,7 +9,7 @@ import (
 	"github.com/MrMiaoMIMI/goshared/db/dbspi"
 	_ "github.com/go-sql-driver/mysql"
 
-	modeldo "mockserver/internal/model/do"
+	modeldo "github.com/MrMiaoMIMI/mockserver/internal/model/do"
 )
 
 const defaultSchemaSQL = `

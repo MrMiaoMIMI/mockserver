@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"mockserver/internal/model/bo"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
 )
 
 func TestRuntimeMetricsRecordsRecentDiagnostics(t *testing.T) {

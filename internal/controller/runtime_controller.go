@@ -9,12 +9,12 @@ import (
 	"github.com/MrMiaoMIMI/goshared/util/serverresp"
 	"github.com/gin-gonic/gin"
 
-	"mockserver/internal/adapter/httpadapter"
-	"mockserver/internal/model/bo"
-	"mockserver/internal/model/request"
-	"mockserver/internal/model/response"
-	"mockserver/internal/observability"
-	"mockserver/internal/view"
+	"github.com/MrMiaoMIMI/mockserver/internal/adapter/httpadapter"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/request"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/response"
+	"github.com/MrMiaoMIMI/mockserver/internal/observability"
+	"github.com/MrMiaoMIMI/mockserver/internal/view"
 )
 
 type RuntimeController struct {

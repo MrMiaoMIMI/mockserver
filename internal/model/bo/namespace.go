@@ -1,6 +1,6 @@
 package bo
 
-import "mockserver/internal/model/eo"
+import "github.com/MrMiaoMIMI/mockserver/internal/model/eo"
 
 type Namespace struct {
 	ID                string                  `json:"id"`

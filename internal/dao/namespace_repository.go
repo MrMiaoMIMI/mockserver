@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"mockserver/internal/model/bo"
-	modeldo "mockserver/internal/model/do"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
+	modeldo "github.com/MrMiaoMIMI/mockserver/internal/model/do"
 )
 
 type namespaceRepository struct {

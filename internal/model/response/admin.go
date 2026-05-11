@@ -1,8 +1,8 @@
 package response
 
 import (
-	"mockserver/internal/model/bo"
-	"mockserver/mockprotocol"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
+	"github.com/MrMiaoMIMI/mockserver/mockprotocol"
 )
 
 type RuleSetResponse struct {
