@@ -16,6 +16,8 @@
 
 一个通用的sdk，提供通用的能力方便用户可以调用 mockserver 的接口，将原始请求转换成决策输入，从而判断是否命中 ruleset 和 rules，并决策出 Action（返回 Response 还是告知 mockinject 转发原始请求）。mocksdk 不负责执行真实转发。
 
+mocksdk 已拆分为独立仓库和 Go module：`github.com/MrMiaoMIMI/mocksdk`。它需要支持较低版本的业务仓库 Go toolchain，当前基线为 Go 1.17，并且只使用 Go 标准库依赖。
+
 ### mockinject
 
 特指一些用户客制化的工具，该工具会结合业务代码所用的技术栈，在代码编译前进行代码注入（例如替换默认的 http client，从而能够获取到原始的 http 请求，并能够控制 http 请求），注入的代码会调用 mocksdk 将原始请求发送给 mockserver 从而获得 Action。
@@ -40,4 +42,4 @@ mocksdk 负责把具体技术栈的原始调用转换成 Event：
 - HTTP：从 `http.Request` 投影出 `request.method`、`request.host`、`request.path`、`request.query`、`request.headers`、`request.body`、`request.raw_body` 等字段。
 - Cache：通过 `mocksdk/cacheadapter.Event` 投影出 `request.operation`、`request.key`、`request.ttl_ms`、`request.value`。
 
-mockinject 仍然负责真正执行原协议调用或转发，mockserver/mocksdk 只返回决策。
+mockinject 仍然负责真正执行原协议调用或转发，mockserver 和独立的 mocksdk module 只返回决策。

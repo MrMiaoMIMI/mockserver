@@ -44,9 +44,8 @@ internal/model/bo              核心领域对象
 internal/model/request         管理接口请求模型
 internal/model/response        管理接口响应模型
 mockprotocol                   协议字段与 selector 规格
-mocksdk                        注入代码使用的决策 SDK 和协议 normalizer
 docs/user_guide.md             用户使用说明书
-docs/mocksdk.md                Mock SDK 快速接入说明
+docs/mocksdk.md                外部 Mock SDK 快速接入说明
 examples/ruleset.json          示例规则
 examples/mockserver.postman_collection.json  Postman 调试集合
 ```

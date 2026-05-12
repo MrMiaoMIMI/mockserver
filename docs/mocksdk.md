@@ -2,6 +2,14 @@
 
 Mock SDK is the runtime decision layer for generated or injected code. It is intended for `mockinject` implementations that intercept an original HTTP request, ask MockServer for a decision, and then either return a mock response or continue with protocol-specific forwarding outside the SDK.
 
+The SDK is maintained as a separate Go module:
+
+```text
+github.com/MrMiaoMIMI/mocksdk
+```
+
+It supports Go 1.17+ and uses only the Go standard library so injected business repositories do not inherit MockServer's higher Go toolchain requirement.
+
 ## Tool Chain Roles
 
 - `mockserver` manages namespaces, draft rulesets, published snapshots, matching, fallback policy, and the SDK decision endpoint.
@@ -103,7 +111,7 @@ type Event struct {
     Protocol  string
     Operation string
     Namespace string
-    Request   map[string]any
+    Request   map[string]interface{}
     Meta      EventMeta
 }
 ```
@@ -138,4 +146,4 @@ Use `mocksdk.IsErrorKind(err, mocksdk.ErrorKindTransport)` to branch on a class 
 
 ## Scope
 
-The SDK core contains only decision-client primitives and shared decision/event types. Protocol-specific request projection lives in adapter packages such as `mocksdk/httpadapter` and `mocksdk/cacheadapter`. Full SPEX, gRPC, MQ, mockinject code generation, and protocol-specific forwarding implementations remain out of scope for this repository's SDK.
+The SDK core contains only decision-client primitives and shared decision/event types. Protocol-specific request projection lives in adapter packages such as `github.com/MrMiaoMIMI/mocksdk/httpadapter` and `github.com/MrMiaoMIMI/mocksdk/cacheadapter`. Full SPEX, gRPC, MQ, mockinject code generation, and protocol-specific forwarding implementations remain out of scope for the SDK module.

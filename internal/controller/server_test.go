@@ -2,7 +2,6 @@ package controller_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,8 +16,6 @@ import (
 	"github.com/MrMiaoMIMI/mockserver/internal/router"
 	"github.com/MrMiaoMIMI/mockserver/internal/service"
 	"github.com/MrMiaoMIMI/mockserver/internal/view"
-	"github.com/MrMiaoMIMI/mockserver/mocksdk"
-	"github.com/MrMiaoMIMI/mockserver/mocksdk/cacheadapter"
 )
 
 func TestAdminPublishAndRuntimeFlow(t *testing.T) {
@@ -651,7 +648,7 @@ func TestSDKDecisionEndpointReturnsResponseFallbackDecisions(t *testing.T) {
 	assertBytesContain(t, readBody(t, runtimeRuleMiss), `"fallback":"rule"`)
 }
 
-func TestMockSDKClientEndToEndDecisions(t *testing.T) {
+func TestSDKDecisionEndpointEndToEndDecisions(t *testing.T) {
 	ruleSetRepository := newTestRuleSetRepository()
 	namespaceService := service.NewNamespaceService(ruleSetRepository)
 	ruleSetService := service.NewRuleSetService(ruleSetRepository, namespaceService)
@@ -718,60 +715,52 @@ func TestMockSDKClientEndToEndDecisions(t *testing.T) {
 		t.Fatalf("decode namespace response: %v", err)
 	}
 
-	server := httptest.NewServer(handler)
-	defer server.Close()
-	client, err := mocksdk.NewClient(mocksdk.Config{MockServerURL: server.URL})
-	if err != nil {
-		t.Fatalf("NewClient() error = %v", err)
-	}
-
-	hitDecision, err := client.Decide(context.Background(), mocksdk.Event{
-		Protocol:  "http",
-		Namespace: "default",
-		Request: mocksdk.EventRequest{
-			"method": "GET",
-			"path":   "/sdk/hit",
+	hitDecision := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/sdk/decision", map[string]any{
+		"event": map[string]any{
+			"protocol":  "http",
+			"namespace": "default",
+			"request": map[string]any{
+				"method": "GET",
+				"path":   "/sdk/hit",
+			},
 		},
-	})
-	if err != nil {
-		t.Fatalf("Decide() hit error = %v", err)
-	}
-	if hitDecision.Kind != mocksdk.DecisionKindResponse || !hitDecision.Matched || hitDecision.Response == nil {
-		t.Fatalf("unexpected hit decision: %+v", hitDecision)
-	}
+	}, http.StatusOK)
+	hitBody := readBody(t, hitDecision)
+	assertBytesContain(t, hitBody, `"decision":{"kind":"response"`)
+	assertBytesContain(t, hitBody, `"matched":true`)
+	assertBytesContain(t, hitBody, `"status":200`)
+	assertBytesContain(t, hitBody, `"decision":"hit"`)
 
-	forwardDecision, err := client.Decide(context.Background(), mocksdk.Event{
-		Protocol:  "http",
-		Namespace: "default",
-		Request: mocksdk.EventRequest{
-			"method": "GET",
-			"path":   "/sdk/miss",
+	forwardDecision := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/sdk/decision", map[string]any{
+		"event": map[string]any{
+			"protocol":  "http",
+			"namespace": "default",
+			"request": map[string]any{
+				"method": "GET",
+				"path":   "/sdk/miss",
+			},
 		},
-	})
-	if err != nil {
-		t.Fatalf("Decide() forward error = %v", err)
-	}
-	if forwardDecision.Kind != mocksdk.DecisionKindForward || !forwardDecision.Fallback || forwardDecision.Forward == nil {
-		t.Fatalf("unexpected forward decision: %+v", forwardDecision)
-	}
+	}, http.StatusOK)
+	forwardBody := readBody(t, forwardDecision)
+	assertBytesContain(t, forwardBody, `"decision":{"kind":"forward"`)
+	assertBytesContain(t, forwardBody, `"fallback":true`)
+	assertBytesContain(t, forwardBody, `"fallback_reason":"rule_miss"`)
 
-	responseFallbackDecision, err := client.Decide(context.Background(), mocksdk.Event{
-		Protocol:  "http",
-		Namespace: namespaceEnvelope.Data.ID,
-		Request: mocksdk.EventRequest{
-			"method": "GET",
-			"path":   "/no-ruleset",
+	responseFallbackDecision := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/sdk/decision", map[string]any{
+		"event": map[string]any{
+			"protocol":  "http",
+			"namespace": namespaceEnvelope.Data.ID,
+			"request": map[string]any{
+				"method": "GET",
+				"path":   "/no-ruleset",
+			},
 		},
-	})
-	if err != nil {
-		t.Fatalf("Decide() response fallback error = %v", err)
-	}
-	if responseFallbackDecision.Kind != mocksdk.DecisionKindResponse || !responseFallbackDecision.Fallback || responseFallbackDecision.Response == nil {
-		t.Fatalf("unexpected response fallback decision: %+v", responseFallbackDecision)
-	}
-	if responseFallbackDecision.Response.Status != 451 {
-		t.Fatalf("unexpected response fallback status: %d", responseFallbackDecision.Response.Status)
-	}
+	}, http.StatusOK)
+	responseFallbackBody := readBody(t, responseFallbackDecision)
+	assertBytesContain(t, responseFallbackBody, `"decision":{"kind":"response"`)
+	assertBytesContain(t, responseFallbackBody, `"fallback":true`)
+	assertBytesContain(t, responseFallbackBody, `"status":451`)
+	assertBytesContain(t, responseFallbackBody, `"decision":"response-fallback"`)
 }
 
 func TestAdminListProtocols(t *testing.T) {
@@ -796,7 +785,7 @@ func TestAdminListProtocols(t *testing.T) {
 	assertBytesContain(t, body, `"selectors"`)
 }
 
-func TestMockSDKCacheDecisionEndToEnd(t *testing.T) {
+func TestSDKDecisionEndpointCacheDecisionEndToEnd(t *testing.T) {
 	ruleSetRepository := newTestRuleSetRepository()
 	namespaceService := service.NewNamespaceService(ruleSetRepository)
 	ruleSetService := service.NewRuleSetService(ruleSetRepository, namespaceService)
@@ -838,40 +827,37 @@ func TestMockSDKCacheDecisionEndToEnd(t *testing.T) {
 	}, http.StatusOK)
 	doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/rulesets/cache-sdk/publish", nil, http.StatusOK)
 
-	server := httptest.NewServer(handler)
-	defer server.Close()
-	client, err := mocksdk.NewClient(mocksdk.Config{MockServerURL: server.URL})
-	if err != nil {
-		t.Fatalf("NewClient() error = %v", err)
-	}
+	hitDecision := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/sdk/decision", map[string]any{
+		"event": map[string]any{
+			"protocol":  "cache",
+			"operation": "request",
+			"namespace": "default",
+			"request": map[string]any{
+				"operation": "get",
+				"key":       "user:123",
+			},
+		},
+	}, http.StatusOK)
+	hitBody := readBody(t, hitDecision)
+	assertBytesContain(t, hitBody, `"decision":{"kind":"response"`)
+	assertBytesContain(t, hitBody, `"matched":true`)
+	assertBytesContain(t, hitBody, `"value":"mocked"`)
 
-	hitDecision, err := client.Decide(context.Background(), cacheadapter.Event("default", cacheadapter.Request{
-		Operation: "get",
-		Key:       "user:123",
-	}))
-	if err != nil {
-		t.Fatalf("Decide() cache hit error = %v", err)
-	}
-	if hitDecision.Kind != mocksdk.DecisionKindResponse || !hitDecision.Matched || hitDecision.Response == nil {
-		t.Fatalf("unexpected cache hit decision: %+v", hitDecision)
-	}
-	if !bytes.Contains(hitDecision.Response.Body, []byte(`"value":"mocked"`)) {
-		t.Fatalf("unexpected cache response body: %s", string(hitDecision.Response.Body))
-	}
-
-	missDecision, err := client.Decide(context.Background(), cacheadapter.Event("default", cacheadapter.Request{
-		Operation: "get",
-		Key:       "user:456",
-	}))
-	if err != nil {
-		t.Fatalf("Decide() cache miss error = %v", err)
-	}
-	if missDecision.Kind != mocksdk.DecisionKindForward || !missDecision.Fallback || missDecision.Forward == nil {
-		t.Fatalf("unexpected cache miss decision: %+v", missDecision)
-	}
-	if missDecision.Trace.FallbackReason != "rule_miss" {
-		t.Fatalf("unexpected cache miss fallback reason: %s", missDecision.Trace.FallbackReason)
-	}
+	missDecision := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/sdk/decision", map[string]any{
+		"event": map[string]any{
+			"protocol":  "cache",
+			"operation": "request",
+			"namespace": "default",
+			"request": map[string]any{
+				"operation": "get",
+				"key":       "user:456",
+			},
+		},
+	}, http.StatusOK)
+	missBody := readBody(t, missDecision)
+	assertBytesContain(t, missBody, `"decision":{"kind":"forward"`)
+	assertBytesContain(t, missBody, `"fallback":true`)
+	assertBytesContain(t, missBody, `"fallback_reason":"rule_miss"`)
 }
 
 func TestNamespaceCreateDefaultsToForwardFallback(t *testing.T) {
