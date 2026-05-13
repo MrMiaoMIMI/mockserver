@@ -157,5 +157,10 @@ func (s *runtimeService) matchPublished(ctx context.Context, event bo.Event) (bo
 	if err != nil {
 		return bo.SimulationResult{}, err
 	}
-	return engine.Match(compiledRuleSets, event)
+	result, err := engine.Match(compiledRuleSets, event)
+	if err != nil {
+		return bo.SimulationResult{}, err
+	}
+	attachPublishedSnapshotTrace(&result, snapshots)
+	return result, nil
 }

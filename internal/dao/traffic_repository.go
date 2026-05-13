@@ -9,14 +9,24 @@ import (
 )
 
 type trafficRepository struct {
-	tableDAO trafficTableDAO
+	tableDAO          trafficTableDAO
+	namespaceTableDAO namespaceTableDAO
+	ruleSetTableDAO   ruleSetTableDAO
 }
 
-func newTrafficRepository(tableDAO trafficTableDAO) TrafficRepository {
-	return &trafficRepository{tableDAO: tableDAO}
+func newTrafficRepository(tableDAO trafficTableDAO, namespaceTableDAO namespaceTableDAO, ruleSetTableDAO ruleSetTableDAO) TrafficRepository {
+	return &trafficRepository{
+		tableDAO:          tableDAO,
+		namespaceTableDAO: namespaceTableDAO,
+		ruleSetTableDAO:   ruleSetTableDAO,
+	}
 }
 
 func (r *trafficRepository) CreateTrafficEvent(ctx context.Context, event bo.TrafficEvent) (bo.TrafficEvent, error) {
+	event, err := r.resolveEventReferences(ctx, event)
+	if err != nil {
+		return bo.TrafficEvent{}, err
+	}
 	record, err := r.tableDAO.CreateTrafficEvent(ctx, encodeTrafficEventRecord(event), encodeTrafficEventIndexRecords(event.Indexes))
 	if err != nil {
 		return bo.TrafficEvent{}, err
@@ -24,7 +34,6 @@ func (r *trafficRepository) CreateTrafficEvent(ctx context.Context, event bo.Tra
 	event.ID = record.Id
 	for i := range event.Indexes {
 		event.Indexes[i].TrafficEventID = record.Id
-		event.Indexes[i].EventID = event.EventID
 		event.Indexes[i].ProtocolName = event.ProtocolName
 		event.Indexes[i].EventTime = event.EventTime
 		event.Indexes[i].ExpireTime = event.ExpireTime
@@ -33,6 +42,15 @@ func (r *trafficRepository) CreateTrafficEvent(ctx context.Context, event bo.Tra
 }
 
 func (r *trafficRepository) ListTrafficEvents(ctx context.Context, query bo.TrafficQuery) (bo.TrafficEventList, error) {
+	var ok bool
+	var err error
+	query, ok, err = r.resolveQueryReferences(ctx, query)
+	if err != nil {
+		return bo.TrafficEventList{}, err
+	}
+	if !ok {
+		return bo.TrafficEventList{Stats: emptyTrafficStats()}, nil
+	}
 	eventIDs, ok, err := r.resolveIndexFilterEventIDs(ctx, query)
 	if err != nil {
 		return bo.TrafficEventList{}, err
@@ -62,6 +80,61 @@ func (r *trafficRepository) ListTrafficEvents(ctx context.Context, query bo.Traf
 		Total: total,
 		Stats: stats,
 	}, nil
+}
+
+func (r *trafficRepository) resolveEventReferences(ctx context.Context, event bo.TrafficEvent) (bo.TrafficEvent, error) {
+	if event.NamespaceID != "" && r.namespaceTableDAO != nil {
+		namespace, ok, err := r.namespaceTableDAO.GetNamespace(ctx, event.NamespaceID)
+		if err != nil {
+			return bo.TrafficEvent{}, err
+		}
+		if ok {
+			event.NamespaceDBID = namespace.Id
+		}
+	}
+	if event.RuleSetID != "" && r.ruleSetTableDAO != nil {
+		ruleSet, ok, err := r.ruleSetTableDAO.GetDraft(ctx, event.RuleSetID)
+		if err != nil {
+			return bo.TrafficEvent{}, err
+		}
+		if ok {
+			event.RuleSetDBID = ruleSet.Id
+		}
+		if event.SnapshotID != "" {
+			snapshot, ok, err := r.ruleSetTableDAO.GetPublishedSnapshot(ctx, event.RuleSetID, event.SnapshotID)
+			if err != nil {
+				return bo.TrafficEvent{}, err
+			}
+			if ok {
+				event.SnapshotDBID = snapshot.Id
+			}
+		}
+	}
+	return event, nil
+}
+
+func (r *trafficRepository) resolveQueryReferences(ctx context.Context, query bo.TrafficQuery) (bo.TrafficQuery, bool, error) {
+	if query.NamespaceID != "" && r.namespaceTableDAO != nil {
+		namespace, ok, err := r.namespaceTableDAO.GetNamespace(ctx, query.NamespaceID)
+		if err != nil {
+			return bo.TrafficQuery{}, false, err
+		}
+		if !ok {
+			return query, true, nil
+		}
+		query.NamespaceDBID = namespace.Id
+	}
+	if query.RuleSetID != "" && r.ruleSetTableDAO != nil {
+		ruleSet, ok, err := r.ruleSetTableDAO.GetDraft(ctx, query.RuleSetID)
+		if err != nil {
+			return bo.TrafficQuery{}, false, err
+		}
+		if !ok {
+			return query, true, nil
+		}
+		query.RuleSetDBID = ruleSet.Id
+	}
+	return query, true, nil
 }
 
 func (r *trafficRepository) resolveIndexFilterEventIDs(ctx context.Context, query bo.TrafficQuery) ([]uint64, bool, error) {
@@ -117,17 +190,20 @@ func (r *trafficRepository) attachTrafficIndexes(ctx context.Context, items []bo
 
 func encodeTrafficEventRecord(event bo.TrafficEvent) modeldo.TrafficEvent {
 	return modeldo.TrafficEvent{
-		EventID:        event.EventID,
+		EventCode:      event.EventID,
 		TraceID:        event.TraceID,
 		TrafficSource:  event.TrafficSource,
 		ProtocolName:   event.ProtocolName,
-		NamespaceID:    event.NamespaceID,
+		NamespaceID:    event.NamespaceDBID,
+		NamespaceCode:  event.NamespaceID,
 		OperationName:  event.OperationName,
 		Outcome:        event.Outcome,
 		DecisionKind:   event.DecisionKind,
-		RuleSetID:      event.RuleSetID,
-		RuleID:         event.RuleID,
-		SnapshotID:     event.SnapshotID,
+		RuleSetID:      event.RuleSetDBID,
+		RuleSetCode:    event.RuleSetID,
+		RuleCode:       event.RuleID,
+		SnapshotID:     event.SnapshotDBID,
+		SnapshotCode:   event.SnapshotID,
 		FallbackReason: event.FallbackReason,
 		DurationMS:     event.DurationMS,
 		EventTime:      event.EventTime,
@@ -150,17 +226,20 @@ func decodeTrafficEventRecords(records []modeldo.TrafficEvent) []bo.TrafficEvent
 func decodeTrafficEventRecord(record modeldo.TrafficEvent) bo.TrafficEvent {
 	return bo.TrafficEvent{
 		ID:             record.Id,
-		EventID:        record.EventID,
+		EventID:        record.EventCode,
 		TraceID:        record.TraceID,
 		TrafficSource:  record.TrafficSource,
 		ProtocolName:   record.ProtocolName,
-		NamespaceID:    record.NamespaceID,
+		NamespaceDBID:  record.NamespaceID,
+		NamespaceID:    record.NamespaceCode,
 		OperationName:  record.OperationName,
 		Outcome:        record.Outcome,
 		DecisionKind:   record.DecisionKind,
-		RuleSetID:      record.RuleSetID,
-		RuleID:         record.RuleID,
-		SnapshotID:     record.SnapshotID,
+		RuleSetDBID:    record.RuleSetID,
+		RuleSetID:      record.RuleSetCode,
+		RuleID:         record.RuleCode,
+		SnapshotDBID:   record.SnapshotID,
+		SnapshotID:     record.SnapshotCode,
 		FallbackReason: record.FallbackReason,
 		DurationMS:     record.DurationMS,
 		EventTime:      record.EventTime,
@@ -177,7 +256,6 @@ func encodeTrafficEventIndexRecords(indexes []bo.TrafficEventIndex) []modeldo.Tr
 	for _, index := range indexes {
 		records = append(records, modeldo.TrafficEventIndex{
 			TrafficEventID:    index.TrafficEventID,
-			EventID:           index.EventID,
 			ProtocolName:      index.ProtocolName,
 			FieldPath:         index.FieldPath,
 			FieldValuePreview: index.FieldValuePreview,
@@ -196,7 +274,6 @@ func decodeTrafficEventIndexRecords(records []modeldo.TrafficEventIndex) []bo.Tr
 		items = append(items, bo.TrafficEventIndex{
 			ID:                record.Id,
 			TrafficEventID:    record.TrafficEventID,
-			EventID:           record.EventID,
 			ProtocolName:      record.ProtocolName,
 			FieldPath:         record.FieldPath,
 			FieldValuePreview: record.FieldValuePreview,
@@ -214,7 +291,7 @@ func buildTrafficStats(records []modeldo.TrafficEvent) bo.TrafficStats {
 	for _, record := range records {
 		stats.ByOutcome[record.Outcome]++
 		stats.ByProtocol[record.ProtocolName]++
-		stats.ByNamespace[record.NamespaceID]++
+		stats.ByNamespace[record.NamespaceCode]++
 	}
 	return stats
 }

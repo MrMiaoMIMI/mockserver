@@ -3,6 +3,7 @@ package bo
 import "time"
 
 type RuleSet struct {
+	DBID      uint64   `json:"-"`
 	ID        string   `json:"id"`
 	Name      string   `json:"name"`
 	Enabled   bool     `json:"enabled"`
@@ -73,8 +74,11 @@ type ValidationResult struct {
 }
 
 type MatchTrace struct {
+	RulesetDBID    uint64 `json:"-"`
+	SnapshotDBID   uint64 `json:"-"`
 	RulesetID      string `json:"ruleset_id,omitempty"`
 	RuleID         string `json:"rule_id,omitempty"`
+	SnapshotID     string `json:"snapshot_id,omitempty"`
 	FallbackReason string `json:"fallback_reason,omitempty"`
 }
 
@@ -179,6 +183,7 @@ type SimulationResult struct {
 }
 
 type PublishedRuleSetSnapshot struct {
+	DBID        uint64     `json:"-"`
 	SnapshotID  string     `json:"snapshot_id"`
 	PublishedAt time.Time  `json:"published_at"`
 	RuleSet     RuleSet    `json:"ruleset"`

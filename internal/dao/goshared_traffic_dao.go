@@ -37,7 +37,7 @@ func (d *gosharedTrafficTableDAO) CreateTrafficEvent(ctx context.Context, event 
 		eventStore := dbhelper.NewSoftDeleteTableStore(&modeldo.TrafficEvent{}, dbhelper.WithTx(tx))
 		indexStore := dbhelper.NewSoftDeleteTableStore(&modeldo.TrafficEventIndex{}, dbhelper.WithTx(tx))
 		if err := eventStore.Create(ctx, &event); err != nil {
-			return fmt.Errorf("insert traffic event %s: %w", event.EventID, err)
+			return fmt.Errorf("insert traffic event %s: %w", event.EventCode, err)
 		}
 		if len(indexes) == 0 {
 			return nil
@@ -45,14 +45,13 @@ func (d *gosharedTrafficTableDAO) CreateTrafficEvent(ctx context.Context, event 
 		rows := make([]*modeldo.TrafficEventIndex, 0, len(indexes))
 		for i := range indexes {
 			indexes[i].TrafficEventID = event.Id
-			indexes[i].EventID = event.EventID
 			indexes[i].ProtocolName = event.ProtocolName
 			indexes[i].EventTime = event.EventTime
 			indexes[i].ExpireTime = event.ExpireTime
 			rows = append(rows, &indexes[i])
 		}
 		if err := indexStore.BatchCreate(ctx, rows, 100); err != nil {
-			return fmt.Errorf("insert traffic event indexes %s: %w", event.EventID, err)
+			return fmt.Errorf("insert traffic event indexes %s: %w", event.EventCode, err)
 		}
 		return nil
 	}, dbhelper.WithManager(d.manager)); err != nil {
@@ -190,8 +189,10 @@ func (d *gosharedTrafficTableDAO) buildEventQuery(query bo.TrafficQuery, eventID
 	if query.ProtocolName != "" {
 		conditions = append(conditions, d.eventFields.ProtocolName.Eq(&query.ProtocolName))
 	}
-	if query.NamespaceID != "" {
-		conditions = append(conditions, d.eventFields.NamespaceID.Eq(&query.NamespaceID))
+	if query.NamespaceDBID > 0 {
+		conditions = append(conditions, d.eventFields.NamespaceID.Eq(&query.NamespaceDBID))
+	} else if query.NamespaceID != "" {
+		conditions = append(conditions, d.eventFields.NamespaceCode.Eq(&query.NamespaceID))
 	}
 	if query.OperationName != "" {
 		conditions = append(conditions, d.eventFields.OperationName.Eq(&query.OperationName))
@@ -202,11 +203,13 @@ func (d *gosharedTrafficTableDAO) buildEventQuery(query bo.TrafficQuery, eventID
 	if query.DecisionKind != "" {
 		conditions = append(conditions, d.eventFields.DecisionKind.Eq(&query.DecisionKind))
 	}
-	if query.RuleSetID != "" {
-		conditions = append(conditions, d.eventFields.RuleSetID.Eq(&query.RuleSetID))
+	if query.RuleSetDBID > 0 {
+		conditions = append(conditions, d.eventFields.RuleSetID.Eq(&query.RuleSetDBID))
+	} else if query.RuleSetID != "" {
+		conditions = append(conditions, d.eventFields.RuleSetCode.Eq(&query.RuleSetID))
 	}
 	if query.RuleID != "" {
-		conditions = append(conditions, d.eventFields.RuleID.Eq(&query.RuleID))
+		conditions = append(conditions, d.eventFields.RuleCode.Eq(&query.RuleID))
 	}
 	if query.FallbackReason != "" {
 		conditions = append(conditions, d.eventFields.FallbackReason.Eq(&query.FallbackReason))

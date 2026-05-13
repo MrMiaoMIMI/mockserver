@@ -108,31 +108,44 @@ type fakeCtxKey string
 
 type fakeRuleSetTableDAO struct {
 	drafts            map[string]modeldo.RuleSetDraft
-	current           map[string]string
+	current           map[uint64]uint64
 	snapshots         map[string]modeldo.PublishedRuleSetSnapshot
+	snapshotsByID     map[uint64]modeldo.PublishedRuleSetSnapshot
 	namespaces        map[string]modeldo.NamespaceConfig
+	nextID            uint64
 	observedCtxValues []any
 }
 
 func newFakeRuleSetTableDAO() *fakeRuleSetTableDAO {
 	return &fakeRuleSetTableDAO{
-		drafts:     make(map[string]modeldo.RuleSetDraft),
-		current:    make(map[string]string),
-		snapshots:  make(map[string]modeldo.PublishedRuleSetSnapshot),
-		namespaces: make(map[string]modeldo.NamespaceConfig),
+		drafts:        make(map[string]modeldo.RuleSetDraft),
+		current:       make(map[uint64]uint64),
+		snapshots:     make(map[string]modeldo.PublishedRuleSetSnapshot),
+		snapshotsByID: make(map[uint64]modeldo.PublishedRuleSetSnapshot),
+		namespaces:    make(map[string]modeldo.NamespaceConfig),
 	}
+}
+
+func (d *fakeRuleSetTableDAO) nextPrimaryID() uint64 {
+	d.nextID++
+	return d.nextID
 }
 
 func (d *fakeRuleSetTableDAO) UpsertDraft(ctx context.Context, draft modeldo.RuleSetDraft, expectedVersion int) error {
 	d.observeContext(ctx)
-	current, exists := d.drafts[draft.RuleSetID]
+	current, exists := d.drafts[draft.RuleSetCode]
 	if expectedVersion == 0 && exists {
 		return ErrConflict
 	}
 	if expectedVersion > 0 && (!exists || current.Version != expectedVersion) {
 		return ErrConflict
 	}
-	d.drafts[draft.RuleSetID] = draft
+	if exists {
+		draft.Id = current.Id
+	} else {
+		draft.Id = d.nextPrimaryID()
+	}
+	d.drafts[draft.RuleSetCode] = draft
 	return nil
 }
 
@@ -151,27 +164,37 @@ func (d *fakeRuleSetTableDAO) ListDrafts(ctx context.Context) ([]modeldo.RuleSet
 	return items, nil
 }
 
-func (d *fakeRuleSetTableDAO) PublishSnapshot(ctx context.Context, snapshot modeldo.PublishedRuleSetSnapshot) error {
+func (d *fakeRuleSetTableDAO) PublishSnapshot(ctx context.Context, snapshot modeldo.PublishedRuleSetSnapshot) (modeldo.PublishedRuleSetSnapshot, error) {
 	d.observeContext(ctx)
-	d.snapshots[snapshot.SnapshotID] = snapshot
-	d.current[snapshot.RuleSetID] = snapshot.SnapshotID
-	return nil
+	snapshot.Id = d.nextPrimaryID()
+	d.snapshots[snapshot.SnapshotCode] = snapshot
+	d.snapshotsByID[snapshot.Id] = snapshot
+	d.current[snapshot.RuleSetID] = snapshot.Id
+	return snapshot, nil
 }
 
 func (d *fakeRuleSetTableDAO) GetCurrentPublished(ctx context.Context, id string) (modeldo.PublishedRuleSetSnapshot, bool, error) {
 	d.observeContext(ctx)
-	snapshotID, ok := d.current[id]
+	draft, ok := d.drafts[id]
 	if !ok {
 		return modeldo.PublishedRuleSetSnapshot{}, false, nil
 	}
-	item, ok := d.snapshots[snapshotID]
+	snapshotID, ok := d.current[draft.Id]
+	if !ok {
+		return modeldo.PublishedRuleSetSnapshot{}, false, nil
+	}
+	item, ok := d.snapshotsByID[snapshotID]
 	return item, ok, nil
 }
 
 func (d *fakeRuleSetTableDAO) GetPublishedSnapshot(ctx context.Context, id string, snapshotID string) (modeldo.PublishedRuleSetSnapshot, bool, error) {
 	d.observeContext(ctx)
+	draft, ok := d.drafts[id]
+	if !ok {
+		return modeldo.PublishedRuleSetSnapshot{}, false, nil
+	}
 	item, ok := d.snapshots[snapshotID]
-	if !ok || item.RuleSetID != id {
+	if !ok || item.RuleSetID != draft.Id {
 		return modeldo.PublishedRuleSetSnapshot{}, false, nil
 	}
 	return item, true, nil
@@ -181,16 +204,20 @@ func (d *fakeRuleSetTableDAO) ListPublished(ctx context.Context) ([]modeldo.Publ
 	d.observeContext(ctx)
 	items := make([]modeldo.PublishedRuleSetSnapshot, 0, len(d.current))
 	for _, snapshotID := range d.current {
-		items = append(items, d.snapshots[snapshotID])
+		items = append(items, d.snapshotsByID[snapshotID])
 	}
 	return items, nil
 }
 
 func (d *fakeRuleSetTableDAO) ListPublishedSnapshots(ctx context.Context, id string) ([]modeldo.PublishedRuleSetSnapshot, error) {
 	d.observeContext(ctx)
+	draft, ok := d.drafts[id]
+	if !ok {
+		return nil, nil
+	}
 	items := make([]modeldo.PublishedRuleSetSnapshot, 0)
 	for _, item := range d.snapshots {
-		if item.RuleSetID == id {
+		if item.RuleSetID == draft.Id {
 			items = append(items, item)
 		}
 	}
@@ -199,7 +226,12 @@ func (d *fakeRuleSetTableDAO) ListPublishedSnapshots(ctx context.Context, id str
 
 func (d *fakeRuleSetTableDAO) UpsertNamespace(ctx context.Context, namespace modeldo.NamespaceConfig) error {
 	d.observeContext(ctx)
-	d.namespaces[namespace.NamespaceID] = namespace
+	if current, ok := d.namespaces[namespace.NamespaceCode]; ok {
+		namespace.Id = current.Id
+	} else {
+		namespace.Id = d.nextPrimaryID()
+	}
+	d.namespaces[namespace.NamespaceCode] = namespace
 	return nil
 }
 

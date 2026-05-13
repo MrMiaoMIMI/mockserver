@@ -15,7 +15,7 @@ import (
 const defaultSchemaSQL = `
 CREATE TABLE IF NOT EXISTS mockserver_rule_set_draft_tab (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Auto increment primary key',
-    ruleset_id VARCHAR(128) NOT NULL COMMENT 'Ruleset business id',
+    ruleset_code VARCHAR(96) NOT NULL COMMENT 'Ruleset business code',
     version INT UNSIGNED NOT NULL DEFAULT 1 COMMENT 'Draft version',
     ruleset_json LONGTEXT NOT NULL COMMENT 'Serialized ruleset JSON',
     creator VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Creator',
@@ -24,14 +24,14 @@ CREATE TABLE IF NOT EXISTS mockserver_rule_set_draft_tab (
     mtime BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Update time in UNIX milliseconds',
     deleted TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Soft delete flag',
     PRIMARY KEY (id),
-    UNIQUE KEY idx_ruleset_id (ruleset_id),
+    UNIQUE KEY idx_ruleset_code (ruleset_code),
     KEY idx_mtime (mtime)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Mockserver ruleset draft table';
 
 CREATE TABLE IF NOT EXISTS mockserver_published_snapshot_tab (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Auto increment primary key',
-    snapshot_id VARCHAR(256) NOT NULL COMMENT 'Snapshot business id',
-    ruleset_id VARCHAR(128) NOT NULL COMMENT 'Ruleset business id',
+    snapshot_code VARCHAR(40) NOT NULL COMMENT 'Snapshot business code',
+    ruleset_id BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Ruleset primary key',
     ruleset_version INT UNSIGNED NOT NULL COMMENT 'Ruleset version',
     ruleset_json LONGTEXT NOT NULL COMMENT 'Serialized ruleset JSON',
     audit_json LONGTEXT NOT NULL COMMENT 'Serialized audit JSON',
@@ -42,14 +42,14 @@ CREATE TABLE IF NOT EXISTS mockserver_published_snapshot_tab (
     mtime BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Update time in UNIX milliseconds',
     deleted TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Soft delete flag',
     PRIMARY KEY (id),
-    UNIQUE KEY idx_snapshot_id (snapshot_id),
+    UNIQUE KEY idx_snapshot_code (snapshot_code),
     KEY idx_ruleset_id_publish_time (ruleset_id, publish_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Mockserver published snapshot table';
 
 CREATE TABLE IF NOT EXISTS mockserver_published_rule_set_tab (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Auto increment primary key',
-    ruleset_id VARCHAR(128) NOT NULL COMMENT 'Ruleset business id',
-    current_snapshot_id VARCHAR(256) NOT NULL COMMENT 'Current snapshot business id',
+    ruleset_id BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Ruleset primary key',
+    current_snapshot_id BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Current snapshot primary key',
     creator VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Creator',
     updater VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Updater',
     ctime BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Create time in UNIX milliseconds',
@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS mockserver_published_rule_set_tab (
 
 CREATE TABLE IF NOT EXISTS mockserver_namespace_tab (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Auto increment primary key',
-    namespace_id VARCHAR(128) NOT NULL COMMENT 'Namespace business id',
+    namespace_code VARCHAR(64) NOT NULL COMMENT 'Namespace business code',
     version INT UNSIGNED NOT NULL DEFAULT 1 COMMENT 'Namespace version',
     namespace_json LONGTEXT NOT NULL COMMENT 'Serialized namespace JSON',
     creator VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Creator',
@@ -71,22 +71,25 @@ CREATE TABLE IF NOT EXISTS mockserver_namespace_tab (
     mtime BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Update time in UNIX milliseconds',
     deleted TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Soft delete flag',
     PRIMARY KEY (id),
-    UNIQUE KEY idx_namespace_id (namespace_id)
+    UNIQUE KEY idx_namespace_code (namespace_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Mockserver namespace table';
 
 CREATE TABLE IF NOT EXISTS mockserver_traffic_event_tab (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Auto increment primary key',
-    event_id VARCHAR(128) NOT NULL COMMENT 'Traffic event business id',
+    event_code VARCHAR(48) NOT NULL COMMENT 'Traffic event business code',
     trace_id VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'SDK trace id',
     traffic_source VARCHAR(32) NOT NULL DEFAULT '' COMMENT 'Traffic source',
     protocol_name VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'Protocol name',
-    namespace_id VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'Namespace business id',
+    namespace_id BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Namespace primary key',
+    namespace_code VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'Namespace business code',
     operation_name VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'Protocol operation name',
     outcome VARCHAR(32) NOT NULL DEFAULT '' COMMENT 'Decision outcome',
     decision_kind VARCHAR(32) NOT NULL DEFAULT '' COMMENT 'Decision action kind',
-    ruleset_id VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'Matched ruleset business id',
-    rule_id VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'Matched rule business id',
-    snapshot_id VARCHAR(256) NOT NULL DEFAULT '' COMMENT 'Published snapshot business id',
+    ruleset_id BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Matched ruleset primary key',
+    ruleset_code VARCHAR(96) NOT NULL DEFAULT '' COMMENT 'Matched ruleset business code',
+    rule_code VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'Matched rule business code',
+    snapshot_id BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Published snapshot primary key',
+    snapshot_code VARCHAR(40) NOT NULL DEFAULT '' COMMENT 'Published snapshot business code',
     fallback_reason VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'Fallback reason',
     duration_ms INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Decision latency in milliseconds',
     event_time BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Event time in UNIX seconds',
@@ -101,11 +104,11 @@ CREATE TABLE IF NOT EXISTS mockserver_traffic_event_tab (
     mtime BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Update time in UNIX milliseconds',
     deleted TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Soft delete flag',
     PRIMARY KEY (id),
-    UNIQUE KEY idx_event_id (event_id),
-    KEY idx_ns_protocol_event_time (namespace_id, protocol_name, event_time),
+    UNIQUE KEY idx_event_code (event_code),
+    KEY idx_namespace_id_protocol_event_time (namespace_id, protocol_name, event_time),
     KEY idx_trace_id (trace_id),
     KEY idx_outcome_event_time (outcome, event_time),
-    KEY idx_ruleset_rule_event_time (ruleset_id, rule_id, event_time),
+    KEY idx_ruleset_id_rule_code_event_time (ruleset_id, rule_code, event_time),
     KEY idx_fallback_event_time (fallback_reason, event_time),
     KEY idx_expire_time (expire_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Mockserver SDK traffic event table';
@@ -113,7 +116,6 @@ CREATE TABLE IF NOT EXISTS mockserver_traffic_event_tab (
 CREATE TABLE IF NOT EXISTS mockserver_traffic_event_index_tab (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Auto increment primary key',
     traffic_event_id BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Traffic event primary key',
-    event_id VARCHAR(128) NOT NULL COMMENT 'Traffic event business id',
     protocol_name VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'Protocol name',
     field_path VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'Protocol field path',
     field_value_preview VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Display preview for field value',
@@ -127,7 +129,6 @@ CREATE TABLE IF NOT EXISTS mockserver_traffic_event_index_tab (
     mtime BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Update time in UNIX milliseconds',
     deleted TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Soft delete flag',
     PRIMARY KEY (id),
-    KEY idx_event_id (event_id),
     KEY idx_traffic_event_id (traffic_event_id),
     KEY idx_protocol_path_hash_time (protocol_name, field_path, field_value_hash, event_time),
     KEY idx_expire_time (expire_time)

@@ -77,7 +77,6 @@ type DecidePublishedResponse struct {
 type TrafficEventIndexResponse struct {
 	ID                uint64 `json:"id"`
 	TrafficEventID    uint64 `json:"traffic_event_id"`
-	EventID           string `json:"event_id"`
 	ProtocolName      string `json:"protocol_name"`
 	FieldPath         string `json:"field_path"`
 	FieldValuePreview string `json:"field_value_preview"`
@@ -134,7 +133,6 @@ func NewTrafficEventResponse(item bo.TrafficEvent) TrafficEventResponse {
 		indexes = append(indexes, TrafficEventIndexResponse{
 			ID:                index.ID,
 			TrafficEventID:    index.TrafficEventID,
-			EventID:           index.EventID,
 			ProtocolName:      index.ProtocolName,
 			FieldPath:         index.FieldPath,
 			FieldValuePreview: index.FieldValuePreview,

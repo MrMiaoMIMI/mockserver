@@ -26,6 +26,12 @@ type rulesetService struct {
 	namespaces NamespaceService
 }
 
+const (
+	maxRuleSetCodeLength   = 96
+	maxNamespaceCodeLength = 64
+	maxRuleCodeLength      = 64
+)
+
 func NewRuleSetService(ruleSetRepository dao.RuleSetRepository, namespaceService NamespaceService) RuleSetService {
 	return &rulesetService{
 		ruleSets:   ruleSetRepository,
@@ -34,10 +40,13 @@ func NewRuleSetService(ruleSetRepository dao.RuleSetRepository, namespaceService
 }
 
 func (s *rulesetService) UpsertDraft(ctx context.Context, ruleSet bo.RuleSet) (bo.RuleSet, error) {
-	ruleSet.ID = strings.TrimSpace(ruleSet.ID)
+	ruleSet.ID = normalizeRuleSetID(ruleSet.ID)
 	ruleSet.Namespace = normalizeNamespaceID(ruleSet.Namespace)
 	if _, err := s.namespaces.GetNamespace(ctx, ruleSet.Namespace); err != nil {
 		return bo.RuleSet{}, err
+	}
+	if ruleSet.ID != "" && !isValidBusinessCode(ruleSet.ID, maxRuleSetCodeLength) {
+		return bo.RuleSet{}, fmt.Errorf("ruleset id can only contain letters, numbers, underscores and hyphens, and must be at most %d characters", maxRuleSetCodeLength)
 	}
 	if ruleSet.ID == "" {
 		id, err := s.newRuleSetID(ctx, ruleSet)
@@ -46,10 +55,16 @@ func (s *rulesetService) UpsertDraft(ctx context.Context, ruleSet bo.RuleSet) (b
 		}
 		ruleSet.ID = id
 	}
+	var err error
+	ruleSet, err = normalizeAndValidateRuleSetIdentifiers(ruleSet)
+	if err != nil {
+		return bo.RuleSet{}, err
+	}
 	return s.ruleSets.UpsertDraft(ctx, ruleSet)
 }
 
 func (s *rulesetService) GetDraft(ctx context.Context, id string) (bo.RuleSet, error) {
+	id = normalizeRuleSetID(id)
 	ruleSet, ok, err := s.ruleSets.GetDraft(ctx, id)
 	if err != nil {
 		return bo.RuleSet{}, err
@@ -65,6 +80,7 @@ func (s *rulesetService) ListDrafts(ctx context.Context) ([]bo.RuleSet, error) {
 }
 
 func (s *rulesetService) GetPublished(ctx context.Context, id string) (bo.PublishedRuleSetSnapshot, error) {
+	id = normalizeRuleSetID(id)
 	snapshot, ok, err := s.ruleSets.GetPublished(ctx, id)
 	if err != nil {
 		return bo.PublishedRuleSetSnapshot{}, err
@@ -80,6 +96,7 @@ func (s *rulesetService) ListPublished(ctx context.Context) ([]bo.PublishedRuleS
 }
 
 func (s *rulesetService) ListPublishedSnapshots(ctx context.Context, id string) ([]bo.PublishedRuleSetSnapshot, error) {
+	id = normalizeRuleSetID(id)
 	if _, ok, err := s.ruleSets.GetPublished(ctx, id); err != nil {
 		return nil, err
 	} else if !ok {
@@ -89,6 +106,7 @@ func (s *rulesetService) ListPublishedSnapshots(ctx context.Context, id string) 
 }
 
 func (s *rulesetService) ValidateDraft(ctx context.Context, id string) (bo.ValidationResult, error) {
+	id = normalizeRuleSetID(id)
 	ruleSet, ok, err := s.ruleSets.GetDraft(ctx, id)
 	if err != nil {
 		return bo.ValidationResult{}, err
@@ -100,6 +118,7 @@ func (s *rulesetService) ValidateDraft(ctx context.Context, id string) (bo.Valid
 }
 
 func (s *rulesetService) Publish(ctx context.Context, id string, audit bo.AuditInfo) (bo.PublishedRuleSetSnapshot, error) {
+	id = normalizeRuleSetID(id)
 	ruleSet, ok, err := s.ruleSets.GetDraft(ctx, id)
 	if err != nil {
 		return bo.PublishedRuleSetSnapshot{}, err
@@ -128,6 +147,8 @@ func (s *rulesetService) Publish(ctx context.Context, id string, audit bo.AuditI
 }
 
 func (s *rulesetService) AddDraftRule(ctx context.Context, id string, rule bo.Rule) (bo.RuleSet, error) {
+	id = normalizeRuleSetID(id)
+	rule.ID = normalizeRuleID(rule.ID)
 	ruleSet, ok, err := s.ruleSets.GetDraft(ctx, id)
 	if err != nil {
 		return bo.RuleSet{}, err
@@ -143,6 +164,9 @@ func (s *rulesetService) AddDraftRule(ctx context.Context, id string, rule bo.Ru
 }
 
 func (s *rulesetService) UpdateDraftRule(ctx context.Context, id string, ruleID string, rule bo.Rule) (bo.RuleSet, error) {
+	id = normalizeRuleSetID(id)
+	ruleID = normalizeRuleID(ruleID)
+	rule.ID = normalizeRuleID(rule.ID)
 	ruleSet, ok, err := s.ruleSets.GetDraft(ctx, id)
 	if err != nil {
 		return bo.RuleSet{}, err
@@ -165,6 +189,8 @@ func (s *rulesetService) UpdateDraftRule(ctx context.Context, id string, ruleID 
 }
 
 func (s *rulesetService) DeleteDraftRule(ctx context.Context, id string, ruleID string) (bo.RuleSet, error) {
+	id = normalizeRuleSetID(id)
+	ruleID = normalizeRuleID(ruleID)
 	ruleSet, ok, err := s.ruleSets.GetDraft(ctx, id)
 	if err != nil {
 		return bo.RuleSet{}, err
@@ -181,6 +207,8 @@ func (s *rulesetService) DeleteDraftRule(ctx context.Context, id string, ruleID 
 }
 
 func (s *rulesetService) SetDraftRuleEnabled(ctx context.Context, id string, ruleID string, enabled bool) (bo.RuleSet, error) {
+	id = normalizeRuleSetID(id)
+	ruleID = normalizeRuleID(ruleID)
 	ruleSet, ok, err := s.ruleSets.GetDraft(ctx, id)
 	if err != nil {
 		return bo.RuleSet{}, err
@@ -197,6 +225,8 @@ func (s *rulesetService) SetDraftRuleEnabled(ctx context.Context, id string, rul
 }
 
 func (s *rulesetService) SetDraftRulePriority(ctx context.Context, id string, ruleID string, priority int) (bo.RuleSet, error) {
+	id = normalizeRuleSetID(id)
+	ruleID = normalizeRuleID(ruleID)
 	ruleSet, ok, err := s.ruleSets.GetDraft(ctx, id)
 	if err != nil {
 		return bo.RuleSet{}, err
@@ -213,6 +243,8 @@ func (s *rulesetService) SetDraftRulePriority(ctx context.Context, id string, ru
 }
 
 func (s *rulesetService) RollbackPreview(ctx context.Context, id, snapshotID string, event *bo.Event, explainOnly bool, explainMaxDepth int, explainCompact bool, explainSummary bool) (bo.RollbackPreviewResult, error) {
+	id = normalizeRuleSetID(id)
+	snapshotID = strings.TrimSpace(snapshotID)
 	snapshot, ok, err := s.ruleSets.GetPublishedSnapshot(ctx, id, snapshotID)
 	if err != nil {
 		return bo.RollbackPreviewResult{}, err
@@ -279,6 +311,8 @@ func (s *rulesetService) RollbackPreview(ctx context.Context, id, snapshotID str
 }
 
 func (s *rulesetService) Rollback(ctx context.Context, id, snapshotID string, audit bo.AuditInfo) (bo.PublishedRuleSetSnapshot, error) {
+	id = normalizeRuleSetID(id)
+	snapshotID = strings.TrimSpace(snapshotID)
 	snapshot, ok, err := s.ruleSets.GetPublishedSnapshot(ctx, id, snapshotID)
 	if err != nil {
 		return bo.PublishedRuleSetSnapshot{}, err
@@ -319,6 +353,7 @@ func (s *rulesetService) Rollback(ctx context.Context, id, snapshotID string, au
 }
 
 func (s *rulesetService) SimulateDraft(ctx context.Context, id string, event bo.Event, draftOverride *bo.RuleSet, explainOnly bool, explainMaxDepth int, explainCompact bool, explainSummary bool) (bo.SimulationResult, error) {
+	id = normalizeRuleSetID(id)
 	var ruleSet bo.RuleSet
 	if draftOverride != nil {
 		ruleSet = *draftOverride
@@ -375,8 +410,24 @@ func (s *rulesetService) SimulatePublished(ctx context.Context, event bo.Event, 
 		logger.Error(ctx, "SimulatePublished failed", logger.Err(err))
 		return bo.SimulationResult{}, err
 	}
+	attachPublishedSnapshotTrace(&result, snapshots)
 	logSimulationResult(ctx, "SimulatePublished completed", result, event, explainOnly, explainMaxDepth, explainCompact, explainSummary)
 	return result, nil
+}
+
+func attachPublishedSnapshotTrace(result *bo.SimulationResult, snapshots []bo.PublishedRuleSetSnapshot) {
+	if result == nil || result.Trace.RulesetID == "" {
+		return
+	}
+	for _, snapshot := range snapshots {
+		if snapshot.RuleSet.ID != result.Trace.RulesetID {
+			continue
+		}
+		result.Trace.RulesetDBID = snapshot.RuleSet.DBID
+		result.Trace.SnapshotDBID = snapshot.DBID
+		result.Trace.SnapshotID = snapshot.SnapshotID
+		return
+	}
 }
 
 func compilePublishedRuleSets(snapshots []bo.PublishedRuleSetSnapshot) ([]engine.CompiledRuleSet, error) {
@@ -392,6 +443,11 @@ func compilePublishedRuleSets(snapshots []bo.PublishedRuleSetSnapshot) ([]engine
 }
 
 func (s *rulesetService) validateAndSaveDraft(ctx context.Context, ruleSet bo.RuleSet) (bo.RuleSet, error) {
+	var err error
+	ruleSet, err = normalizeAndValidateRuleSetIdentifiers(ruleSet)
+	if err != nil {
+		return bo.RuleSet{}, err
+	}
 	validation := engine.ValidateRuleSet(ruleSet)
 	if !validation.Valid {
 		return bo.RuleSet{}, fmt.Errorf("ruleset validation failed: %+v", validation.Issues)
@@ -483,6 +539,24 @@ func normalizeNamespaceID(id string) string {
 }
 
 func isValidNamespaceID(id string) bool {
+	if !isValidBusinessCode(id, maxNamespaceCodeLength) {
+		return false
+	}
+	return true
+}
+
+func normalizeRuleSetID(id string) string {
+	return strings.ToLower(strings.TrimSpace(id))
+}
+
+func normalizeRuleID(id string) string {
+	return strings.ToLower(strings.TrimSpace(id))
+}
+
+func isValidBusinessCode(id string, maxLength int) bool {
+	if id == "" || len(id) > maxLength {
+		return false
+	}
 	for _, item := range id {
 		if item >= 'a' && item <= 'z' || item >= '0' && item <= '9' || item == '_' || item == '-' {
 			continue
@@ -490,6 +564,24 @@ func isValidNamespaceID(id string) bool {
 		return false
 	}
 	return true
+}
+
+func normalizeAndValidateRuleSetIdentifiers(ruleSet bo.RuleSet) (bo.RuleSet, error) {
+	ruleSet.ID = normalizeRuleSetID(ruleSet.ID)
+	ruleSet.Namespace = normalizeNamespaceID(ruleSet.Namespace)
+	if !isValidBusinessCode(ruleSet.ID, maxRuleSetCodeLength) {
+		return bo.RuleSet{}, fmt.Errorf("ruleset id can only contain letters, numbers, underscores and hyphens, and must be at most %d characters", maxRuleSetCodeLength)
+	}
+	if !isValidBusinessCode(ruleSet.Namespace, maxNamespaceCodeLength) {
+		return bo.RuleSet{}, fmt.Errorf("namespace id can only contain letters, numbers, underscores and hyphens, and must be at most %d characters", maxNamespaceCodeLength)
+	}
+	for i := range ruleSet.Rules {
+		ruleSet.Rules[i].ID = normalizeRuleID(ruleSet.Rules[i].ID)
+		if !isValidBusinessCode(ruleSet.Rules[i].ID, maxRuleCodeLength) {
+			return bo.RuleSet{}, fmt.Errorf("rule id can only contain letters, numbers, underscores and hyphens, and must be at most %d characters", maxRuleCodeLength)
+		}
+	}
+	return ruleSet, nil
 }
 
 func validateNamespaceFallbackAction(action bo.NamespaceFallbackAction, path string) error {
@@ -641,9 +733,8 @@ func (s *rulesetService) newRuleSetID(ctx context.Context, ruleSet bo.RuleSet) (
 	if base == "" {
 		base = "ruleset"
 	}
-	const maxIDLength = 128
 	const suffixLength = 8
-	maxBaseLength := maxIDLength - suffixLength - 1
+	maxBaseLength := maxRuleSetCodeLength - suffixLength - 1
 	if len(base) > maxBaseLength {
 		base = strings.Trim(base[:maxBaseLength], "-")
 	}

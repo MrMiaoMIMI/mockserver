@@ -321,7 +321,6 @@ export interface RuntimeRequestRecord {
 export interface TrafficEventIndex {
   id: number
   traffic_event_id: number
-  event_id: string
   protocol_name: string
   field_path: string
   field_value_preview: string

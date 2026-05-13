@@ -2,7 +2,7 @@ package modeldo
 
 type RuleSetDraft struct {
 	CommonDo
-	RuleSetID   string `gorm:"column:ruleset_id"`
+	RuleSetCode string `gorm:"column:ruleset_code"`
 	Version     int    `gorm:"column:version"`
 	RuleSetJSON string `gorm:"column:ruleset_json"`
 }
@@ -12,13 +12,13 @@ func (*RuleSetDraft) TableName() string {
 }
 
 func (*RuleSetDraft) IdFieldName() string {
-	return "ruleset_id"
+	return "id"
 }
 
 type PublishedRuleSetCurrent struct {
 	CommonDo
-	RuleSetID         string `gorm:"column:ruleset_id"`
-	CurrentSnapshotID string `gorm:"column:current_snapshot_id"`
+	RuleSetID         uint64 `gorm:"column:ruleset_id"`
+	CurrentSnapshotID uint64 `gorm:"column:current_snapshot_id"`
 }
 
 func (*PublishedRuleSetCurrent) TableName() string {
@@ -26,13 +26,13 @@ func (*PublishedRuleSetCurrent) TableName() string {
 }
 
 func (*PublishedRuleSetCurrent) IdFieldName() string {
-	return "ruleset_id"
+	return "id"
 }
 
 type PublishedRuleSetSnapshot struct {
 	CommonDo
-	SnapshotID     string `gorm:"column:snapshot_id"`
-	RuleSetID      string `gorm:"column:ruleset_id"`
+	SnapshotCode   string `gorm:"column:snapshot_code"`
+	RuleSetID      uint64 `gorm:"column:ruleset_id"`
 	RuleSetVersion int    `gorm:"column:ruleset_version"`
 	RuleSetJSON    string `gorm:"column:ruleset_json"`
 	AuditJSON      string `gorm:"column:audit_json"`
@@ -44,12 +44,12 @@ func (*PublishedRuleSetSnapshot) TableName() string {
 }
 
 func (*PublishedRuleSetSnapshot) IdFieldName() string {
-	return "snapshot_id"
+	return "id"
 }
 
 type NamespaceConfig struct {
 	CommonDo
-	NamespaceID   string `gorm:"column:namespace_id"`
+	NamespaceCode string `gorm:"column:namespace_code"`
 	Version       int    `gorm:"column:version"`
 	NamespaceJSON string `gorm:"column:namespace_json"`
 }
@@ -59,5 +59,5 @@ func (*NamespaceConfig) TableName() string {
 }
 
 func (*NamespaceConfig) IdFieldName() string {
-	return "namespace_id"
+	return "id"
 }

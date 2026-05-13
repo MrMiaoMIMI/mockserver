@@ -104,7 +104,7 @@ func TestAdminPublishAndRuntimeFlow(t *testing.T) {
 	doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/rulesets", nonMatchingRuleSet, http.StatusOK)
 	doJSON(t, handler, http.MethodPost, fmt.Sprintf("/mockserver/api/v1/admin/rulesets/%s/validate", ruleSetID), nil, http.StatusOK)
 	publishResp := doJSON(t, handler, http.MethodPost, fmt.Sprintf("/mockserver/api/v1/admin/rulesets/%s/publish", ruleSetID), nil, http.StatusOK)
-	assertBytesContain(t, readBody(t, publishResp), fmt.Sprintf(`"snapshot_id":"%s-v1-`, ruleSetID))
+	assertBytesContain(t, readBody(t, publishResp), `"snapshot_id":"snap_`)
 
 	simulateResp := doJSON(t, handler, http.MethodPost, fmt.Sprintf("/mockserver/api/v1/admin/rulesets/%s/simulate", ruleSetID), map[string]any{
 		"explain_only":    true,

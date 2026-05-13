@@ -16,6 +16,7 @@ import (
 )
 
 const maxRegexPatternLength = 512
+const maxRuleCodeLength = 64
 
 type CompiledRuleSet struct {
 	RuleSet             bo.RuleSet
@@ -287,8 +288,11 @@ func isValidAbsolutePath(value string) bool {
 }
 
 func validateRule(protocol string, rule bo.Rule, path string, issues *[]bo.ValidationIssue) {
-	if strings.TrimSpace(rule.ID) == "" {
+	ruleID := strings.TrimSpace(rule.ID)
+	if ruleID == "" {
 		*issues = append(*issues, bo.ValidationIssue{Path: path + ".id", Message: "rule id is required"})
+	} else if !isValidRuleCode(ruleID) {
+		*issues = append(*issues, bo.ValidationIssue{Path: path + ".id", Message: "rule id can only contain letters, numbers, underscores and hyphens, and must be at most 64 characters"})
 	}
 	if strings.TrimSpace(rule.Name) == "" {
 		*issues = append(*issues, bo.ValidationIssue{Path: path + ".name", Message: "rule name is required"})
@@ -333,6 +337,19 @@ func validateRule(protocol string, rule bo.Rule, path string, issues *[]bo.Valid
 		validateWebhookAction(rule.Action, path+".action", issues)
 	}
 	validateCondition(protocol, rule.When, path+".when", issues)
+}
+
+func isValidRuleCode(id string) bool {
+	if id == "" || len(id) > maxRuleCodeLength {
+		return false
+	}
+	for _, item := range id {
+		if item >= 'a' && item <= 'z' || item >= 'A' && item <= 'Z' || item >= '0' && item <= '9' || item == '_' || item == '-' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func requiresTopLevelStatus(actionType string) bool {

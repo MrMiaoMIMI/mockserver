@@ -216,6 +216,7 @@ curl 'http://127.0.0.1:8080/mockserver/api/v1/admin/traffic/events?limit=50&incl
 ```
 
 SDK decision traffic 会落库；ruleset/rule 管理页面里的 simulate 结果直接展示在页面，不写入 traffic 表。
+Traffic index 默认只保存低基数、常用于定位的字段，例如 HTTP `method/host/path`、cache `operation/key`、SPEX `cmd` 和 `decision.response.status`；HTTP `query/header/body`、cache `value`、SPEX `param/req` 等高基数或大字段保留在原始 event JSON 中，不默认展开到索引表。
 
 ## 5. 核心概念
 

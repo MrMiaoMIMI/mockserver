@@ -529,7 +529,7 @@ curl -X POST http://127.0.0.1:8080/mockserver/api/v1/admin/published/rulesets/ht
   -H 'Content-Type: application/json' \
   -H 'X-Mockserver-Operator: admin@example.com' \
   -d '{
-    "snapshot_id": "http-default-v1-1710000000000000000",
+    "snapshot_id": "snap_9f2a4c7b1d3e5f60",
     "reason": "restore previous stable mock"
   }'
 ```
@@ -540,7 +540,7 @@ curl -X POST http://127.0.0.1:8080/mockserver/api/v1/admin/published/rulesets/ht
 curl -X POST http://127.0.0.1:8080/mockserver/api/v1/admin/published/rulesets/http-default/rollback/preview \
   -H 'Content-Type: application/json' \
   -d '{
-    "snapshot_id": "http-default-v1-1710000000000000000",
+    "snapshot_id": "snap_9f2a4c7b1d3e5f60",
     "explain_compact": true,
     "explain_max_depth": 1,
     "event": {
@@ -727,6 +727,7 @@ curl 'http://127.0.0.1:8080/mockserver/api/v1/admin/traffic/events?limit=50&incl
 - runtime 目前只实现了 HTTP adapter。
 - runtime metrics 当前是内存型，服务重启后会清零，仅作为 HTTP runtime 调试指标。
 - SDK decision traffic 会落库到 `mockserver_traffic_event_tab` 和 `mockserver_traffic_event_index_tab`；admin simulate 流量不落库。
+- traffic index 默认只展开低基数定位字段；HTTP `query/header/body`、cache `value`、SPEX `param/req` 等高基数或大字段保留在原始 event JSON 中。
 
 ## 已有验证
 

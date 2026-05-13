@@ -89,9 +89,8 @@ func (s *namespaceService) newNamespaceID(ctx context.Context, namespace bo.Name
 	if base == "" {
 		base = "namespace"
 	}
-	const maxIDLength = 128
 	const suffixLength = 8
-	maxBaseLength := maxIDLength - suffixLength - 1
+	maxBaseLength := maxNamespaceCodeLength - suffixLength - 1
 	if len(base) > maxBaseLength {
 		base = strings.Trim(base[:maxBaseLength], "-")
 	}

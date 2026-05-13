@@ -15,12 +15,15 @@ type TrafficEvent struct {
 	TraceID        string              `json:"trace_id,omitempty"`
 	TrafficSource  string              `json:"traffic_source"`
 	ProtocolName   string              `json:"protocol_name"`
+	NamespaceDBID  uint64              `json:"-"`
 	NamespaceID    string              `json:"namespace_id"`
 	OperationName  string              `json:"operation_name,omitempty"`
 	Outcome        string              `json:"outcome"`
 	DecisionKind   string              `json:"decision_kind,omitempty"`
+	RuleSetDBID    uint64              `json:"-"`
 	RuleSetID      string              `json:"ruleset_id,omitempty"`
 	RuleID         string              `json:"rule_id,omitempty"`
+	SnapshotDBID   uint64              `json:"-"`
 	SnapshotID     string              `json:"snapshot_id,omitempty"`
 	FallbackReason string              `json:"fallback_reason,omitempty"`
 	DurationMS     uint32              `json:"duration_ms"`
@@ -36,7 +39,6 @@ type TrafficEvent struct {
 type TrafficEventIndex struct {
 	ID                uint64 `json:"id"`
 	TrafficEventID    uint64 `json:"traffic_event_id"`
-	EventID           string `json:"event_id"`
 	ProtocolName      string `json:"protocol_name"`
 	FieldPath         string `json:"field_path"`
 	FieldValuePreview string `json:"field_value_preview"`
@@ -63,7 +65,9 @@ type TrafficQuery struct {
 	OperationName  string
 	Outcome        string
 	DecisionKind   string
+	NamespaceDBID  uint64
 	RuleSetID      string
+	RuleSetDBID    uint64
 	RuleID         string
 	FallbackReason string
 	IndexFilters   []TrafficIndexFilter

@@ -42,7 +42,7 @@ func NewDB(ctx context.Context, cfg config.Config) (DB, error) {
 		manager:             manager,
 		ruleSetRepository:   newRuleSetRepository(ruleSetTableDAO),
 		namespaceRepository: newNamespaceRepository(namespaceTableDAO),
-		trafficRepository:   newTrafficRepository(trafficTableDAO),
+		trafficRepository:   newTrafficRepository(trafficTableDAO, namespaceTableDAO, ruleSetTableDAO),
 	}, nil
 }
 

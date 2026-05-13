@@ -42,7 +42,7 @@ type ruleSetTableDAO interface {
 	UpsertDraft(ctx context.Context, draft modeldo.RuleSetDraft, expectedVersion int) error
 	GetDraft(ctx context.Context, id string) (modeldo.RuleSetDraft, bool, error)
 	ListDrafts(ctx context.Context) ([]modeldo.RuleSetDraft, error)
-	PublishSnapshot(ctx context.Context, snapshot modeldo.PublishedRuleSetSnapshot) error
+	PublishSnapshot(ctx context.Context, snapshot modeldo.PublishedRuleSetSnapshot) (modeldo.PublishedRuleSetSnapshot, error)
 	GetCurrentPublished(ctx context.Context, id string) (modeldo.PublishedRuleSetSnapshot, bool, error)
 	GetPublishedSnapshot(ctx context.Context, id string, snapshotID string) (modeldo.PublishedRuleSetSnapshot, bool, error)
 	ListPublished(ctx context.Context) ([]modeldo.PublishedRuleSetSnapshot, error)

@@ -129,13 +129,13 @@ func cleanupMySQLRuleSet(t *testing.T, ctx context.Context, manager dbspi.Manage
 	if !ok {
 		t.Fatalf("table store does not support raw SQL")
 	}
-	if err := sqlStore.Exec(ctx, "DELETE FROM mockserver_published_rule_set_tab WHERE ruleset_id = ?", id); err != nil {
+	if err := sqlStore.Exec(ctx, "DELETE FROM mockserver_published_rule_set_tab WHERE ruleset_id IN (SELECT id FROM mockserver_rule_set_draft_tab WHERE ruleset_code = ?)", id); err != nil {
 		t.Fatalf("cleanup current published %s: %v", id, err)
 	}
-	if err := sqlStore.Exec(ctx, "DELETE FROM mockserver_published_snapshot_tab WHERE ruleset_id = ?", id); err != nil {
+	if err := sqlStore.Exec(ctx, "DELETE FROM mockserver_published_snapshot_tab WHERE ruleset_id IN (SELECT id FROM mockserver_rule_set_draft_tab WHERE ruleset_code = ?)", id); err != nil {
 		t.Fatalf("cleanup published snapshots %s: %v", id, err)
 	}
-	if err := sqlStore.Exec(ctx, "DELETE FROM mockserver_rule_set_draft_tab WHERE ruleset_id = ?", id); err != nil {
+	if err := sqlStore.Exec(ctx, "DELETE FROM mockserver_rule_set_draft_tab WHERE ruleset_code = ?", id); err != nil {
 		t.Fatalf("cleanup draft %s: %v", id, err)
 	}
 }
@@ -147,7 +147,7 @@ func cleanupMySQLNamespace(t *testing.T, ctx context.Context, manager dbspi.Mana
 	if !ok {
 		t.Fatalf("table store does not support raw SQL")
 	}
-	if err := sqlStore.Exec(ctx, "DELETE FROM mockserver_namespace_tab WHERE namespace_id = ?", id); err != nil {
+	if err := sqlStore.Exec(ctx, "DELETE FROM mockserver_namespace_tab WHERE namespace_code = ?", id); err != nil {
 		t.Fatalf("cleanup namespace %s: %v", id, err)
 	}
 }

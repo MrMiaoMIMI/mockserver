@@ -34,7 +34,7 @@ func newGosharedRuleSetTableDAO(manager dbspi.Manager) ruleSetTableDAO {
 func (d *gosharedRuleSetTableDAO) UpsertDraft(ctx context.Context, draft modeldo.RuleSetDraft, expectedVersion int) error {
 	if expectedVersion <= 0 {
 		if err := d.draftStore.Create(ctx, &draft); err != nil {
-			return fmt.Errorf("insert draft %s: %w", draft.RuleSetID, err)
+			return fmt.Errorf("insert draft %s: %w", draft.RuleSetCode, err)
 		}
 		return nil
 	}
@@ -43,13 +43,13 @@ func (d *gosharedRuleSetTableDAO) UpsertDraft(ctx context.Context, draft modeldo
 		Set(d.draftFields.Version, draft.Version).
 		Set(d.draftFields.RuleSetJSON, draft.RuleSetJSON)
 	query := dbhelper.Q(
-		d.draftFields.RuleSetID.Eq(&draft.RuleSetID),
+		d.draftFields.RuleSetCode.Eq(&draft.RuleSetCode),
 		d.draftFields.Version.Eq(&expectedVersion),
 	)
 	if err := d.draftStore.UpdateByQuery(ctx, query, updater); err != nil {
-		return fmt.Errorf("update draft %s: %w", draft.RuleSetID, err)
+		return fmt.Errorf("update draft %s: %w", draft.RuleSetCode, err)
 	}
-	updated, ok, err := d.GetDraft(ctx, draft.RuleSetID)
+	updated, ok, err := d.GetDraft(ctx, draft.RuleSetCode)
 	if err != nil {
 		return err
 	}
@@ -60,7 +60,8 @@ func (d *gosharedRuleSetTableDAO) UpsertDraft(ctx context.Context, draft modeldo
 }
 
 func (d *gosharedRuleSetTableDAO) GetDraft(ctx context.Context, id string) (modeldo.RuleSetDraft, bool, error) {
-	exists, draft, err := d.draftStore.ExistsByIdNotDeleted(ctx, id)
+	query := dbhelper.Q(d.draftFields.RuleSetCode.Eq(&id))
+	exists, draft, err := d.draftStore.ExistsNotDeleted(ctx, query)
 	if err != nil {
 		return modeldo.RuleSetDraft{}, false, fmt.Errorf("get draft %s: %w", id, err)
 	}
@@ -84,49 +85,72 @@ func (d *gosharedRuleSetTableDAO) ListDrafts(ctx context.Context) ([]modeldo.Rul
 	return result, nil
 }
 
-func (d *gosharedRuleSetTableDAO) PublishSnapshot(ctx context.Context, snapshot modeldo.PublishedRuleSetSnapshot) error {
+func (d *gosharedRuleSetTableDAO) PublishSnapshot(ctx context.Context, snapshot modeldo.PublishedRuleSetSnapshot) (modeldo.PublishedRuleSetSnapshot, error) {
 	if err := d.snapshotStore.Create(ctx, &snapshot); err != nil {
-		return fmt.Errorf("insert published snapshot %s: %w", snapshot.SnapshotID, err)
+		return modeldo.PublishedRuleSetSnapshot{}, fmt.Errorf("insert published snapshot %s: %w", snapshot.SnapshotCode, err)
 	}
 
-	exists, _, err := d.currentStore.ExistsById(ctx, snapshot.RuleSetID)
+	query := dbhelper.Q(d.currentFields.RuleSetID.Eq(&snapshot.RuleSetID))
+	exists, _, err := d.currentStore.Exists(ctx, query)
 	if err != nil {
-		return fmt.Errorf("get current published %s: %w", snapshot.RuleSetID, err)
+		return modeldo.PublishedRuleSetSnapshot{}, fmt.Errorf("get current published %d: %w", snapshot.RuleSetID, err)
 	}
 	if !exists {
 		current := &modeldo.PublishedRuleSetCurrent{
 			RuleSetID:         snapshot.RuleSetID,
-			CurrentSnapshotID: snapshot.SnapshotID,
+			CurrentSnapshotID: snapshot.Id,
 		}
 		if err := d.currentStore.Create(ctx, current); err != nil {
-			return fmt.Errorf("insert current published %s: %w", snapshot.RuleSetID, err)
+			return modeldo.PublishedRuleSetSnapshot{}, fmt.Errorf("insert current published %d: %w", snapshot.RuleSetID, err)
 		}
-		return nil
+		return snapshot, nil
 	}
 
 	updater := dbhelper.NewUpdater().
-		Set(d.currentFields.CurrentSnapshotID, snapshot.SnapshotID)
-	if err := d.currentStore.UpdateById(ctx, snapshot.RuleSetID, updater); err != nil {
-		return fmt.Errorf("update current published %s: %w", snapshot.RuleSetID, err)
+		Set(d.currentFields.CurrentSnapshotID, snapshot.Id)
+	if err := d.currentStore.UpdateByQuery(ctx, query, updater); err != nil {
+		return modeldo.PublishedRuleSetSnapshot{}, fmt.Errorf("update current published %d: %w", snapshot.RuleSetID, err)
 	}
-	return nil
+	return snapshot, nil
 }
 
 func (d *gosharedRuleSetTableDAO) GetCurrentPublished(ctx context.Context, id string) (modeldo.PublishedRuleSetSnapshot, bool, error) {
-	exists, current, err := d.currentStore.ExistsByIdNotDeleted(ctx, id)
+	draft, ok, err := d.GetDraft(ctx, id)
+	if err != nil {
+		return modeldo.PublishedRuleSetSnapshot{}, false, err
+	}
+	if !ok {
+		return modeldo.PublishedRuleSetSnapshot{}, false, nil
+	}
+	query := dbhelper.Q(d.currentFields.RuleSetID.Eq(&draft.Id))
+	exists, current, err := d.currentStore.ExistsNotDeleted(ctx, query)
 	if err != nil {
 		return modeldo.PublishedRuleSetSnapshot{}, false, fmt.Errorf("get current published %s: %w", id, err)
 	}
 	if !exists || current == nil {
 		return modeldo.PublishedRuleSetSnapshot{}, false, nil
 	}
-	return d.GetPublishedSnapshot(ctx, id, current.CurrentSnapshotID)
+	exists, snapshot, err := d.snapshotStore.ExistsByIdNotDeleted(ctx, current.CurrentSnapshotID)
+	if err != nil {
+		return modeldo.PublishedRuleSetSnapshot{}, false, fmt.Errorf("get current snapshot %d: %w", current.CurrentSnapshotID, err)
+	}
+	if !exists || snapshot == nil {
+		return modeldo.PublishedRuleSetSnapshot{}, false, nil
+	}
+	return *snapshot, true, nil
 }
 
 func (d *gosharedRuleSetTableDAO) GetPublishedSnapshot(ctx context.Context, id string, snapshotID string) (modeldo.PublishedRuleSetSnapshot, bool, error) {
+	draft, ok, err := d.GetDraft(ctx, id)
+	if err != nil {
+		return modeldo.PublishedRuleSetSnapshot{}, false, err
+	}
+	if !ok {
+		return modeldo.PublishedRuleSetSnapshot{}, false, nil
+	}
 	query := dbhelper.Q(
-		d.snapshotFields.RuleSetID.Eq(&id),
-		d.snapshotFields.SnapshotID.Eq(&snapshotID),
+		d.snapshotFields.RuleSetID.Eq(&draft.Id),
+		d.snapshotFields.SnapshotCode.Eq(&snapshotID),
 	)
 	exists, snapshot, err := d.snapshotStore.ExistsNotDeleted(ctx, query)
 	if err != nil {
@@ -148,19 +172,26 @@ func (d *gosharedRuleSetTableDAO) ListPublished(ctx context.Context) ([]modeldo.
 		if current == nil {
 			continue
 		}
-		snapshot, ok, err := d.GetPublishedSnapshot(ctx, current.RuleSetID, current.CurrentSnapshotID)
+		exists, snapshot, err := d.snapshotStore.ExistsByIdNotDeleted(ctx, current.CurrentSnapshotID)
 		if err != nil {
 			return nil, err
 		}
-		if ok {
-			items = append(items, snapshot)
+		if exists && snapshot != nil {
+			items = append(items, *snapshot)
 		}
 	}
 	return items, nil
 }
 
 func (d *gosharedRuleSetTableDAO) ListPublishedSnapshots(ctx context.Context, id string) ([]modeldo.PublishedRuleSetSnapshot, error) {
-	query := dbhelper.Q(d.snapshotFields.RuleSetID.Eq(&id))
+	draft, ok, err := d.GetDraft(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, nil
+	}
+	query := dbhelper.Q(d.snapshotFields.RuleSetID.Eq(&draft.Id))
 	items, err := d.snapshotStore.FindNotDeleted(ctx, query, nil)
 	if err != nil {
 		return nil, fmt.Errorf("list published snapshots %s: %w", id, err)

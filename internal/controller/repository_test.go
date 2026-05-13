@@ -184,7 +184,7 @@ func (s *testRuleSetRepository) ListNamespaces(ctx context.Context) ([]bo.Namesp
 func (s *testRuleSetRepository) publishSnapshot(ruleSet bo.RuleSet, audit *bo.AuditInfo) (bo.PublishedRuleSetSnapshot, error) {
 	publishedAt := time.Now().UTC()
 	snapshot := bo.PublishedRuleSetSnapshot{
-		SnapshotID:  fmt.Sprintf("%s-v%d-%d", ruleSet.ID, ruleSet.Version, publishedAt.UnixMilli()),
+		SnapshotID:  fmt.Sprintf("snap_%d", publishedAt.UnixNano()),
 		PublishedAt: publishedAt,
 		RuleSet:     ruleSet,
 		Audit:       cloneTestAuditInfo(audit),

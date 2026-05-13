@@ -3,6 +3,7 @@ package bo
 import "github.com/MrMiaoMIMI/mockserver/internal/model/eo"
 
 type Namespace struct {
+	DBID              uint64                  `json:"-"`
 	ID                string                  `json:"id"`
 	Name              string                  `json:"name,omitempty"`
 	Description       string                  `json:"description,omitempty"`

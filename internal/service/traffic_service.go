@@ -61,8 +61,11 @@ func (s *trafficService) RecordSDKDecision(ctx context.Context, event bo.Event, 
 		OperationName:  operationName(event),
 		Outcome:        decisionOutcome(decision, decisionErr),
 		DecisionKind:   strings.TrimSpace(decision.Kind),
+		RuleSetDBID:    decision.Trace.RulesetDBID,
 		RuleSetID:      strings.TrimSpace(decision.Trace.RulesetID),
 		RuleID:         strings.TrimSpace(decision.Trace.RuleID),
+		SnapshotDBID:   decision.Trace.SnapshotDBID,
+		SnapshotID:     strings.TrimSpace(decision.Trace.SnapshotID),
 		FallbackReason: strings.TrimSpace(decision.Trace.FallbackReason),
 		DurationMS:     durationMS,
 		EventTime:      uint64(now.Unix()),
@@ -72,7 +75,7 @@ func (s *trafficService) RecordSDKDecision(ctx context.Context, event bo.Event, 
 		ExplainJSON:    explainRaw,
 		ErrorMessage:   errorMessage,
 	}
-	traffic.Indexes = buildTrafficIndexes(traffic, event, decision)
+	traffic.Indexes = buildTrafficIndexes(event, decision)
 	return s.repository.CreateTrafficEvent(ctx, traffic)
 }
 
@@ -144,9 +147,8 @@ func operationName(event bo.Event) string {
 	return ""
 }
 
-func buildTrafficIndexes(traffic bo.TrafficEvent, event bo.Event, decision bo.RuntimeDecision) []bo.TrafficEventIndex {
+func buildTrafficIndexes(event bo.Event, decision bo.RuntimeDecision) []bo.TrafficEventIndex {
 	fields := map[string]string{}
-	addField(fields, "event.operation", traffic.OperationName)
 	for _, key := range sortedRequestKeys(event.Request) {
 		if !isQueryableRequestField(event.Protocol, key) {
 			continue
@@ -155,15 +157,8 @@ func buildTrafficIndexes(traffic bo.TrafficEvent, event bo.Event, decision bo.Ru
 			addField(fields, "event.request."+key, value)
 		}
 	}
-	if strings.EqualFold(strings.TrimSpace(event.Protocol), "http") {
-		addNestedMultiValueFields(fields, "event.request.query.", event.Request["query"])
-		addNestedMultiValueFields(fields, "event.request.headers.", event.Request["headers"])
-	}
 	if decision.Response != nil && decision.Response.Status > 0 {
 		addField(fields, "decision.response.status", strconv.Itoa(decision.Response.Status))
-	}
-	if decision.Forward != nil && decision.Forward.TimeoutMS > 0 {
-		addField(fields, "decision.forward.timeout_ms", strconv.Itoa(decision.Forward.TimeoutMS))
 	}
 
 	indexes := make([]bo.TrafficEventIndex, 0, len(fields))
@@ -201,22 +196,17 @@ func isQueryableRequestField(protocol, key string) bool {
 	switch strings.ToLower(strings.TrimSpace(protocol)) {
 	case "http":
 		switch key {
-		case "method", "host", "original_host", "path":
-			return true
-		default:
-			return strings.HasPrefix(key, "query.")
-		}
-	case "cache":
-		return key == "operation" || key == "key" || key == "value"
-	case "spex":
-		return key == "cmd" || key == "param"
-	default:
-		switch key {
-		case "operation", "service", "method", "topic", "group", "key":
+		case "method", "host", "path":
 			return true
 		default:
 			return false
 		}
+	case "cache":
+		return key == "operation" || key == "key"
+	case "spex":
+		return key == "cmd"
+	default:
+		return false
 	}
 }
 
@@ -226,31 +216,6 @@ func addField(fields map[string]string, path, value string) {
 		return
 	}
 	fields[path] = value
-}
-
-func addNestedMultiValueFields(fields map[string]string, prefix string, value any) {
-	switch typed := value.(type) {
-	case map[string][]string:
-		keys := make([]string, 0, len(typed))
-		for key := range typed {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		for _, key := range keys {
-			addField(fields, prefix+key, strings.Join(typed[key], ","))
-		}
-	case map[string]any:
-		keys := make([]string, 0, len(typed))
-		for key := range typed {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		for _, key := range keys {
-			if value := stringFromAny(typed[key]); value != "" {
-				addField(fields, prefix+key, value)
-			}
-		}
-	}
 }
 
 func stringFromAny(value any) string {

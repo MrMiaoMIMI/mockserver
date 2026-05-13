@@ -7,17 +7,20 @@ import (
 
 type TrafficEventFields struct {
 	CommonFmo
-	EventID        dbspi.Field[string]
+	EventCode      dbspi.Field[string]
 	TraceID        dbspi.Field[string]
 	TrafficSource  dbspi.Field[string]
 	ProtocolName   dbspi.Field[string]
-	NamespaceID    dbspi.Field[string]
+	NamespaceID    dbspi.Field[uint64]
+	NamespaceCode  dbspi.Field[string]
 	OperationName  dbspi.Field[string]
 	Outcome        dbspi.Field[string]
 	DecisionKind   dbspi.Field[string]
-	RuleSetID      dbspi.Field[string]
-	RuleID         dbspi.Field[string]
-	SnapshotID     dbspi.Field[string]
+	RuleSetID      dbspi.Field[uint64]
+	RuleSetCode    dbspi.Field[string]
+	RuleCode       dbspi.Field[string]
+	SnapshotID     dbspi.Field[uint64]
+	SnapshotCode   dbspi.Field[string]
 	FallbackReason dbspi.Field[string]
 	DurationMS     dbspi.Field[uint32]
 	EventTime      dbspi.Field[uint64]
@@ -31,17 +34,20 @@ type TrafficEventFields struct {
 func NewTrafficEventFields() TrafficEventFields {
 	return TrafficEventFields{
 		CommonFmo:      NewCommonFmo(),
-		EventID:        dbhelper.NewField[string]("event_id"),
+		EventCode:      dbhelper.NewField[string]("event_code"),
 		TraceID:        dbhelper.NewField[string]("trace_id"),
 		TrafficSource:  dbhelper.NewField[string]("traffic_source"),
 		ProtocolName:   dbhelper.NewField[string]("protocol_name"),
-		NamespaceID:    dbhelper.NewField[string]("namespace_id"),
+		NamespaceID:    dbhelper.NewField[uint64]("namespace_id"),
+		NamespaceCode:  dbhelper.NewField[string]("namespace_code"),
 		OperationName:  dbhelper.NewField[string]("operation_name"),
 		Outcome:        dbhelper.NewField[string]("outcome"),
 		DecisionKind:   dbhelper.NewField[string]("decision_kind"),
-		RuleSetID:      dbhelper.NewField[string]("ruleset_id"),
-		RuleID:         dbhelper.NewField[string]("rule_id"),
-		SnapshotID:     dbhelper.NewField[string]("snapshot_id"),
+		RuleSetID:      dbhelper.NewField[uint64]("ruleset_id"),
+		RuleSetCode:    dbhelper.NewField[string]("ruleset_code"),
+		RuleCode:       dbhelper.NewField[string]("rule_code"),
+		SnapshotID:     dbhelper.NewField[uint64]("snapshot_id"),
+		SnapshotCode:   dbhelper.NewField[string]("snapshot_code"),
 		FallbackReason: dbhelper.NewField[string]("fallback_reason"),
 		DurationMS:     dbhelper.NewField[uint32]("duration_ms"),
 		EventTime:      dbhelper.NewField[uint64]("event_time"),
@@ -56,7 +62,6 @@ func NewTrafficEventFields() TrafficEventFields {
 type TrafficEventIndexFields struct {
 	CommonFmo
 	TrafficEventID    dbspi.Field[uint64]
-	EventID           dbspi.Field[string]
 	ProtocolName      dbspi.Field[string]
 	FieldPath         dbspi.Field[string]
 	FieldValuePreview dbspi.Field[string]
@@ -70,7 +75,6 @@ func NewTrafficEventIndexFields() TrafficEventIndexFields {
 	return TrafficEventIndexFields{
 		CommonFmo:         NewCommonFmo(),
 		TrafficEventID:    dbhelper.NewField[uint64]("traffic_event_id"),
-		EventID:           dbhelper.NewField[string]("event_id"),
 		ProtocolName:      dbhelper.NewField[string]("protocol_name"),
 		FieldPath:         dbhelper.NewField[string]("field_path"),
 		FieldValuePreview: dbhelper.NewField[string]("field_value_preview"),

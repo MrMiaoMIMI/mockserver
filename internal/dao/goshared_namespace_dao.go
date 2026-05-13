@@ -24,27 +24,29 @@ func newGosharedNamespaceTableDAO(manager dbspi.Manager) namespaceTableDAO {
 }
 
 func (d *gosharedNamespaceTableDAO) UpsertNamespace(ctx context.Context, namespace modeldo.NamespaceConfig) error {
-	exists, _, err := d.namespaceStore.ExistsById(ctx, namespace.NamespaceID)
+	query := dbhelper.Q(d.namespaceFields.NamespaceCode.Eq(&namespace.NamespaceCode))
+	exists, _, err := d.namespaceStore.Exists(ctx, query)
 	if err != nil {
-		return fmt.Errorf("get namespace %s: %w", namespace.NamespaceID, err)
+		return fmt.Errorf("get namespace %s: %w", namespace.NamespaceCode, err)
 	}
 	if !exists {
 		if err := d.namespaceStore.Create(ctx, &namespace); err != nil {
-			return fmt.Errorf("insert namespace %s: %w", namespace.NamespaceID, err)
+			return fmt.Errorf("insert namespace %s: %w", namespace.NamespaceCode, err)
 		}
 		return nil
 	}
 
 	updater := dbhelper.NewUpdater().
 		Set(d.namespaceFields.NamespaceJSON, namespace.NamespaceJSON)
-	if err := d.namespaceStore.UpdateById(ctx, namespace.NamespaceID, updater); err != nil {
-		return fmt.Errorf("update namespace %s: %w", namespace.NamespaceID, err)
+	if err := d.namespaceStore.UpdateByQuery(ctx, query, updater); err != nil {
+		return fmt.Errorf("update namespace %s: %w", namespace.NamespaceCode, err)
 	}
 	return nil
 }
 
 func (d *gosharedNamespaceTableDAO) GetNamespace(ctx context.Context, id string) (modeldo.NamespaceConfig, bool, error) {
-	exists, namespace, err := d.namespaceStore.ExistsByIdNotDeleted(ctx, id)
+	query := dbhelper.Q(d.namespaceFields.NamespaceCode.Eq(&id))
+	exists, namespace, err := d.namespaceStore.ExistsNotDeleted(ctx, query)
 	if err != nil {
 		return modeldo.NamespaceConfig{}, false, fmt.Errorf("get namespace %s: %w", id, err)
 	}

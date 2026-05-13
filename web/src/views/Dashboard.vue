@@ -472,9 +472,7 @@ function rankedEntries(values: Record<string, number>, totalValue: number): Entr
 
 function indexedFieldOptions(protocol: string) {
   const base = [
-    { label: 'event.operation', value: 'event.operation' },
     { label: 'decision.response.status', value: 'decision.response.status' },
-    { label: 'decision.forward.timeout_ms', value: 'decision.forward.timeout_ms' },
   ]
   if (protocol === 'cache') {
     return [
@@ -486,7 +484,6 @@ function indexedFieldOptions(protocol: string) {
   if (protocol === 'spex') {
     return [
       { label: 'event.request.cmd', value: 'event.request.cmd' },
-      { label: 'event.request.param', value: 'event.request.param' },
       ...base,
     ]
   }
@@ -494,7 +491,6 @@ function indexedFieldOptions(protocol: string) {
     return [
       { label: 'event.request.method', value: 'event.request.method' },
       { label: 'event.request.host', value: 'event.request.host' },
-      { label: 'event.request.original_host', value: 'event.request.original_host' },
       { label: 'event.request.path', value: 'event.request.path' },
       ...base,
     ]

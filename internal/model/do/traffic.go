@@ -2,17 +2,20 @@ package modeldo
 
 type TrafficEvent struct {
 	CommonDo
-	EventID        string `gorm:"column:event_id"`
+	EventCode      string `gorm:"column:event_code"`
 	TraceID        string `gorm:"column:trace_id"`
 	TrafficSource  string `gorm:"column:traffic_source"`
 	ProtocolName   string `gorm:"column:protocol_name"`
-	NamespaceID    string `gorm:"column:namespace_id"`
+	NamespaceID    uint64 `gorm:"column:namespace_id"`
+	NamespaceCode  string `gorm:"column:namespace_code"`
 	OperationName  string `gorm:"column:operation_name"`
 	Outcome        string `gorm:"column:outcome"`
 	DecisionKind   string `gorm:"column:decision_kind"`
-	RuleSetID      string `gorm:"column:ruleset_id"`
-	RuleID         string `gorm:"column:rule_id"`
-	SnapshotID     string `gorm:"column:snapshot_id"`
+	RuleSetID      uint64 `gorm:"column:ruleset_id"`
+	RuleSetCode    string `gorm:"column:ruleset_code"`
+	RuleCode       string `gorm:"column:rule_code"`
+	SnapshotID     uint64 `gorm:"column:snapshot_id"`
+	SnapshotCode   string `gorm:"column:snapshot_code"`
 	FallbackReason string `gorm:"column:fallback_reason"`
 	DurationMS     uint32 `gorm:"column:duration_ms"`
 	EventTime      uint64 `gorm:"column:event_time"`
@@ -34,7 +37,6 @@ func (*TrafficEvent) IdFieldName() string {
 type TrafficEventIndex struct {
 	CommonDo
 	TrafficEventID    uint64 `gorm:"column:traffic_event_id"`
-	EventID           string `gorm:"column:event_id"`
 	ProtocolName      string `gorm:"column:protocol_name"`
 	FieldPath         string `gorm:"column:field_path"`
 	FieldValuePreview string `gorm:"column:field_value_preview"`

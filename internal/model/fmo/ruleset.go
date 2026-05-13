@@ -7,7 +7,7 @@ import (
 
 type RuleSetDraftFields struct {
 	CommonFmo
-	RuleSetID   dbspi.Field[string]
+	RuleSetCode dbspi.Field[string]
 	Version     dbspi.Field[int]
 	RuleSetJSON dbspi.Field[string]
 }
@@ -15,7 +15,7 @@ type RuleSetDraftFields struct {
 func NewRuleSetDraftFields() RuleSetDraftFields {
 	return RuleSetDraftFields{
 		CommonFmo:   NewCommonFmo(),
-		RuleSetID:   dbhelper.NewField[string]("ruleset_id"),
+		RuleSetCode: dbhelper.NewField[string]("ruleset_code"),
 		Version:     dbhelper.NewField[int]("version"),
 		RuleSetJSON: dbhelper.NewField[string]("ruleset_json"),
 	}
@@ -23,22 +23,22 @@ func NewRuleSetDraftFields() RuleSetDraftFields {
 
 type PublishedRuleSetCurrentFields struct {
 	CommonFmo
-	RuleSetID         dbspi.Field[string]
-	CurrentSnapshotID dbspi.Field[string]
+	RuleSetID         dbspi.Field[uint64]
+	CurrentSnapshotID dbspi.Field[uint64]
 }
 
 func NewPublishedRuleSetCurrentFields() PublishedRuleSetCurrentFields {
 	return PublishedRuleSetCurrentFields{
 		CommonFmo:         NewCommonFmo(),
-		RuleSetID:         dbhelper.NewField[string]("ruleset_id"),
-		CurrentSnapshotID: dbhelper.NewField[string]("current_snapshot_id"),
+		RuleSetID:         dbhelper.NewField[uint64]("ruleset_id"),
+		CurrentSnapshotID: dbhelper.NewField[uint64]("current_snapshot_id"),
 	}
 }
 
 type PublishedRuleSetSnapshotFields struct {
 	CommonFmo
-	SnapshotID     dbspi.Field[string]
-	RuleSetID      dbspi.Field[string]
+	SnapshotCode   dbspi.Field[string]
+	RuleSetID      dbspi.Field[uint64]
 	RuleSetVersion dbspi.Field[int]
 	RuleSetJSON    dbspi.Field[string]
 	AuditJSON      dbspi.Field[string]
@@ -48,8 +48,8 @@ type PublishedRuleSetSnapshotFields struct {
 func NewPublishedRuleSetSnapshotFields() PublishedRuleSetSnapshotFields {
 	return PublishedRuleSetSnapshotFields{
 		CommonFmo:      NewCommonFmo(),
-		SnapshotID:     dbhelper.NewField[string]("snapshot_id"),
-		RuleSetID:      dbhelper.NewField[string]("ruleset_id"),
+		SnapshotCode:   dbhelper.NewField[string]("snapshot_code"),
+		RuleSetID:      dbhelper.NewField[uint64]("ruleset_id"),
 		RuleSetVersion: dbhelper.NewField[int]("ruleset_version"),
 		RuleSetJSON:    dbhelper.NewField[string]("ruleset_json"),
 		AuditJSON:      dbhelper.NewField[string]("audit_json"),
@@ -59,7 +59,7 @@ func NewPublishedRuleSetSnapshotFields() PublishedRuleSetSnapshotFields {
 
 type NamespaceConfigFields struct {
 	CommonFmo
-	NamespaceID   dbspi.Field[string]
+	NamespaceCode dbspi.Field[string]
 	Version       dbspi.Field[int]
 	NamespaceJSON dbspi.Field[string]
 }
@@ -67,7 +67,7 @@ type NamespaceConfigFields struct {
 func NewNamespaceConfigFields() NamespaceConfigFields {
 	return NamespaceConfigFields{
 		CommonFmo:     NewCommonFmo(),
-		NamespaceID:   dbhelper.NewField[string]("namespace_id"),
+		NamespaceCode: dbhelper.NewField[string]("namespace_code"),
 		Version:       dbhelper.NewField[int]("version"),
 		NamespaceJSON: dbhelper.NewField[string]("namespace_json"),
 	}

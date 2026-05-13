@@ -55,6 +55,7 @@ Important fields:
 - `fallback`: true when the response came from namespace fallback.
 - `trace.ruleset_id`: matched ruleset ID when available.
 - `trace.rule_id`: matched rule ID when available.
+- `trace.snapshot_id`: matched published snapshot ID when available.
 - `trace.fallback_reason`: `ruleset_miss` or `rule_miss` for fallback responses.
 - `response.status`, `response.headers`, `response.body`: HTTP response to apply.
 - `meta.trace_id`: trace ID propagated from the original request event.

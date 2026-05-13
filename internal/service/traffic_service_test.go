@@ -23,7 +23,7 @@ func (r *testTrafficRepository) ListTrafficEvents(ctx context.Context, query bo.
 	return bo.TrafficEventList{}, nil
 }
 
-func TestTrafficServiceRecordSDKDecisionBuildsProtocolNeutralEventAndIndexes(t *testing.T) {
+func TestTrafficServiceRecordSDKDecisionBuildsMinimalQueryableIndexes(t *testing.T) {
 	repository := &testTrafficRepository{}
 	service := NewTrafficService(repository)
 
@@ -32,11 +32,15 @@ func TestTrafficServiceRecordSDKDecisionBuildsProtocolNeutralEventAndIndexes(t *
 		Operation: "request",
 		Namespace: "shop",
 		Request: bo.EventRequest{
-			"method": "GET",
-			"host":   "api.example.test",
-			"path":   "/orders",
+			"method":        "GET",
+			"host":          "api.example.test",
+			"original_host": "public.example.test",
+			"path":          "/orders",
 			"query": map[string][]string{
 				"shop_id": {"123"},
+			},
+			"headers": map[string][]string{
+				"authorization": {"Bearer secret"},
 			},
 		},
 		Meta: bo.EventMeta{TraceID: "trace-001"},
@@ -49,6 +53,7 @@ func TestTrafficServiceRecordSDKDecisionBuildsProtocolNeutralEventAndIndexes(t *
 			RuleID:    "rule-hit",
 		},
 		Response: &bo.ActionExecution{Status: 202},
+		Forward:  &bo.ForwardDecision{TimeoutMS: 800},
 	}
 
 	created, err := service.RecordSDKDecision(context.Background(), event, decision, nil, 12)
@@ -74,16 +79,20 @@ func TestTrafficServiceRecordSDKDecisionBuildsProtocolNeutralEventAndIndexes(t *
 	indexes := map[string]bo.TrafficEventIndex{}
 	for _, index := range repository.event.Indexes {
 		indexes[index.FieldPath] = index
-		if index.FieldPath == "status_code" {
-			t.Fatalf("HTTP status must not be stored as a top-level status_code index")
+		switch index.FieldPath {
+		case "status_code",
+			"event.operation",
+			"event.request.original_host",
+			"event.request.query.shop_id",
+			"event.request.headers.authorization",
+			"decision.forward.timeout_ms":
+			t.Fatalf("unexpected high-cardinality or duplicate index %s", index.FieldPath)
 		}
 	}
 	for _, path := range []string{
-		"event.operation",
 		"event.request.method",
 		"event.request.host",
 		"event.request.path",
-		"event.request.query.shop_id",
 		"decision.response.status",
 	} {
 		index, ok := indexes[path]
