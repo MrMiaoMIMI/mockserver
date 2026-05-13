@@ -29,6 +29,10 @@ const (
 )
 
 func New(adminController *controller.AdminController, runtimeController *controller.RuntimeController, authConfig AdminAuthConfig, metricsController *controller.MetricsController) *gin.Engine {
+	return NewWithTraffic(adminController, runtimeController, authConfig, metricsController, nil)
+}
+
+func NewWithTraffic(adminController *controller.AdminController, runtimeController *controller.RuntimeController, authConfig AdminAuthConfig, metricsController *controller.MetricsController, trafficController *controller.TrafficController) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	engine.RedirectTrailingSlash = false
@@ -62,6 +66,9 @@ func New(adminController *controller.AdminController, runtimeController *control
 	admin.POST("/published/rulesets/:ruleset_id/rollback", adminController.Rollback)
 	if metricsController != nil {
 		admin.GET("/metrics/runtime", metricsController.RuntimeMetrics)
+	}
+	if trafficController != nil {
+		admin.GET("/traffic/events", trafficController.ListEvents)
 	}
 	engine.POST("/mockserver/api/v1/sdk/decision", runtimeController.DecidePublished)
 	engine.Any("/mockserver/runtime/:namespace/http", runtimeController.HandleHTTP)

@@ -4,6 +4,7 @@ import type {
   ListNamespacesResponse,
   ListProtocolsResponse,
   ListRuleSetsResponse,
+  ListTrafficEventsResponse,
   NamespaceConfig,
   PublishedRuleSetResponse,
   PublishRuleSetResponse,
@@ -15,6 +16,7 @@ import type {
   RuntimeMetrics,
   SimulateRuleSetRequest,
   SimulateRuleSetResponse,
+  TrafficQueryParams,
   ValidateRuleSetResponse,
 } from '@/types'
 
@@ -106,5 +108,8 @@ export const mockserverApi = {
   },
   runtimeMetrics(): Promise<RuntimeMetrics> {
     return http.get(`${adminBase}/metrics/runtime`)
+  },
+  listTrafficEvents(params: TrafficQueryParams = {}): Promise<ListTrafficEventsResponse> {
+    return http.get(`${adminBase}/traffic/events`, { params })
   },
 }

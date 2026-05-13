@@ -75,9 +75,9 @@ const navItems = computed(() => [
   },
   {
     path: '/dashboard',
-    label: 'Runtime',
+    label: 'Traffic',
     icon: markRaw(TrendCharts),
-    count: store.metrics?.total_requests,
+    count: store.trafficTotal,
     active: route.path.startsWith('/dashboard'),
   },
 ])

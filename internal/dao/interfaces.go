@@ -33,6 +33,11 @@ type NamespaceRepository interface {
 	ListNamespaces(ctx context.Context) ([]bo.Namespace, error)
 }
 
+type TrafficRepository interface {
+	CreateTrafficEvent(ctx context.Context, event bo.TrafficEvent) (bo.TrafficEvent, error)
+	ListTrafficEvents(ctx context.Context, query bo.TrafficQuery) (bo.TrafficEventList, error)
+}
+
 type ruleSetTableDAO interface {
 	UpsertDraft(ctx context.Context, draft modeldo.RuleSetDraft, expectedVersion int) error
 	GetDraft(ctx context.Context, id string) (modeldo.RuleSetDraft, bool, error)
@@ -50,8 +55,17 @@ type namespaceTableDAO interface {
 	ListNamespaces(ctx context.Context) ([]modeldo.NamespaceConfig, error)
 }
 
+type trafficTableDAO interface {
+	CreateTrafficEvent(ctx context.Context, event modeldo.TrafficEvent, indexes []modeldo.TrafficEventIndex) (modeldo.TrafficEvent, error)
+	ListTrafficEvents(ctx context.Context, query bo.TrafficQuery, eventIDs []uint64) ([]modeldo.TrafficEvent, uint64, error)
+	ListTrafficEventIndexesByEventIDs(ctx context.Context, eventIDs []uint64) (map[uint64][]modeldo.TrafficEventIndex, error)
+	ListTrafficEventIDsByIndexFilter(ctx context.Context, query bo.TrafficQuery, filter bo.TrafficIndexFilter, valueHash uint64) ([]uint64, error)
+	ListTrafficEventsForStats(ctx context.Context, query bo.TrafficQuery, eventIDs []uint64, limit int) ([]modeldo.TrafficEvent, error)
+}
+
 type DB interface {
 	GetRuleSetRepository() RuleSetRepository
 	GetNamespaceRepository() NamespaceRepository
+	GetTrafficRepository() TrafficRepository
 	GetManager() dbspi.Manager
 }

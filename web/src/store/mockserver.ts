@@ -7,6 +7,7 @@ import type {
   ListNamespacesResponse,
   ListProtocolsResponse,
   ListRuleSetsResponse,
+  ListTrafficEventsResponse,
   NamespaceConfig,
   ProtocolSpec,
   PublishedRuleSetSnapshot,
@@ -15,6 +16,9 @@ import type {
   RuntimeMetrics,
   SimulateRuleSetRequest,
   SimulationResult,
+  TrafficEvent,
+  TrafficQueryParams,
+  TrafficStats,
   ValidateRuleSetResponse,
 } from '@/types'
 
@@ -28,6 +32,9 @@ export const useMockserverStore = defineStore('mockserver', () => {
   const validation = ref<ValidateRuleSetResponse | null>(null)
   const simulation = ref<SimulationResult | null>(null)
   const metrics = ref<RuntimeMetrics | null>(null)
+  const trafficEvents = ref<TrafficEvent[]>([])
+  const trafficStats = ref<TrafficStats | null>(null)
+  const trafficTotal = ref(0)
   const loading = ref(false)
   const saving = ref(false)
 
@@ -227,6 +234,19 @@ export const useMockserverStore = defineStore('mockserver', () => {
     return metrics.value
   }
 
+  async function fetchTrafficEvents(query: TrafficQueryParams = {}) {
+    loading.value = true
+    try {
+      const response: ListTrafficEventsResponse = await mockserverApi.listTrafficEvents(query)
+      trafficEvents.value = response.items
+      trafficStats.value = response.stats
+      trafficTotal.value = response.total
+      return response
+    } finally {
+      loading.value = false
+    }
+  }
+
   function setCurrentDraft(ruleSet: RuleSet | null) {
     currentDraft.value = ruleSet
     validation.value = null
@@ -243,6 +263,9 @@ export const useMockserverStore = defineStore('mockserver', () => {
     validation,
     simulation,
     metrics,
+    trafficEvents,
+    trafficStats,
+    trafficTotal,
     loading,
     saving,
     draftMap,
@@ -267,6 +290,7 @@ export const useMockserverStore = defineStore('mockserver', () => {
     simulateDraft,
     simulatePublished,
     fetchMetrics,
+    fetchTrafficEvents,
     setCurrentDraft,
   }
 })

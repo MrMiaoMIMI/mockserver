@@ -17,6 +17,7 @@ type dbImpl struct {
 	manager             dbspi.Manager
 	ruleSetRepository   RuleSetRepository
 	namespaceRepository NamespaceRepository
+	trafficRepository   TrafficRepository
 }
 
 func NewDB(ctx context.Context, cfg config.Config) (DB, error) {
@@ -36,10 +37,12 @@ func NewDB(ctx context.Context, cfg config.Config) (DB, error) {
 
 	ruleSetTableDAO := newGosharedRuleSetTableDAO(manager)
 	namespaceTableDAO := newGosharedNamespaceTableDAO(manager)
+	trafficTableDAO := newGosharedTrafficTableDAO(manager)
 	return &dbImpl{
 		manager:             manager,
 		ruleSetRepository:   newRuleSetRepository(ruleSetTableDAO),
 		namespaceRepository: newNamespaceRepository(namespaceTableDAO),
+		trafficRepository:   newTrafficRepository(trafficTableDAO),
 	}, nil
 }
 
@@ -73,6 +76,10 @@ func (d *dbImpl) GetRuleSetRepository() RuleSetRepository {
 
 func (d *dbImpl) GetNamespaceRepository() NamespaceRepository {
 	return d.namespaceRepository
+}
+
+func (d *dbImpl) GetTrafficRepository() TrafficRepository {
+	return d.trafficRepository
 }
 
 func (d *dbImpl) GetManager() dbspi.Manager {

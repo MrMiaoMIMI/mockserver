@@ -30,9 +30,10 @@ type engineParams struct {
 	AdminController   *controller.AdminController
 	RuntimeController *controller.RuntimeController
 	MetricsController *controller.MetricsController
+	TrafficController *controller.TrafficController
 	AuthConfig        AdminAuthConfig
 }
 
 func newEngine(p engineParams) *gin.Engine {
-	return New(p.AdminController, p.RuntimeController, p.AuthConfig, p.MetricsController)
+	return NewWithTraffic(p.AdminController, p.RuntimeController, p.AuthConfig, p.MetricsController, p.TrafficController)
 }

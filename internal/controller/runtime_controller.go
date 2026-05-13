@@ -14,12 +14,14 @@ import (
 	"github.com/MrMiaoMIMI/mockserver/internal/model/request"
 	"github.com/MrMiaoMIMI/mockserver/internal/model/response"
 	"github.com/MrMiaoMIMI/mockserver/internal/observability"
+	"github.com/MrMiaoMIMI/mockserver/internal/service"
 	"github.com/MrMiaoMIMI/mockserver/internal/view"
 )
 
 type RuntimeController struct {
 	view           view.RuntimeView
 	runtimeMetrics *observability.RuntimeMetrics
+	trafficService service.TrafficService
 }
 
 func NewRuntimeController(runtimeView view.RuntimeView, runtimeMetrics *observability.RuntimeMetrics) *RuntimeController {
@@ -27,6 +29,12 @@ func NewRuntimeController(runtimeView view.RuntimeView, runtimeMetrics *observab
 		view:           runtimeView,
 		runtimeMetrics: runtimeMetrics,
 	}
+}
+
+func NewRuntimeControllerWithTraffic(runtimeView view.RuntimeView, runtimeMetrics *observability.RuntimeMetrics, trafficService service.TrafficService) *RuntimeController {
+	controller := NewRuntimeController(runtimeView, runtimeMetrics)
+	controller.trafficService = trafficService
+	return controller
 }
 
 func (c *RuntimeController) HandleHTTP(ctx *gin.Context) {
@@ -112,16 +120,39 @@ func (c *RuntimeController) HandleHTTP(ctx *gin.Context) {
 }
 
 func (c *RuntimeController) DecidePublished(ctx *gin.Context) {
+	startedAt := time.Now()
 	var req request.DecidePublishedRequest
 	if !bindJSON(ctx, &req) {
 		return
 	}
 	decision, err := c.view.DecidePublished(ctx.Request.Context(), req.Event)
+	c.recordSDKDecision(ctx, req.Event, decision, err, startedAt)
 	if err != nil {
 		writeBusinessError(ctx, err)
 		return
 	}
 	serverresp.Success(ctx, response.DecidePublishedResponse{Decision: decision})
+}
+
+func (c *RuntimeController) recordSDKDecision(ctx *gin.Context, event bo.Event, decision bo.RuntimeDecision, decisionErr error, startedAt time.Time) {
+	if c.trafficService == nil {
+		return
+	}
+	durationMS := time.Since(startedAt).Milliseconds()
+	if durationMS < 0 {
+		durationMS = 0
+	}
+	if durationMS > int64(^uint32(0)) {
+		durationMS = int64(^uint32(0))
+	}
+	if _, err := c.trafficService.RecordSDKDecision(ctx.Request.Context(), event, decision, decisionErr, uint32(durationMS)); err != nil {
+		logger.Error(ctx.Request.Context(), "Record SDK traffic event failed",
+			logger.String("event", "sdk_traffic_record_failed"),
+			logger.String("protocol", event.Protocol),
+			logger.String("namespace", event.Namespace),
+			logger.String("message", err.Error()),
+		)
+	}
 }
 
 func (c *RuntimeController) observeRuntime(r *http.Request, event *bo.Event, observation observability.RuntimeObservation, startedAt time.Time) {

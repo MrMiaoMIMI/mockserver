@@ -16,6 +16,7 @@
 - SDK decision endpoint 和 cache tracer bullet
 - 唯一 `X-Trace-ID`
 - runtime 命中日志和内存 metrics
+- SDK decision traffic 落库和前端 Traffic Inspector
 
 面向使用者的快速上手说明见：
 
@@ -363,6 +364,9 @@ Cache 字段：
 - `GET /mockserver/api/v1/admin/metrics/runtime`
 查询 runtime 请求数、命中数、错误数、耗时和 ruleset/rule 维度命中统计
 
+- `GET /mockserver/api/v1/admin/traffic/events`
+查询 SDK decision traffic 事件，支持按时间、协议、namespace、outcome、ruleset/rule、trace 和协议索引字段过滤
+
 ## Runtime 接口
 
 统一前缀：
@@ -635,12 +639,18 @@ curl 'http://127.0.0.1:8080/mockserver/runtime/default/http/api/v1/debug?q1=qv1'
 - `X-Mockserver-Rule`
 - `X-Trace-ID`
 
-如果请求没有带 `X-Trace-ID`，服务会自动生成一个唯一 trace id。runtime 请求还会输出一条 JSON 格式命中日志，并写入内存 metrics。
+如果请求没有带 `X-Trace-ID`，服务会自动生成一个唯一 trace id。HTTP runtime 请求还会输出一条 JSON 格式命中日志，并写入内存 metrics。
 
 查看 runtime metrics：
 
 ```bash
 curl http://127.0.0.1:8080/mockserver/api/v1/admin/metrics/runtime
+```
+
+查看 SDK decision traffic：
+
+```bash
+curl 'http://127.0.0.1:8080/mockserver/api/v1/admin/traffic/events?limit=50&include_indexes=true'
 ```
 
 ## 一个最小规则示例
@@ -708,7 +718,8 @@ curl http://127.0.0.1:8080/mockserver/api/v1/admin/metrics/runtime
 - `template_response` 已支持常用 helper，但还没有做模板沙箱、模板限流和更强的调试信息。
 - `request.body` 的路径访问目前只覆盖基础 JSON 对象场景。
 - runtime 目前只实现了 HTTP adapter。
-- runtime metrics 当前是内存型，服务重启后会清零。
+- runtime metrics 当前是内存型，服务重启后会清零，仅作为 HTTP runtime 调试指标。
+- SDK decision traffic 会落库到 `mockserver_traffic_event_tab` 和 `mockserver_traffic_event_index_tab`；admin simulate 流量不落库。
 
 ## 已有验证
 

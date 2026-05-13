@@ -118,7 +118,7 @@ VITE_MOCKSERVER_PROXY_TARGET=http://127.0.0.1:18080 npm run dev
 - `Rule 管理`：新增、更新、删除、启用、禁用、调整优先级。
 - `Simulate`：输入 event，查看命中结果和 explain。
 - `Rollback`：查看 snapshot，预演回滚 diff，再执行回滚。
-- `Dashboard`：查看 runtime metrics。
+- `Traffic Inspector`：查看 SDK decision traffic，包括协议、namespace、命中结果、ruleset/rule、trace、原始 event、decision 和可查询索引字段。
 
 前端配置 selector 和 rule condition 时会根据 `ProtocolSpec` 自动切换字段、operator 和 value 输入方式：
 
@@ -203,11 +203,19 @@ curl 'http://127.0.0.1:8080/mockserver/runtime/default/http/api/v1/debug?q1=qv1'
   -H 'X-Trace-ID: runtime-001'
 ```
 
-查看 metrics：
+查看 HTTP runtime metrics：
 
 ```bash
 curl http://127.0.0.1:8080/mockserver/api/v1/admin/metrics/runtime
 ```
+
+查看 SDK decision traffic：
+
+```bash
+curl 'http://127.0.0.1:8080/mockserver/api/v1/admin/traffic/events?limit=50&include_indexes=true'
+```
+
+SDK decision traffic 会落库；ruleset/rule 管理页面里的 simulate 结果直接展示在页面，不写入 traffic 表。
 
 ## 5. 核心概念
 
@@ -928,6 +936,7 @@ VITE_MOCKSERVER_PROXY_TARGET=http://127.0.0.1:18080 npm run dev
 | `POST` | `/mockserver/api/v1/admin/published/rulesets/{id}/rollback/preview` | 回滚预演 |
 | `POST` | `/mockserver/api/v1/admin/published/rulesets/{id}/rollback` | 执行回滚 |
 | `GET` | `/mockserver/api/v1/admin/metrics/runtime` | 查询 runtime metrics |
+| `GET` | `/mockserver/api/v1/admin/traffic/events` | 查询 SDK decision traffic 事件 |
 | `ANY` | `/mockserver/runtime/{namespace}/http/{actual_path}` | runtime mock 调用入口 |
 
 ## 14. 推荐上手路径

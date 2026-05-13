@@ -7,6 +7,7 @@ var Module = fx.Module("dao",
 		NewDB,
 		provideRuleSetRepository,
 		provideNamespaceRepository,
+		provideTrafficRepository,
 	),
 )
 
@@ -16,4 +17,8 @@ func provideRuleSetRepository(db DB) RuleSetRepository {
 
 func provideNamespaceRepository(db DB) NamespaceRepository {
 	return db.GetNamespaceRepository()
+}
+
+func provideTrafficRepository(db DB) TrafficRepository {
+	return db.GetTrafficRepository()
 }

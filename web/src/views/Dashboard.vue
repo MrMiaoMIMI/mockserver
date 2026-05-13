@@ -1,295 +1,257 @@
 <template>
-  <PageContainer title="Runtime Diagnostics" eyebrow="telemetry">
+  <PageContainer title="Traffic Inspector" eyebrow="sdk traffic">
     <template #meta>
       <span class="meta-pill">
         <span class="status-dot is-on" />
-        match {{ matchRate }}%
+        {{ formatNumber(total) }} events
       </span>
-      <span class="meta-pill">{{ recentRows.length }} recent</span>
-      <span class="meta-pill">{{ fallbackTotal }} fallback</span>
+      <span class="meta-pill">match {{ matchRate }}%</span>
+      <span class="meta-pill">{{ formatNumber(fallbackTotal) }} fallback</span>
     </template>
     <template #actions>
-      <el-button :type="insightsExpanded ? 'primary' : 'default'" :icon="View" @click="insightsExpanded = !insightsExpanded">
-        {{ insightsExpanded ? 'Hide insights' : 'Insights' }}
-      </el-button>
       <el-button :icon="Refresh" :loading="loading" @click="loadData">Refresh</el-button>
     </template>
 
-    <div class="diagnostics-dashboard">
-      <section class="diagnostic-grid" :class="{ 'insights-open': insightsExpanded }">
-        <section class="request-stream panel-surface">
-          <header class="panel-heading">
-            <div>
-              <span>recent requests</span>
-              <strong>{{ recentRows.length }}</strong>
-            </div>
-            <small>live runtime requests only</small>
-          </header>
+    <div class="traffic-page">
+      <section class="traffic-main panel-surface">
+        <header class="panel-heading">
+          <div>
+            <span>SDK decisions</span>
+            <strong>{{ formatNumber(filteredEvents.length) }}</strong>
+          </div>
+          <small>{{ rangeLabel }}</small>
+        </header>
 
-          <div class="request-toolbar">
-            <el-input
-              v-model="filters.query"
-              clearable
-              :prefix-icon="Search"
-              placeholder="Search path, namespace, trace, ruleset, rule"
+        <div class="traffic-toolbar">
+          <el-input
+            v-model="filters.query"
+            clearable
+            :prefix-icon="Search"
+            placeholder="Search trace, event, ruleset, rule, namespace"
+          />
+          <el-select v-model="filters.timeRange" placeholder="Range" @change="loadData">
+            <el-option label="Last hour" value="1h" />
+            <el-option label="Last 24h" value="24h" />
+            <el-option label="Last 7d" value="7d" />
+            <el-option label="All" value="all" />
+          </el-select>
+          <el-select v-model="filters.protocol" clearable filterable placeholder="Protocol" @change="loadData">
+            <el-option v-for="protocol in protocolOptions" :key="protocol" :label="protocol" :value="protocol" />
+          </el-select>
+          <el-select v-model="filters.namespace" clearable filterable placeholder="Namespace" @change="loadData">
+            <el-option
+              v-for="namespace in namespaceOptions"
+              :key="namespace"
+              :label="namespace"
+              :value="namespace"
             />
-            <el-select v-model="filters.namespace" clearable filterable placeholder="Namespace">
+          </el-select>
+          <FilterSegment v-model="filters.outcome" :options="outcomeOptions" @update:model-value="loadData" />
+          <div class="field-filter">
+            <el-select v-model="filters.fieldPath" clearable filterable placeholder="Indexed field">
               <el-option
-                v-for="namespace in namespaceOptions"
-                :key="namespace"
-                :label="namespace"
-                :value="namespace"
+                v-for="option in fieldOptions"
+                :key="option.value"
+                :label="option.label"
+                :value="option.value"
               />
             </el-select>
-            <el-select v-model="filters.sort" placeholder="Sort">
-              <el-option v-for="option in sortOptions" :key="option.value" :label="option.label" :value="option.value" />
-            </el-select>
-            <FilterSegment
-              v-model="filters.outcome"
-              :options="outcomeOptions"
-              aria-label="Runtime outcome filter"
-            />
+            <el-input v-model="filters.fieldValue" clearable placeholder="Exact value" @keyup.enter="loadData" />
+            <el-button :icon="Search" @click="loadData">Apply</el-button>
           </div>
+        </div>
 
-          <el-empty v-if="!recentRows.length && !loading" description="No runtime request diagnostics yet" />
-          <div v-else v-loading="loading" class="request-list">
-            <article
-              v-for="row in recentRows"
-              :key="row.record.id"
-              :class="['request-row', `is-${row.tone}`, { active: selectedRequest?.record.id === row.record.id }]"
-              tabindex="0"
-              @click="openRequestDetail(row)"
-              @keydown.enter.prevent="openRequestDetail(row)"
-              @keydown.space.prevent="openRequestDetail(row)"
-            >
-              <div class="request-main">
-                <div class="request-line">
-                  <span class="method-chip">{{ row.record.method || '-' }}</span>
-                  <code :title="row.pathLabel">{{ row.pathLabel }}</code>
-                </div>
-                <div class="request-meta">
-                  <span>{{ row.observedAtLabel }}</span>
-                  <span>{{ row.record.namespace || 'default' }}</span>
-                  <span v-if="row.record.host">{{ row.record.host }}</span>
-                  <button
-                    v-if="row.record.trace_id"
-                    type="button"
-                    class="trace-button"
-                    :title="row.record.trace_id"
-                    @click.stop="copyText(row.record.trace_id)"
-                  >
-                    trace {{ shortText(row.record.trace_id, 10) }}
-                  </button>
-                </div>
+        <el-table
+          v-loading="loading"
+          class="traffic-table"
+          :data="filteredEvents"
+          height="100%"
+          row-key="id"
+          @row-click="openEvent"
+        >
+          <el-table-column label="Time" min-width="150">
+            <template #default="{ row }">
+              <div class="time-cell">
+                <strong>{{ formatTime(row.event_time) }}</strong>
+                <small>{{ formatDuration(row.duration_ms) }}</small>
               </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="Protocol" min-width="120">
+            <template #default="{ row }">
+              <StateChip :label="row.protocol_name || '-'" tone="primary" />
+            </template>
+          </el-table-column>
+          <el-table-column label="Namespace" min-width="150" show-overflow-tooltip>
+            <template #default="{ row }">
+              <code>{{ row.namespace_id || 'default' }}</code>
+            </template>
+          </el-table-column>
+          <el-table-column label="Operation" min-width="130" show-overflow-tooltip>
+            <template #default="{ row }">
+              <code>{{ row.operation_name || '-' }}</code>
+            </template>
+          </el-table-column>
+          <el-table-column label="Outcome" min-width="130">
+            <template #default="{ row }">
+              <StateChip :label="row.outcome" :tone="outcomeTone(row.outcome)" />
+            </template>
+          </el-table-column>
+          <el-table-column label="Decision" min-width="110">
+            <template #default="{ row }">
+              <code>{{ row.decision_kind || '-' }}</code>
+            </template>
+          </el-table-column>
+          <el-table-column label="Rule" min-width="220" show-overflow-tooltip>
+            <template #default="{ row }">
+              <div class="rule-cell">
+                <code>{{ row.ruleset_id || '-' }}</code>
+                <small>{{ row.rule_id || row.fallback_reason || '-' }}</small>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="Trace" min-width="180" show-overflow-tooltip>
+            <template #default="{ row }">
+              <button v-if="row.trace_id" class="trace-button" type="button" @click.stop="copyTrace(row.trace_id)">
+                {{ shortText(row.trace_id, 18) }}
+              </button>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+        </el-table>
+      </section>
 
-              <div class="request-state">
-                <span :class="['outcome-chip', `is-${row.tone}`]">{{ row.outcomeLabel }}</span>
-                <strong :class="`is-${statusTone(row.record.status)}`">{{ row.statusLabel }}</strong>
-                <small>{{ row.durationLabel }}</small>
-              </div>
-
-              <div class="request-links">
-                <div>
-                  <span>ruleset</span>
-                  <code :title="row.record.ruleset_id || ''">{{ row.record.ruleset_id || '-' }}</code>
-                </div>
-                <div>
-                  <span>rule</span>
-                  <code :title="row.record.rule_id || ''">{{ row.record.rule_id || '-' }}</code>
-                </div>
-                <div>
-                  <span>fallback</span>
-                  <code>{{ row.record.fallback_reason || '-' }}</code>
-                </div>
-                <div v-if="row.record.message">
-                  <span>message</span>
-                  <code :title="row.record.message">{{ row.record.message }}</code>
-                </div>
-              </div>
-            </article>
-          </div>
+      <aside class="traffic-side">
+        <section class="side-panel panel-surface">
+          <header class="panel-heading compact">
+            <span>outcomes</span>
+            <strong>{{ outcomeEntries.length }}</strong>
+          </header>
+          <MetricCard
+            v-for="entry in outcomeEntries"
+            :key="entry.key"
+            :label="entry.key"
+            :value="formatNumber(entry.value)"
+            :caption="`${entry.percent}% of filtered traffic`"
+            :tone="metricTone(entry.key)"
+          />
+          <el-empty v-if="!outcomeEntries.length" description="No traffic events" />
         </section>
 
-        <aside v-if="insightsExpanded" class="diagnostic-side">
-          <section class="side-panel panel-surface">
-            <header class="panel-heading compact">
-              <span>traffic summary</span>
-              <strong>{{ formatNumber(metrics?.total_requests ?? 0) }}</strong>
-            </header>
-            <div class="insight-metrics">
-              <MetricCard
-                v-for="card in metricCards"
-                :key="card.label"
-                :label="card.label"
-                :value="card.value"
-                :caption="card.caption"
-                :tone="card.tone"
-              />
-            </div>
-          </section>
+        <section class="side-panel panel-surface">
+          <header class="panel-heading compact">
+            <span>protocols</span>
+            <strong>{{ protocolEntries.length }}</strong>
+          </header>
+          <div v-if="protocolEntries.length" class="compact-list">
+            <button
+              v-for="entry in protocolEntries"
+              :key="entry.key"
+              class="compact-row as-button"
+              type="button"
+              @click="setProtocol(entry.key)"
+            >
+              <code>{{ entry.key }}</code>
+              <div class="mini-bar"><span :style="{ width: entry.width }" /></div>
+              <strong>{{ entry.value }}</strong>
+            </button>
+          </div>
+          <el-empty v-else description="No protocol data" />
+        </section>
 
-          <section class="side-panel panel-surface">
-            <header class="panel-heading compact">
-              <span>status classes</span>
-              <strong>{{ statusEntries.length }}</strong>
-            </header>
-            <div v-if="statusEntries.length" class="compact-list">
-              <div v-for="entry in statusEntries" :key="entry.key" class="compact-row">
-                <code>{{ entry.label }}</code>
-                <div class="mini-bar"><span :style="{ width: hitWidth(entry.value, statusEntries) }" /></div>
-                <strong>{{ entry.value }}</strong>
-              </div>
-            </div>
-            <el-empty v-else description="No status data yet" />
-          </section>
+        <section class="side-panel panel-surface">
+          <header class="panel-heading compact">
+            <span>namespaces</span>
+            <strong>{{ namespaceEntries.length }}</strong>
+          </header>
+          <div v-if="namespaceEntries.length" class="compact-list">
+            <button
+              v-for="entry in namespaceEntries"
+              :key="entry.key"
+              class="compact-row as-button"
+              type="button"
+              @click="setNamespace(entry.key)"
+            >
+              <code>{{ entry.key }}</code>
+              <div class="mini-bar is-accent"><span :style="{ width: entry.width }" /></div>
+              <strong>{{ entry.value }}</strong>
+            </button>
+          </div>
+          <el-empty v-else description="No namespace data" />
+        </section>
 
-          <section class="side-panel panel-surface">
-            <header class="panel-heading compact">
-              <span>fallback reasons</span>
-              <strong>{{ fallbackEntries.length }}</strong>
-            </header>
-            <div v-if="fallbackEntries.length" class="compact-list">
-              <div v-for="entry in fallbackEntries" :key="entry.key" class="compact-row">
-                <code>{{ entry.label }}</code>
-                <div class="mini-bar is-warn"><span :style="{ width: hitWidth(entry.value, fallbackEntries) }" /></div>
-                <strong>{{ entry.value }}</strong>
-              </div>
-            </div>
-            <el-empty v-else description="No fallback data yet" />
-          </section>
-
-          <section class="side-panel panel-surface">
-            <header class="panel-heading compact">
-              <span>ruleset hits</span>
-              <strong>{{ rulesetHits.length }}</strong>
-            </header>
-            <div v-if="rulesetHits.length" class="compact-list">
-              <button
-                v-for="entry in rulesetHits"
-                :key="entry.key"
-                class="compact-row as-button"
-                type="button"
-                @click="openRulesetById(entry.key)"
-              >
-                <code :title="entry.key">{{ entry.key }}</code>
-                <div class="mini-bar"><span :style="{ width: hitWidth(entry.value, rulesetHits) }" /></div>
-                <strong>{{ entry.value }}</strong>
-              </button>
-            </div>
-            <el-empty v-else description="No ruleset hits yet" />
-          </section>
-
-          <section class="side-panel panel-surface">
-            <header class="panel-heading compact">
-              <span>rule hits</span>
-              <strong>{{ ruleHits.length }}</strong>
-            </header>
-            <div v-if="ruleHits.length" class="compact-list">
-              <div v-for="entry in ruleHits" :key="entry.key" class="compact-row">
-                <code :title="entry.key">{{ entry.key }}</code>
-                <div class="mini-bar is-accent"><span :style="{ width: hitWidth(entry.value, ruleHits) }" /></div>
-                <strong>{{ entry.value }}</strong>
-              </div>
-            </div>
-            <el-empty v-else description="No rule hits yet" />
-          </section>
-
-          <section class="replay-panel panel-surface">
-            <header class="panel-heading compact">
-              <span>replay result</span>
-              <strong>{{ replaySourceLabel }}</strong>
-            </header>
-            <ResultInspector :raw-json="replayJson" />
-          </section>
-        </aside>
-      </section>
+        <section class="side-panel panel-surface">
+          <header class="panel-heading compact">
+            <span>replay result</span>
+            <strong>{{ replaySourceLabel }}</strong>
+          </header>
+          <ResultInspector :raw-json="replayJson" />
+        </section>
+      </aside>
     </div>
 
     <el-drawer
-      v-model="requestDetailVisible"
-      :title="selectedRequest ? `Request #${selectedRequest.record.id}` : 'Request detail'"
-      size="min(560px, calc(100vw - 24px))"
+      v-model="detailVisible"
+      :title="selectedEvent ? `Traffic #${selectedEvent.id}` : 'Traffic detail'"
+      size="min(640px, calc(100vw - 24px))"
       append-to-body
     >
-      <div v-if="selectedRequest" class="request-drawer">
-        <header class="request-drawer-heading">
+      <div v-if="selectedEvent" class="traffic-drawer">
+        <header class="drawer-heading">
           <div>
-            <StateChip :label="selectedRequest.record.method || '-'" tone="primary" />
-            <strong :title="selectedRequest.pathLabel">{{ selectedRequest.pathLabel }}</strong>
-            <small>{{ selectedRequest.observedAtLabel }} / {{ selectedRequest.durationLabel }}</small>
+            <StateChip :label="selectedEvent.protocol_name || '-'" tone="primary" />
+            <strong>{{ selectedEvent.namespace_id || 'default' }}</strong>
+            <small>{{ formatTime(selectedEvent.event_time) }} / {{ formatDuration(selectedEvent.duration_ms) }}</small>
           </div>
-          <StateChip :label="selectedRequest.outcomeLabel" :tone="selectedRequest.tone" />
+          <StateChip :label="selectedEvent.outcome" :tone="outcomeTone(selectedEvent.outcome)" />
         </header>
 
-        <KeyValueGrid :items="requestFacts(selectedRequest)" />
+        <KeyValueGrid :items="detailFacts(selectedEvent)" />
 
         <section class="drawer-section">
           <header>
-            <span>Route context</span>
-            <strong>{{ selectedRequest.record.namespace || 'default' }}</strong>
+            <span>indexed fields</span>
+            <strong>{{ selectedEvent.indexes?.length || 0 }}</strong>
           </header>
-          <KeyValueGrid :items="routeFacts(selectedRequest)" />
+          <div v-if="selectedEvent.indexes?.length" class="index-list">
+            <button
+              v-for="index in selectedEvent.indexes"
+              :key="`${index.field_path}:${index.field_value_hash}`"
+              type="button"
+              @click="applyIndexFilter(index.field_path, index.field_value_text || index.field_value_preview)"
+            >
+              <span>{{ index.field_path }}</span>
+              <code>{{ index.field_value_preview }}</code>
+            </button>
+          </div>
+          <el-empty v-else description="No indexed fields" />
         </section>
 
-        <section v-if="selectedDiagnosis" class="drawer-section diagnosis-section">
-          <header>
-            <span>Diagnosis</span>
-            <strong>{{ selectedDiagnosis.title }}</strong>
-          </header>
-          <p>{{ selectedDiagnosis.detail }}</p>
-          <small>{{ selectedDiagnosis.nextAction }}</small>
-          <code>
-            target: {{ debugTargetLabel(selectedRequest) }}
-          </code>
-          <p v-if="selectedRequest.record.message">{{ selectedRequest.record.message }}</p>
-          <code v-if="selectedRequest.record.fallback_reason">
-            fallback: {{ selectedRequest.record.fallback_reason }}
-          </code>
-        </section>
-
-        <section v-if="selectedRequest.record.event" class="drawer-section">
-          <header>
-            <span>Replay event</span>
-            <strong>captured</strong>
-          </header>
-          <ResultInspector :raw-json="requestEventJson(selectedRequest)" :show-raw="false" />
-        </section>
+        <el-tabs model-value="event" class="json-tabs">
+          <el-tab-pane label="Event" name="event">
+            <ResultInspector :raw-json="jsonString(selectedEvent.event)" :show-raw="false" />
+          </el-tab-pane>
+          <el-tab-pane label="Decision" name="decision">
+            <ResultInspector :raw-json="jsonString(selectedEvent.decision)" :show-raw="false" />
+          </el-tab-pane>
+          <el-tab-pane label="Explain" name="explain">
+            <ResultInspector :raw-json="jsonString(selectedEvent.explain || {})" :show-raw="false" />
+          </el-tab-pane>
+        </el-tabs>
 
         <footer class="drawer-actions">
           <el-button
             type="primary"
-            :disabled="!selectedRequest.canReplay || !selectedDebugTarget"
             :icon="VideoPlay"
-            @click="sendToWorkspace(selectedRequest, 'simulate')"
-          >
-            Use as simulation
-          </el-button>
-          <el-button
-            :disabled="!selectedRequest.canReplay || !selectedDebugTarget"
-            :icon="EditPen"
-            @click="sendToWorkspace(selectedRequest, 'create_rule')"
-          >
-            Create rule
-          </el-button>
-          <el-button
-            :disabled="!selectedRequest.canOpenRuleset"
-            :icon="Right"
-            @click="openRuleset(selectedRequest)"
-          >
-            Open rules
-          </el-button>
-          <el-button
-            :disabled="!selectedRequest.canReplay"
-            :loading="replayLoadingId === selectedRequest.record.id"
-            @click="replay(selectedRequest)"
+            :loading="replayLoadingId === selectedEvent.id"
+            @click="replay(selectedEvent)"
           >
             Replay
           </el-button>
-          <el-button
-            v-if="selectedRequest.record.trace_id"
-            @click="copyText(selectedRequest.record.trace_id)"
-          >
+          <el-button :disabled="!selectedEvent.ruleset_id" :icon="Right" @click="openRuleset(selectedEvent)">
+            Open rules
+          </el-button>
+          <el-button v-if="selectedEvent.trace_id" :icon="CopyDocument" @click="copyTrace(selectedEvent.trace_id)">
             Copy trace
           </el-button>
         </footer>
@@ -302,7 +264,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { EditPen, Refresh, Right, Search, VideoPlay, View } from '@element-plus/icons-vue'
+import { CopyDocument, Refresh, Right, Search, VideoPlay } from '@element-plus/icons-vue'
 import FilterSegment, { type FilterSegmentOption } from '@/components/common/FilterSegment.vue'
 import KeyValueGrid from '@/components/common/KeyValueGrid.vue'
 import MetricCard from '@/components/common/MetricCard.vue'
@@ -310,95 +272,119 @@ import PageContainer from '@/components/common/PageContainer.vue'
 import StateChip from '@/components/common/StateChip.vue'
 import ResultInspector from '@/components/rulesets/ResultInspector.vue'
 import { useMockserverStore } from '@/store'
-import type { RuntimeDiagnosticFilters, RuntimeOutcomeFilter, RuntimeSortKey } from '@/utils/runtimeDiagnostics'
-import {
-  buildDebugToFixRoute,
-  buildRuntimeDiagnosis,
-  createDebugToFixPayload,
-  inferDebugToFixTarget,
-  storeDebugToFixPayload,
-  type DebugToFixAction,
-} from '@/utils/debugToFix'
-import {
-  buildRuntimeDiagnosticRows,
-  buildRuntimeMetricCards,
-  defaultRuntimeDiagnosticFilters,
-  runtimeMatchRate,
-  runtimeNamespaceOptions,
-  sumMetricValues,
-  toSortedMetricEntries,
-  type RuntimeDiagnosticRow,
-  type RuntimeMetricEntry,
-  type RuntimeTone,
-} from '@/utils/runtimeDiagnostics'
+import type { TrafficEvent } from '@/types'
+
+type TimeRange = '1h' | '24h' | '7d' | 'all'
+type ChipTone = 'neutral' | 'ok' | 'warn' | 'danger' | 'accent' | 'primary'
+
+interface Entry {
+  key: string
+  value: number
+  width: string
+  percent: number
+}
 
 const router = useRouter()
 const store = useMockserverStore()
 const loading = ref(false)
-const insightsExpanded = ref(false)
+const selectedEventId = ref<number | null>(null)
+const detailVisible = ref(false)
 const replayLoadingId = ref<number | null>(null)
-const replaySource = ref<RuntimeDiagnosticRow | null>(null)
-const selectedRequestId = ref<number | null>(null)
-const requestDetailVisible = ref(false)
+const replaySource = ref<TrafficEvent | null>(null)
 const replayJson = ref('')
 
-const outcomeOptions: Array<FilterSegmentOption & { value: RuntimeOutcomeFilter }> = [
-  { label: 'All', value: 'all' },
+const filters = reactive({
+  query: '',
+  timeRange: '24h' as TimeRange,
+  protocol: '',
+  namespace: '',
+  outcome: '',
+  fieldPath: '',
+  fieldValue: '',
+})
+
+const outcomeOptions: FilterSegmentOption[] = [
+  { label: 'All', value: '' },
   { label: 'Matched', value: 'matched' },
   { label: 'Fallback', value: 'fallback' },
   { label: 'Unmatched', value: 'unmatched' },
   { label: 'Error', value: 'error' },
 ]
-const sortOptions: Array<{ label: string; value: RuntimeSortKey }> = [
-  { label: 'Newest', value: 'newest' },
-  { label: 'Slowest', value: 'slowest' },
-  { label: 'Status', value: 'status' },
-  { label: 'Outcome', value: 'outcome' },
-]
 
-const filters = reactive<RuntimeDiagnosticFilters>(defaultRuntimeDiagnosticFilters())
-const metrics = computed(() => store.metrics)
-const matchRate = computed(() => runtimeMatchRate(metrics.value))
-const fallbackTotal = computed(() => sumMetricValues(metrics.value?.fallback_reasons))
-const metricCards = computed(() => buildRuntimeMetricCards(metrics.value))
-const recentRows = computed(() => buildRuntimeDiagnosticRows(metrics.value, filters))
-const selectedRequest = computed(() => {
-  return recentRows.value.find((row) => row.record.id === selectedRequestId.value) || null
+const total = computed(() => store.trafficTotal)
+const stats = computed(() => store.trafficStats)
+const events = computed(() => store.trafficEvents)
+const filteredEvents = computed(() => {
+  const query = filters.query.trim().toLowerCase()
+  if (!query) return events.value
+  return events.value.filter((event) => {
+    return [
+      event.event_id,
+      event.trace_id,
+      event.namespace_id,
+      event.operation_name,
+      event.ruleset_id,
+      event.rule_id,
+      event.fallback_reason,
+      event.protocol_name,
+      event.outcome,
+    ].some((value) => String(value || '').toLowerCase().includes(query))
+  })
 })
-const selectedDiagnosis = computed(() => selectedRequest.value ? buildRuntimeDiagnosis(selectedRequest.value) : null)
-const selectedDebugTarget = computed(() => {
-  return selectedRequest.value ? inferDebugToFixTarget(selectedRequest.value, store.drafts) : null
+const selectedEvent = computed(() => {
+  return events.value.find((event) => event.id === selectedEventId.value) || null
 })
-const namespaceOptions = computed(() => runtimeNamespaceOptions(metrics.value))
-const statusEntries = computed(() => toSortedMetricEntries(metrics.value?.status_codes))
-const fallbackEntries = computed(() => toSortedMetricEntries(metrics.value?.fallback_reasons))
-const rulesetHits = computed(() => toSortedMetricEntries(metrics.value?.ruleset_matches).slice(0, 8))
-const ruleHits = computed(() => toSortedMetricEntries(metrics.value?.rule_matches).slice(0, 8))
-const replaySourceLabel = computed(() => {
-  if (!replaySource.value) return 'idle'
-  return `#${replaySource.value.record.id}`
+const protocolOptions = computed(() => Object.keys(stats.value?.by_protocol || {}).sort())
+const namespaceOptions = computed(() => Object.keys(stats.value?.by_namespace || {}).sort())
+const outcomeEntries = computed(() => rankedEntries(stats.value?.by_outcome || {}, total.value))
+const protocolEntries = computed(() => rankedEntries(stats.value?.by_protocol || {}, total.value))
+const namespaceEntries = computed(() => rankedEntries(stats.value?.by_namespace || {}, total.value))
+const fallbackTotal = computed(() => stats.value?.by_outcome?.fallback || 0)
+const matchRate = computed(() => {
+  if (!total.value) return 0
+  return Math.round(((stats.value?.by_outcome?.matched || 0) / total.value) * 100)
 })
+const fieldOptions = computed(() => indexedFieldOptions(filters.protocol))
+const rangeLabel = computed(() => {
+  if (filters.timeRange === 'all') return 'all retained traffic'
+  if (filters.timeRange === '1h') return 'last hour'
+  if (filters.timeRange === '24h') return 'last 24h'
+  return 'last 7 days'
+})
+const replaySourceLabel = computed(() => replaySource.value ? `#${replaySource.value.id}` : 'idle')
 
 async function loadData() {
   loading.value = true
   try {
-    await Promise.all([store.fetchMetrics(), store.fetchDrafts()])
+    const range = timeRangeSeconds(filters.timeRange)
+    await store.fetchTrafficEvents({
+      limit: 100,
+      start_time: range.start,
+      end_time: range.end,
+      protocol_name: filters.protocol || undefined,
+      namespace_id: filters.namespace || undefined,
+      outcome: filters.outcome || undefined,
+      field_path: filters.fieldPath || undefined,
+      field_value: filters.fieldPath ? filters.fieldValue : undefined,
+      include_indexes: true,
+    })
   } finally {
     loading.value = false
   }
 }
 
-async function replay(row: RuntimeDiagnosticRow) {
-  if (!row.record.event) {
-    ElMessage.warning('This request has no replayable event')
-    return
-  }
-  replayLoadingId.value = row.record.id
-  replaySource.value = row
-  selectedRequestId.value = row.record.id
+function openEvent(row: TrafficEvent) {
+  selectedEventId.value = row.id
+  detailVisible.value = true
+}
+
+async function replay(event: TrafficEvent) {
+  replayLoadingId.value = event.id
+  replaySource.value = event
+  selectedEventId.value = event.id
   try {
     const result = await store.simulatePublished({
-      event: row.record.event,
+      event: event.event,
       explain_only: false,
       explain_summary: true,
       explain_max_depth: 3,
@@ -412,91 +398,143 @@ async function replay(row: RuntimeDiagnosticRow) {
   }
 }
 
-function openRequestDetail(row: RuntimeDiagnosticRow) {
-  selectedRequestId.value = row.record.id
-  requestDetailVisible.value = true
-}
-
-function openRuleset(row: RuntimeDiagnosticRow) {
-  if (!row.record.ruleset_id) return
+function openRuleset(event: TrafficEvent) {
+  if (!event.ruleset_id) return
   router.push({
-    path: `/rulesets/${encodeURIComponent(row.record.ruleset_id)}/rules`,
+    path: `/rulesets/${encodeURIComponent(event.ruleset_id)}/rules`,
     query: {
       workbench: 'inspect',
-      ...(row.record.rule_id ? { rule: row.record.rule_id } : {}),
+      ...(event.rule_id ? { rule: event.rule_id } : {}),
     },
   })
 }
 
-function sendToWorkspace(row: RuntimeDiagnosticRow, action: DebugToFixAction) {
-  const target = inferDebugToFixTarget(row, store.drafts)
-  if (!target) {
-    ElMessage.warning('No target ruleset found for this runtime request')
-    return
-  }
-  const payload = createDebugToFixPayload(row, action, target)
-  if (!payload) {
-    ElMessage.warning('This request has no captured event')
-    return
-  }
-  storeDebugToFixPayload(payload)
-  router.push(buildDebugToFixRoute(payload))
+function applyIndexFilter(path: string, value: string) {
+  filters.fieldPath = path
+  filters.fieldValue = value
+  loadData()
 }
 
-function requestFacts(row: RuntimeDiagnosticRow) {
+function setProtocol(protocol: string) {
+  filters.protocol = protocol
+  loadData()
+}
+
+function setNamespace(namespace: string) {
+  filters.namespace = namespace
+  loadData()
+}
+
+function detailFacts(event: TrafficEvent) {
   return [
-    { label: 'Outcome', value: row.outcomeLabel, tone: row.tone },
-    { label: 'Status', value: row.statusLabel, tone: statusTone(row.record.status) },
-    { label: 'Duration', value: row.durationLabel },
-    { label: 'Observed', value: row.observedAtLabel },
-    { label: 'Trace', value: row.record.trace_id || '-', code: true },
-    { label: 'Replay', value: row.canReplay ? 'available' : 'none', tone: row.canReplay ? 'ok' : 'neutral' },
+    { label: 'Event ID', value: event.event_id, code: true },
+    { label: 'Trace', value: event.trace_id || '-', code: true },
+    { label: 'Outcome', value: event.outcome, tone: outcomeTone(event.outcome) },
+    { label: 'Decision', value: event.decision_kind || '-' },
+    { label: 'Ruleset', value: event.ruleset_id || '-', code: true },
+    { label: 'Rule', value: event.rule_id || '-', code: true },
+    { label: 'Fallback', value: event.fallback_reason || '-' },
+    { label: 'Error', value: event.error_message || '-' },
   ]
 }
 
-function routeFacts(row: RuntimeDiagnosticRow) {
-  return [
-    { label: 'Namespace', value: row.record.namespace || 'default', code: true },
-    { label: 'Host', value: row.record.host || '-', code: true },
-    { label: 'Path', value: row.pathLabel, code: true },
-    { label: 'Ruleset', value: row.record.ruleset_id || '-', code: true },
-    { label: 'Rule', value: row.record.rule_id || '-', code: true },
-    { label: 'Fallback', value: row.record.fallback_reason || '-' },
-  ]
-}
-
-function debugTargetLabel(row: RuntimeDiagnosticRow) {
-  return inferDebugToFixTarget(row, store.drafts)?.label || 'No draft target found'
-}
-
-function requestEventJson(row: RuntimeDiagnosticRow) {
-  return JSON.stringify({ event: row.record.event }, null, 2)
-}
-
-function openRulesetById(rulesetId: string) {
-  router.push(`/rulesets/${encodeURIComponent(rulesetId)}/rules`)
-}
-
-async function copyText(value: string) {
+async function copyTrace(traceId: string) {
   try {
-    await navigator.clipboard.writeText(value)
+    await navigator.clipboard.writeText(traceId)
     ElMessage.success('Trace ID copied')
   } catch {
     ElMessage.error('Copy failed')
   }
 }
 
-function hitWidth(value: number, rows: RuntimeMetricEntry[]) {
-  const max = Math.max(...rows.map((row) => row.value), 1)
-  return `${Math.max((value / max) * 100, 6)}%`
+function timeRangeSeconds(range: TimeRange) {
+  const end = Math.floor(Date.now() / 1000)
+  if (range === 'all') {
+    return { start: undefined, end: undefined }
+  }
+  const seconds = range === '1h' ? 3600 : range === '24h' ? 86400 : 7 * 86400
+  return { start: end - seconds, end }
 }
 
-function statusTone(status?: number): RuntimeTone {
-  if (!status) return 'neutral'
-  if (status >= 500) return 'danger'
-  if (status >= 400) return 'warn'
-  if (status >= 200 && status < 400) return 'ok'
-  return 'neutral'
+function rankedEntries(values: Record<string, number>, totalValue: number): Entry[] {
+  const max = Math.max(...Object.values(values), 1)
+  return Object.entries(values)
+    .filter(([, value]) => value > 0)
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, 8)
+    .map(([key, value]) => ({
+      key: key || '-',
+      value,
+      width: `${Math.max((value / max) * 100, 6)}%`,
+      percent: totalValue ? Math.round((value / totalValue) * 100) : 0,
+    }))
+}
+
+function indexedFieldOptions(protocol: string) {
+  const base = [
+    { label: 'event.operation', value: 'event.operation' },
+    { label: 'decision.response.status', value: 'decision.response.status' },
+    { label: 'decision.forward.timeout_ms', value: 'decision.forward.timeout_ms' },
+  ]
+  if (protocol === 'cache') {
+    return [
+      { label: 'event.request.operation', value: 'event.request.operation' },
+      { label: 'event.request.key', value: 'event.request.key' },
+      ...base,
+    ]
+  }
+  if (protocol === 'http' || protocol === '') {
+    return [
+      { label: 'event.request.method', value: 'event.request.method' },
+      { label: 'event.request.host', value: 'event.request.host' },
+      { label: 'event.request.original_host', value: 'event.request.original_host' },
+      { label: 'event.request.path', value: 'event.request.path' },
+      ...base,
+    ]
+  }
+  return [
+    { label: 'event.request.operation', value: 'event.request.operation' },
+    { label: 'event.request.service', value: 'event.request.service' },
+    { label: 'event.request.method', value: 'event.request.method' },
+    { label: 'event.request.topic', value: 'event.request.topic' },
+    { label: 'event.request.group', value: 'event.request.group' },
+    { label: 'event.request.key', value: 'event.request.key' },
+    ...base,
+  ]
+}
+
+function outcomeTone(outcome: string): ChipTone {
+  if (outcome === 'matched') return 'ok'
+  if (outcome === 'fallback') return 'warn'
+  if (outcome === 'error') return 'danger'
+  if (outcome === 'unmatched') return 'neutral'
+  return 'accent'
+}
+
+function metricTone(outcome: string): ChipTone {
+  if (outcome === 'matched') return 'ok'
+  if (outcome === 'fallback') return 'warn'
+  if (outcome === 'error') return 'danger'
+  return 'accent'
+}
+
+function formatTime(seconds: number) {
+  if (!seconds) return '-'
+  return new Intl.DateTimeFormat('en-US', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(new Date(seconds * 1000))
+}
+
+function formatDuration(value: number) {
+  return `${value || 0} ms`
+}
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat('en-US').format(value || 0)
 }
 
 function shortText(value: string, size: number) {
@@ -504,50 +542,38 @@ function shortText(value: string, size: number) {
   return `${value.slice(0, size)}...`
 }
 
-function formatNumber(value: number) {
-  return new Intl.NumberFormat('en-US').format(value)
+function jsonString(value: unknown) {
+  return JSON.stringify(value || {}, null, 2)
 }
 
 onMounted(loadData)
 </script>
 
 <style lang="scss" scoped>
-.diagnostics-dashboard {
-  min-height: 0;
+.traffic-page {
   height: 100%;
+  min-height: 0;
   display: grid;
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(310px, 0.3fr);
   gap: var(--ms-space-3);
 }
 
-.insight-metrics {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--ms-space-2);
-  padding: var(--ms-space-3);
-}
-
-.diagnostic-grid {
-  min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--ms-space-3);
-
-  &.insights-open {
-    grid-template-columns: minmax(0, 1fr) minmax(330px, 0.34fr);
-  }
-}
-
-.request-stream,
-.diagnostic-side {
+.traffic-main,
+.traffic-side {
   min-height: 0;
 }
 
-.request-stream {
+.traffic-main {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.traffic-side {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  gap: var(--ms-space-3);
+  overflow: auto;
 }
 
 .panel-heading {
@@ -586,224 +612,77 @@ onMounted(loadData)
   }
 }
 
-.request-toolbar {
+.traffic-toolbar {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(150px, 190px) minmax(130px, 160px);
+  grid-template-columns: minmax(240px, 1fr) 120px 140px 160px;
   gap: var(--ms-space-2);
   padding: var(--ms-space-3);
   border-bottom: 1px solid var(--ms-border-light);
 }
 
-.request-toolbar :deep(.filter-segment) {
+.traffic-toolbar :deep(.filter-segment),
+.field-filter {
   grid-column: 1 / -1;
-  width: max-content;
-  max-width: 100%;
 }
 
-.request-list {
+.field-filter {
+  display: grid;
+  grid-template-columns: minmax(200px, 260px) minmax(180px, 1fr) auto;
+  gap: var(--ms-space-2);
+}
+
+.traffic-table {
   min-height: 0;
+}
+
+.traffic-table :deep(.el-table__row) {
+  cursor: pointer;
+}
+
+.time-cell,
+.rule-cell {
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--ms-space-2);
-  overflow: auto;
-  padding: var(--ms-space-3);
-}
+  gap: 2px;
 
-.request-row {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1.35fr) 126px minmax(240px, 0.9fr);
-  align-items: center;
-  gap: var(--ms-space-3);
-  padding: var(--ms-space-3);
-  border: 1px solid var(--ms-border-light);
-  border-left-width: 3px;
-  border-radius: var(--ms-radius-lg);
-  background: var(--ms-control-bg);
-  cursor: pointer;
-  transition:
-    background var(--ms-transition-fast),
-    box-shadow var(--ms-transition-fast),
-    transform var(--ms-transition-fast);
-
-  &:hover,
-  &:focus-visible,
-  &.active {
-    background: var(--ms-panel-bg-soft);
-    box-shadow:
-      var(--ms-shadow-xs),
-      0 0 0 1px rgba(15, 118, 110, 0.16);
-    outline: none;
-  }
-
-  &.active {
-    transform: translateY(-1px);
-  }
-
-  &.is-ok {
-    border-left-color: var(--ms-green-500);
-  }
-
-  &.is-warn {
-    border-left-color: var(--ms-amber-500);
-  }
-
-  &.is-danger {
-    border-left-color: var(--ms-red-500);
-  }
-}
-
-.request-main,
-.request-links {
-  min-width: 0;
-}
-
-.request-line {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--ms-space-2);
-
+  strong,
   code {
     min-width: 0;
     overflow: hidden;
-    color: var(--ms-text-primary);
-    font-size: var(--ms-text-base);
-    line-height: 1.35;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-}
-
-.method-chip,
-.outcome-chip {
-  flex: 0 0 auto;
-  padding: 4px 9px;
-  border-radius: var(--ms-radius-pill);
-  font-size: var(--ms-text-sm);
-  font-weight: var(--ms-font-bold);
-  line-height: 1.2;
-}
-
-.method-chip {
-  color: var(--ms-blue-500);
-  background: var(--ms-blue-50);
-}
-
-.request-meta {
-  min-width: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--ms-space-1) var(--ms-space-2);
-  margin-top: var(--ms-space-2);
-  color: var(--ms-text-tertiary);
-  font-size: var(--ms-text-sm);
-}
-
-.trace-button {
-  max-width: 150px;
-  padding: 0;
-  overflow: hidden;
-  border: none;
-  color: var(--ms-teal-700);
-  background: transparent;
-  font-size: var(--ms-text-sm);
-  font-weight: var(--ms-font-semibold);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.request-state {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--ms-space-1);
-
-  strong {
-    font-family: var(--ms-font-display);
-    font-size: var(--ms-text-lg);
-    line-height: 1.1;
-
-    &.is-ok {
-      color: var(--ms-green-600);
-    }
-
-    &.is-warn {
-      color: var(--ms-amber-600);
-    }
-
-    &.is-danger {
-      color: var(--ms-red-600);
-    }
   }
 
   small {
     color: var(--ms-text-tertiary);
-    font-size: var(--ms-text-sm);
+    font-size: var(--ms-text-xs);
   }
 }
 
-.outcome-chip {
-  color: var(--ms-text-tertiary);
-  background: var(--ms-panel-bg);
-
-  &.is-ok {
-    color: var(--ms-green-600);
-    background: var(--ms-green-50);
-  }
-
-  &.is-warn {
-    color: var(--ms-amber-600);
-    background: var(--ms-amber-50);
-  }
-
-  &.is-danger {
-    color: var(--ms-red-600);
-    background: var(--ms-red-50);
-  }
+code {
+  color: var(--ms-text-secondary);
+  font-family: var(--ms-font-mono);
+  font-size: var(--ms-text-sm);
 }
 
-.request-links {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--ms-space-2);
-
-  div {
-    min-width: 0;
-  }
-
-  span {
-    display: block;
-    color: var(--ms-text-tertiary);
-    font-size: var(--ms-text-sm);
-    font-weight: var(--ms-font-bold);
-    text-transform: uppercase;
-  }
-
-  code {
-    display: block;
-    min-width: 0;
-    margin-top: 2px;
-    overflow: hidden;
-    color: var(--ms-text-secondary);
-    font-size: var(--ms-text-sm);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+.trace-button {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  color: var(--ms-blue-500);
+  background: transparent;
+  font-family: var(--ms-font-mono);
+  font-size: var(--ms-text-sm);
+  cursor: pointer;
 }
 
-.diagnostic-side {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ms-space-3);
-  overflow: auto;
-}
-
-.side-panel,
-.replay-panel {
-  min-height: 0;
+.side-panel {
   overflow: hidden;
+}
+
+.side-panel :deep(.metric-card) {
+  margin: var(--ms-space-3);
 }
 
 .compact-list {
@@ -815,35 +694,31 @@ onMounted(loadData)
 
 .compact-row {
   min-width: 0;
-  width: 100%;
   display: grid;
-  grid-template-columns: minmax(88px, 0.9fr) minmax(90px, 1fr) 42px;
+  grid-template-columns: minmax(0, 1fr) minmax(80px, 110px) auto;
   align-items: center;
   gap: var(--ms-space-2);
   padding: var(--ms-space-2);
-  border: none;
+  border: 1px solid var(--ms-border-light);
   border-radius: var(--ms-radius-md);
-  color: inherit;
-  background: var(--ms-control-bg);
-  text-align: left;
+  background: var(--ms-panel-bg);
+
+  &.as-button {
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+  }
 
   code {
     min-width: 0;
     overflow: hidden;
-    color: var(--ms-text-secondary);
-    font-size: var(--ms-text-sm);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   strong {
-    justify-self: end;
-    color: var(--ms-text-primary);
+    color: var(--ms-text-secondary);
     font-size: var(--ms-text-sm);
-  }
-
-  &.as-button {
-    cursor: pointer;
   }
 }
 
@@ -851,43 +726,27 @@ onMounted(loadData)
   height: 7px;
   overflow: hidden;
   border-radius: var(--ms-radius-pill);
-  background: rgba(148, 163, 184, 0.16);
+  background: var(--ms-panel-bg-soft);
 
   span {
     display: block;
     height: 100%;
     border-radius: inherit;
-    background: var(--ms-teal-600);
-  }
-
-  &.is-warn span {
-    background: var(--ms-amber-500);
+    background: var(--ms-green-500);
   }
 
   &.is-accent span {
-    background: var(--ms-violet-500);
+    background: var(--ms-blue-500);
   }
 }
 
-.replay-panel {
-  flex: 1 1 360px;
-  display: flex;
-  flex-direction: column;
-}
-
-.replay-panel :deep(.result-inspector) {
-  padding: var(--ms-space-3);
-}
-
-.request-drawer {
-  min-width: 0;
+.traffic-drawer {
   display: flex;
   flex-direction: column;
   gap: var(--ms-space-4);
 }
 
-.request-drawer-heading {
-  min-width: 0;
+.drawer-heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -897,18 +756,15 @@ onMounted(loadData)
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--ms-space-2);
+    gap: var(--ms-space-1);
   }
 
   strong {
     min-width: 0;
-    overflow: hidden;
     color: var(--ms-text-primary);
     font-family: var(--ms-font-display);
     font-size: var(--ms-text-xl);
-    line-height: 1.25;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
   }
 
   small {
@@ -918,103 +774,108 @@ onMounted(loadData)
 }
 
 .drawer-section {
-  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--ms-space-3);
-  padding-top: var(--ms-space-3);
-  border-top: 1px solid var(--ms-border-light);
+  gap: var(--ms-space-2);
 
   header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--ms-space-2);
+
+    span {
+      color: var(--ms-text-primary);
+      font-size: var(--ms-text-sm);
+      font-weight: var(--ms-font-bold);
+      text-transform: uppercase;
+    }
+
+    strong {
+      color: var(--ms-text-tertiary);
+      font-size: var(--ms-text-sm);
+    }
+  }
+}
+
+.index-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--ms-space-2);
+
+  button {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(170px, 0.45fr) minmax(0, 1fr);
+    gap: var(--ms-space-2);
+    padding: var(--ms-space-2);
+    border: 1px solid var(--ms-border-light);
+    border-radius: var(--ms-radius-md);
+    background: var(--ms-panel-bg);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  span,
+  code {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   span {
     color: var(--ms-text-tertiary);
     font-size: var(--ms-text-sm);
-    font-weight: var(--ms-font-bold);
-    text-transform: uppercase;
-  }
-
-  strong {
-    min-width: 0;
-    overflow: hidden;
-    color: var(--ms-text-primary);
-    font-size: var(--ms-text-sm);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  p,
-  > code {
-    margin: 0;
-    padding: var(--ms-space-3);
-    border: 1px solid var(--ms-border-light);
-    border-radius: var(--ms-radius-md);
-    color: var(--ms-text-secondary);
-    background: var(--ms-panel-bg-soft);
-    font-size: var(--ms-text-sm);
-    line-height: 1.55;
-  }
-
-  > code {
-    display: block;
-    overflow: auto;
-    font-family: var(--ms-font-mono);
   }
 }
 
-.diagnosis-section {
-  small {
-    display: block;
-    color: var(--ms-text-tertiary);
-    font-size: var(--ms-text-sm);
-    line-height: 1.45;
-  }
-
-  p + p {
-    margin-top: calc(var(--ms-space-2) * -1);
-  }
+.json-tabs {
+  min-width: 0;
 }
 
 .drawer-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--ms-space-2);
-  padding-top: var(--ms-space-3);
-  border-top: 1px solid var(--ms-border-light);
 }
 
-@media (max-width: 1280px) {
-  .diagnostic-grid {
+@media (max-width: 1180px) {
+  .traffic-page {
     grid-template-columns: 1fr;
   }
 
-  .diagnostic-side {
+  .traffic-side {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-
-  .replay-panel {
-    grid-column: 1 / -1;
-  }
 }
 
-@media (max-width: 900px) {
-  .request-toolbar,
-  .request-row,
-  .request-links,
-  .diagnostic-side {
+@media (max-width: 760px) {
+  .traffic-page {
+    height: auto;
+    min-height: 100%;
+  }
+
+  .traffic-main {
+    grid-template-rows: auto auto minmax(260px, 1fr);
+    overflow: visible;
+  }
+
+  .traffic-toolbar,
+  .field-filter,
+  .traffic-side {
     grid-template-columns: 1fr;
   }
 
-}
+  .traffic-toolbar :deep(.filter-segment) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    overflow: visible;
+  }
 
-@media (max-width: 640px) {
-  .request-toolbar :deep(.filter-segment) {
+  .traffic-toolbar :deep(.filter-segment button) {
     width: 100%;
   }
 }

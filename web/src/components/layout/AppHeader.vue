@@ -45,7 +45,7 @@ const store = useMockserverStore()
 const sectionLabel = computed(() => {
   if (route.path.startsWith('/rulesets')) return 'rule control'
   if (route.path.startsWith('/namespaces')) return 'namespace'
-  if (route.path.startsWith('/dashboard')) return 'runtime'
+  if (route.path.startsWith('/dashboard')) return 'traffic'
   return 'mockserver'
 })
 
@@ -55,6 +55,7 @@ async function refreshAll() {
     store.fetchPublished(),
     store.fetchNamespaces(),
     store.fetchMetrics(),
+    store.fetchTrafficEvents({ limit: 50, include_indexes: true }),
   ])
 }
 

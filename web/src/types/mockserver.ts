@@ -156,6 +156,20 @@ export interface ActionExecution {
   body?: unknown
 }
 
+export interface RuntimeDecision {
+  kind: string
+  matched: boolean
+  fallback?: boolean
+  trace: MatchTrace
+  response?: ActionExecution
+  forward?: {
+    timeout_ms?: number
+  }
+  meta?: {
+    trace_id?: string
+  }
+}
+
 export interface SimulationResult {
   matched: boolean
   fallback?: boolean
@@ -302,4 +316,72 @@ export interface RuntimeRequestRecord {
   message?: string
   duration_ms: number
   event?: MockEvent
+}
+
+export interface TrafficEventIndex {
+  id: number
+  traffic_event_id: number
+  event_id: string
+  protocol_name: string
+  field_path: string
+  field_value_preview: string
+  field_value_hash: number
+  field_value_text?: string
+  event_time: number
+}
+
+export interface TrafficEvent {
+  id: number
+  event_id: string
+  trace_id?: string
+  traffic_source: string
+  protocol_name: string
+  namespace_id: string
+  operation_name?: string
+  outcome: 'matched' | 'fallback' | 'unmatched' | 'error' | string
+  decision_kind?: string
+  ruleset_id?: string
+  rule_id?: string
+  snapshot_id?: string
+  fallback_reason?: string
+  duration_ms: number
+  event_time: number
+  expire_time: number
+  event: MockEvent
+  decision: RuntimeDecision | Record<string, unknown>
+  explain?: Record<string, unknown>
+  error_message?: string
+  indexes?: TrafficEventIndex[]
+}
+
+export interface TrafficStats {
+  total: number
+  by_outcome: Record<string, number>
+  by_protocol: Record<string, number>
+  by_namespace: Record<string, number>
+}
+
+export interface ListTrafficEventsResponse {
+  items: TrafficEvent[]
+  total: number
+  stats: TrafficStats
+}
+
+export interface TrafficQueryParams {
+  limit?: number
+  offset?: number
+  start_time?: number
+  end_time?: number
+  trace_id?: string
+  protocol_name?: string
+  namespace_id?: string
+  operation_name?: string
+  outcome?: string
+  decision_kind?: string
+  ruleset_id?: string
+  rule_id?: string
+  fallback_reason?: string
+  field_path?: string
+  field_value?: string
+  include_indexes?: boolean
 }

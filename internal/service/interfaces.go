@@ -37,3 +37,8 @@ type RuntimeService interface {
 	MatchPublished(ctx context.Context, event bo.Event) (bo.SimulationResult, error)
 	DecidePublished(ctx context.Context, event bo.Event) (bo.RuntimeDecision, error)
 }
+
+type TrafficService interface {
+	RecordSDKDecision(ctx context.Context, event bo.Event, decision bo.RuntimeDecision, decisionErr error, durationMS uint32) (bo.TrafficEvent, error)
+	ListTrafficEvents(ctx context.Context, query bo.TrafficQuery) (bo.TrafficEventList, error)
+}
