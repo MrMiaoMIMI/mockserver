@@ -2,7 +2,7 @@ package mockprotocol
 
 import "testing"
 
-func TestDefaultRegistryContainsHTTPAndCacheSpecs(t *testing.T) {
+func TestDefaultRegistryContainsHTTPAndCacheAndSPEXSpecs(t *testing.T) {
 	registry := DefaultRegistry()
 	if _, ok := registry.Get("http"); !ok {
 		t.Fatalf("expected http spec")
@@ -10,7 +10,10 @@ func TestDefaultRegistryContainsHTTPAndCacheSpecs(t *testing.T) {
 	if _, ok := registry.Get("cache"); !ok {
 		t.Fatalf("expected cache spec")
 	}
-	if len(registry.List()) != 2 {
+	if _, ok := registry.Get("spex"); !ok {
+		t.Fatalf("expected spex spec")
+	}
+	if len(registry.List()) != 3 {
 		t.Fatalf("unexpected registry size: %d", len(registry.List()))
 	}
 }
@@ -32,6 +35,13 @@ func TestFieldForPathSupportsDynamicPaths(t *testing.T) {
 	}
 	if _, ok := FieldForPath("cache", "request.unknown"); ok {
 		t.Fatalf("unexpected unknown cache field")
+	}
+	spexReqField, ok := FieldForPath("spex", "request.req.user.id")
+	if !ok {
+		t.Fatalf("expected dynamic spex req field")
+	}
+	if spexReqField.Path != "request.req" || spexReqField.Type != FieldTypeJSON {
+		t.Fatalf("unexpected spex req field: %+v", spexReqField)
 	}
 }
 
@@ -80,5 +90,8 @@ func TestRegisteredSpecsExposeEffectiveOperators(t *testing.T) {
 	}
 	if SelectorOperatorAllowed("http", "request.path", OperatorRegex) {
 		t.Fatalf("http path selector should not allow regex")
+	}
+	if !SelectorOperatorAllowed("spex", "request.cmd", OperatorPrefix) {
+		t.Fatalf("spex cmd selector should allow prefix")
 	}
 }

@@ -483,6 +483,13 @@ function indexedFieldOptions(protocol: string) {
       ...base,
     ]
   }
+  if (protocol === 'spex') {
+    return [
+      { label: 'event.request.cmd', value: 'event.request.cmd' },
+      { label: 'event.request.param', value: 'event.request.param' },
+      ...base,
+    ]
+  }
   if (protocol === 'http' || protocol === '') {
     return [
       { label: 'event.request.method', value: 'event.request.method' },

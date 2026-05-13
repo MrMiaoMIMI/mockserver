@@ -782,6 +782,8 @@ func TestAdminListProtocols(t *testing.T) {
 	assertBytesContain(t, body, `"path":"request.body"`)
 	assertBytesContain(t, body, `"name":"cache"`)
 	assertBytesContain(t, body, `"path":"request.value"`)
+	assertBytesContain(t, body, `"name":"spex"`)
+	assertBytesContain(t, body, `"path":"request.req"`)
 	assertBytesContain(t, body, `"selectors"`)
 }
 
@@ -851,6 +853,88 @@ func TestSDKDecisionEndpointCacheDecisionEndToEnd(t *testing.T) {
 			"request": map[string]any{
 				"operation": "get",
 				"key":       "user:456",
+			},
+		},
+	}, http.StatusOK)
+	missBody := readBody(t, missDecision)
+	assertBytesContain(t, missBody, `"decision":{"kind":"forward"`)
+	assertBytesContain(t, missBody, `"fallback":true`)
+	assertBytesContain(t, missBody, `"fallback_reason":"rule_miss"`)
+}
+
+func TestSDKDecisionEndpointSPEXDecisionEndToEnd(t *testing.T) {
+	ruleSetRepository := newTestRuleSetRepository()
+	namespaceService := service.NewNamespaceService(ruleSetRepository)
+	ruleSetService := service.NewRuleSetService(ruleSetRepository, namespaceService)
+	runtimeService := service.NewRuntimeService(ruleSetRepository, ruleSetRepository, namespaceService)
+	ruleSetView := view.NewRuleSetView(ruleSetService)
+	namespaceView := view.NewNamespaceView(namespaceService)
+	runtimeView := view.NewRuntimeView(runtimeService)
+
+	adminController := controller.NewAdminController(ruleSetView, namespaceView)
+	runtimeController := controller.NewRuntimeController(runtimeView, observability.NewRuntimeMetrics())
+	handler := router.New(adminController, runtimeController, router.AdminAuthConfig{}, nil)
+
+	doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/rulesets", map[string]any{
+		"id":        "spex-sdk",
+		"name":      "spex sdk",
+		"enabled":   true,
+		"protocol":  "spex",
+		"namespace": "default",
+		"selector": map[string]any{
+			"all": []map[string]any{
+				{"field": "request.cmd", "op": "prefix", "value": "shop."},
+			},
+		},
+		"rules": []map[string]any{
+			{
+				"id":       "spex-get-order",
+				"name":     "SPEX Get Order",
+				"enabled":  true,
+				"priority": 100,
+				"when": map[string]any{
+					"all": []map[string]any{
+						{"field": "request.cmd", "op": "eq", "value": "shop.GetOrder"},
+						{"field": "request.req.order_id", "op": "eq", "value": "1001"},
+					},
+				},
+				"action": map[string]any{
+					"type":   "static_response",
+					"status": 200,
+					"body":   map[string]any{"order_status": "mocked"},
+				},
+			},
+		},
+	}, http.StatusOK)
+	doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/rulesets/spex-sdk/publish", nil, http.StatusOK)
+
+	hitDecision := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/sdk/decision", map[string]any{
+		"event": map[string]any{
+			"protocol":  "spex",
+			"operation": "request",
+			"namespace": "default",
+			"request": map[string]any{
+				"cmd":   "shop.GetOrder",
+				"req":   map[string]any{"order_id": "1001"},
+				"param": "region=sg",
+			},
+		},
+	}, http.StatusOK)
+	hitBody := readBody(t, hitDecision)
+	assertBytesContain(t, hitBody, `"decision":{"kind":"response"`)
+	assertBytesContain(t, hitBody, `"matched":true`)
+	assertBytesContain(t, hitBody, `"ruleset_id":"spex-sdk"`)
+	assertBytesContain(t, hitBody, `"rule_id":"spex-get-order"`)
+	assertBytesContain(t, hitBody, `"order_status":"mocked"`)
+
+	missDecision := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/sdk/decision", map[string]any{
+		"event": map[string]any{
+			"protocol":  "spex",
+			"operation": "request",
+			"namespace": "default",
+			"request": map[string]any{
+				"cmd": "shop.GetOrder",
+				"req": map[string]any{"order_id": "2002"},
 			},
 		},
 	}, http.StatusOK)

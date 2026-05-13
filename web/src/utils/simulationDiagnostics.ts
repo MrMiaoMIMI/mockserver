@@ -52,6 +52,9 @@ export function buildDefaultSimulationEvent(ruleSet: RuleSet | null, rule?: Rule
   if (ruleSet?.protocol === 'cache') {
     return buildDefaultCacheEvent(ruleSet, rule)
   }
+  if (ruleSet?.protocol === 'spex') {
+    return buildDefaultSPEXEvent(ruleSet, rule)
+  }
   return buildDefaultHTTPEvent(ruleSet, rule)
 }
 
@@ -99,6 +102,29 @@ function buildDefaultCacheEvent(ruleSet: RuleSet, rule?: Rule | null): MockEvent
         id: key,
         status: 'active',
       },
+    },
+  }
+
+  if (rule) {
+    applySafeConditionHints(event, rule.when, {
+      selectorConstraints: collectSelectorConstraints(ruleSet),
+    })
+  }
+
+  return event
+}
+
+function buildDefaultSPEXEvent(ruleSet: RuleSet, rule?: Rule | null): MockEvent {
+  const selectorCmd = selectorValue(ruleSet, 'request.cmd', ['eq', 'prefix', 'in']) || 'service.'
+  const event: MockEvent = {
+    protocol: 'spex',
+    namespace: ruleSet.namespace || 'default',
+    request: {
+      cmd: selectorCmd.endsWith('.') ? `${selectorCmd}Method` : selectorCmd,
+      req: {
+        id: 'demo',
+      },
+      param: 'default',
     },
   }
 
@@ -275,6 +301,30 @@ function applyPredicateHint(
     const operation = value.toLowerCase()
     if (hintCanReplaceSelectorValue(condition.field, condition.op, operation, context.selectorConstraints)) {
       event.request.operation = operation
+    }
+    return
+  }
+
+  if (condition.field === 'request.cmd' && ['eq', 'prefix'].includes(condition.op || '')) {
+    if (hintCanReplaceSelectorValue(condition.field, condition.op || 'eq', value, context.selectorConstraints)) {
+      event.request.cmd = condition.op === 'prefix' && value.endsWith('.') ? `${value}Method` : value
+    }
+    return
+  }
+
+  if (condition.field === 'request.param' && condition.op === 'eq') {
+    event.request.param = value
+    return
+  }
+
+  const spexReqKey = indexedFieldKey(condition.field || '', 'request.req.')
+  if (spexReqKey && condition.op === 'eq') {
+    const req = (typeof event.request.req === 'object' && event.request.req !== null && !Array.isArray(event.request.req))
+      ? event.request.req as Record<string, unknown>
+      : {}
+    event.request.req = {
+      ...req,
+      [spexReqKey]: value,
     }
     return
   }

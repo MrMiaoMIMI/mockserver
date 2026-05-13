@@ -3,7 +3,7 @@
 一个基于 Go 的通用 mockserver 骨架，当前实现的是 V1 最小闭环：
 
 - 统一 `Event` 输入模型
-- 代码注册 `ProtocolSpec`，当前包含 HTTP 和 cache
+- 代码注册 `ProtocolSpec`，当前包含 HTTP、cache 和 SPEX
 - `RuleSet -> Rule -> Action` 规则结构
 - `draft / published` 双态
 - `selector` 粗筛 + 条件树精匹配
@@ -207,6 +207,13 @@ Cache 字段：
 - `request.ttl_ms`
 - `request.value`
 - `request.value.<key>`
+
+SPEX 字段：
+
+- `request.cmd`
+- `request.req`
+- `request.req.<key>`
+- `request.param`
 
 ## 当前支持的操作符
 

@@ -13,7 +13,7 @@ MockServer 用规则来模拟协议调用结果。HTTP runtime 适合本地调�
 - 用 `publish` 把 draft 规则发布到 runtime。
 - 用 `simulate` 在不真正调用 runtime 的情况下解释为什么命中或不命中。
 - 用 `rollback` 回滚到历史发布快照。
-- 用代码注册的 `ProtocolSpec` 约束协议字段，当前包含 HTTP 和 cache。
+- 用代码注册的 `ProtocolSpec` 约束协议字段，当前包含 HTTP、cache 和 SPEX。
 
 ## 2. 你需要准备什么
 
@@ -270,7 +270,7 @@ MockServer 有两层规则状态：
 
 - `id`：规则集唯一 ID，由后端创建 draft 时生成，后续用于发布、回滚、trace 和 metrics。
 - `enabled`：关闭后整个 ruleset 不参与匹配。
-- `protocol`：当前支持 `http` 和 `cache`。
+- `protocol`：当前支持 `http`、`cache` 和 `spex`。
 - `namespace`：运行时命名空间，runtime URL 中会用到。
 - `selector`：ruleset 级粗筛。
 - `rules`：具体规则列表。
@@ -320,7 +320,7 @@ runtime 路径格式：
 }
 ```
 
-如果一个请求同时命中多个 ruleset，MockServer 会先选 selector 更严格的 ruleset，再只匹配该 ruleset 内部的 rules。selector 字段来自当前协议的 `ProtocolSpec.selectors`，例如 HTTP 支持 `request.host` 和 `request.path`，cache 支持 `request.operation` 和 `request.key`。当前严格度按 selector 条件累加，`eq` 高于 `prefix/suffix`，再高于 `contains/exists`，最后用 `ruleset.id` 倒序做稳定兜底。
+如果一个请求同时命中多个 ruleset，MockServer 会先选 selector 更严格的 ruleset，再只匹配该 ruleset 内部的 rules。selector 字段来自当前协议的 `ProtocolSpec.selectors`，例如 HTTP 支持 `request.host` 和 `request.path`，cache 支持 `request.operation` 和 `request.key`，SPEX 支持 `request.cmd`。当前严格度按 selector 条件累加，`eq` 高于 `prefix/suffix`，再高于 `contains/exists`，最后用 `ruleset.id` 倒序做稳定兜底。
 
 如果 selector 没命中，ruleset 内部的 rule 不会继续匹配。排查这类问题时，用 `simulate` 看 `rule_set_explanations.selector_checks`。
 
@@ -454,6 +454,15 @@ request.key
 request.ttl_ms
 request.value
 request.value.user.id
+```
+
+SPEX：
+
+```text
+request.cmd
+request.req
+request.req.order_id
+request.param
 ```
 
 ### 6.3 常用操作符

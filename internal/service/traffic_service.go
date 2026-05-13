@@ -208,6 +208,8 @@ func isQueryableRequestField(protocol, key string) bool {
 		}
 	case "cache":
 		return key == "operation" || key == "key" || key == "value"
+	case "spex":
+		return key == "cmd" || key == "param"
 	default:
 		switch key {
 		case "operation", "service", "method", "topic", "group", "key":

@@ -99,6 +99,17 @@ describe('rule form adapter', () => {
     })
   })
 
+  it('uses spex-friendly default conditions for spex rulesets', () => {
+    const form = defaultRuleForm({ ...ruleSet, protocol: 'spex' })
+
+    expect(form.conditionTree).toMatchObject({
+      all: [
+        { field: 'request.cmd', op: 'prefix', value: 'service.' },
+        { field: 'request.req.id', op: 'eq', value: 'demo' },
+      ],
+    })
+  })
+
   it('validates raw JSON mode and preserves locked rule IDs', () => {
     const form = ruleToForm(staticRule)
     form.rawRuleJson = JSON.stringify({ ...staticRule, id: 'changed-id' })

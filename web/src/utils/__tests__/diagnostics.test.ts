@@ -169,6 +169,44 @@ describe('simulation diagnostics', () => {
     expect(warnings[0].message).toContain('request.operation')
   })
 
+  it('builds spex default events from selector and req hints', () => {
+    const spexRuleSet: RuleSet = {
+      id: 'spex-rs',
+      name: 'spex rules',
+      enabled: true,
+      protocol: 'spex',
+      namespace: 'default',
+      selector: {
+        all: [
+          { field: 'request.cmd', op: 'prefix', value: 'shop.' },
+        ],
+      },
+      rules: [
+        {
+          id: 'spex-rule',
+          name: 'SPEX get order',
+          enabled: true,
+          priority: 10,
+          when: {
+            all: [
+              { field: 'request.cmd', op: 'eq', value: 'shop.GetOrder' },
+              { field: 'request.req.order_id', op: 'eq', value: '1001' },
+              { field: 'request.param', op: 'eq', value: 'region=sg' },
+            ],
+          },
+          action: { type: 'static_response', status: 200 },
+        },
+      ],
+    }
+
+    const event = buildDefaultSimulationEvent(spexRuleSet, spexRuleSet.rules[0])
+
+    expect(event.protocol).toBe('spex')
+    expect(event.request.cmd).toBe('shop.GetOrder')
+    expect(event.request.req).toMatchObject({ order_id: '1001' })
+    expect(event.request.param).toBe('region=sg')
+  })
+
   it('does not let host hints override hard host selectors', () => {
     const hostRuleSet: RuleSet = {
       ...ruleSet,

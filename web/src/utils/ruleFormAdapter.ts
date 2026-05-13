@@ -432,6 +432,14 @@ function defaultConditionTree(protocol = 'http'): Condition {
       ],
     }
   }
+  if (protocol === 'spex') {
+    return {
+      all: [
+        { field: 'request.cmd', op: 'prefix', value: 'service.' },
+        { field: 'request.req.id', op: 'eq', value: 'demo' },
+      ],
+    }
+  }
   return {
     all: [
       { field: 'request.method', op: 'eq', value: 'GET' },

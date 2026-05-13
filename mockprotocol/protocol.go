@@ -94,7 +94,7 @@ func (r Registry) List() []ProtocolSpec {
 }
 
 func DefaultRegistry() Registry {
-	return NewRegistry(HTTPSpec(), CacheSpec())
+	return NewRegistry(HTTPSpec(), SPEXSpec(), CacheSpec())
 }
 
 func RegisteredSpecs() []ProtocolSpec {
@@ -170,6 +170,21 @@ func CacheSpec() ProtocolSpec {
 		Selectors: []SelectorSpec{
 			{Path: "request.operation"},
 			{Path: "request.key", Operators: []string{OperatorEQ, OperatorPrefix}},
+		},
+	}
+}
+
+// SPEX is a self-developed RPC framework
+func SPEXSpec() ProtocolSpec {
+	return ProtocolSpec{
+		Name: "spex",
+		Fields: append(commonFields(), []FieldSpec{
+			{Path: "request.cmd", Type: FieldTypeString},
+			{Path: "request.req", Type: FieldTypeJSON, DynamicPath: true},
+			{Path: "request.param", Type: FieldTypeString},
+		}...),
+		Selectors: []SelectorSpec{
+			{Path: "request.cmd", Operators: []string{OperatorPrefix}},
 		},
 	}
 }

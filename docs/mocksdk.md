@@ -133,6 +133,22 @@ decision, err := client.Decide(ctx, event)
 
 Cache projection provides `request.operation`, `request.key`, optional `request.ttl_ms`, and optional `request.value`.
 
+SPEX normalization is available from `github.com/MrMiaoMIMI/mocksdk/spexadapter`:
+
+```go
+event := spexadapter.Event("default", spexadapter.Request{
+    Cmd: "shop.GetOrder",
+    Req: map[string]interface{}{
+        "order_id": "1001",
+    },
+    Param: "region=sg",
+})
+
+decision, err := client.Decide(ctx, event)
+```
+
+SPEX projection provides `request.cmd`, optional JSON `request.req`, and optional `request.param`.
+
 ## Errors
 
 SDK errors are classified with `mocksdk.ErrorKind`:
@@ -146,4 +162,4 @@ Use `mocksdk.IsErrorKind(err, mocksdk.ErrorKindTransport)` to branch on a class 
 
 ## Scope
 
-The SDK core contains only decision-client primitives and shared decision/event types. Protocol-specific request projection lives in adapter packages such as `github.com/MrMiaoMIMI/mocksdk/httpadapter` and `github.com/MrMiaoMIMI/mocksdk/cacheadapter`. Full SPEX, gRPC, MQ, mockinject code generation, and protocol-specific forwarding implementations remain out of scope for the SDK module.
+The SDK core contains only decision-client primitives and shared decision/event types. Protocol-specific request projection lives in adapter packages such as `github.com/MrMiaoMIMI/mocksdk/httpadapter`, `github.com/MrMiaoMIMI/mocksdk/cacheadapter`, and `github.com/MrMiaoMIMI/mocksdk/spexadapter`. gRPC, MQ, mockinject code generation, and protocol-specific forwarding implementations remain out of scope for the SDK module.
