@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -20,12 +21,27 @@ func NewTrafficController(trafficService service.TrafficService) *TrafficControl
 	return &TrafficController{service: trafficService}
 }
 
+func (c *TrafficController) GetEvent(ctx *gin.Context) {
+	id, err := strconv.ParseUint(strings.TrimSpace(ctx.Param("traffic_event_id")), 10, 64)
+	if err != nil || id == 0 {
+		writeBusinessError(ctx, fmt.Errorf("traffic event %s not found", ctx.Param("traffic_event_id")))
+		return
+	}
+	item, err := c.service.GetTrafficEvent(ctx.Request.Context(), id)
+	if err != nil {
+		writeBusinessError(ctx, err)
+		return
+	}
+	serverresp.Success(ctx, response.NewTrafficEventDetailResponse(item))
+}
+
 func (c *TrafficController) ListEvents(ctx *gin.Context) {
 	query := bo.TrafficQuery{
 		Limit:          intQuery(ctx, "limit", 50),
 		Offset:         intQuery(ctx, "offset", 0),
 		StartTime:      uint64Query(ctx, "start_time", 0),
 		EndTime:        uint64Query(ctx, "end_time", 0),
+		EventID:        strings.TrimSpace(ctx.Query("event_id")),
 		TraceID:        strings.TrimSpace(ctx.Query("trace_id")),
 		ProtocolName:   strings.TrimSpace(ctx.Query("protocol_name")),
 		NamespaceID:    strings.TrimSpace(ctx.Query("namespace_id")),
@@ -36,7 +52,6 @@ func (c *TrafficController) ListEvents(ctx *gin.Context) {
 		RuleID:         strings.TrimSpace(ctx.Query("rule_id")),
 		FallbackReason: strings.TrimSpace(ctx.Query("fallback_reason")),
 		IndexFilters:   trafficIndexFilters(ctx),
-		IncludeIndexes: boolQuery(ctx, "include_indexes", false),
 	}
 	list, err := c.service.ListTrafficEvents(ctx.Request.Context(), query)
 	if err != nil {

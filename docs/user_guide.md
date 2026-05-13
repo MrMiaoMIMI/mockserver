@@ -212,7 +212,8 @@ curl http://127.0.0.1:8080/mockserver/api/v1/admin/metrics/runtime
 查看 SDK decision traffic：
 
 ```bash
-curl 'http://127.0.0.1:8080/mockserver/api/v1/admin/traffic/events?limit=50&include_indexes=true'
+curl 'http://127.0.0.1:8080/mockserver/api/v1/admin/traffic/events?limit=50&offset=0'
+curl 'http://127.0.0.1:8080/mockserver/api/v1/admin/traffic/events/35'
 ```
 
 SDK decision traffic 会落库；ruleset/rule 管理页面里的 simulate 结果直接展示在页面，不写入 traffic 表。

@@ -346,8 +346,8 @@ export interface TrafficEvent {
   duration_ms: number
   event_time: number
   expire_time: number
-  event: MockEvent
-  decision: RuntimeDecision | Record<string, unknown>
+  event?: MockEvent
+  decision?: RuntimeDecision | Record<string, unknown>
   explain?: Record<string, unknown>
   error_message?: string
   indexes?: TrafficEventIndex[]
@@ -371,6 +371,7 @@ export interface TrafficQueryParams {
   offset?: number
   start_time?: number
   end_time?: number
+  event_id?: string
   trace_id?: string
   protocol_name?: string
   namespace_id?: string
@@ -382,5 +383,4 @@ export interface TrafficQueryParams {
   fallback_reason?: string
   field_path?: string
   field_value?: string
-  include_indexes?: boolean
 }

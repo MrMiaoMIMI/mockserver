@@ -58,6 +58,7 @@ type TrafficQuery struct {
 	Offset         int
 	StartTime      uint64
 	EndTime        uint64
+	EventID        string
 	TraceID        string
 	TrafficSource  string
 	ProtocolName   string
@@ -71,7 +72,6 @@ type TrafficQuery struct {
 	RuleID         string
 	FallbackReason string
 	IndexFilters   []TrafficIndexFilter
-	IncludeIndexes bool
 }
 
 type TrafficStats struct {

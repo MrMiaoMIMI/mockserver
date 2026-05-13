@@ -35,6 +35,7 @@ type NamespaceRepository interface {
 
 type TrafficRepository interface {
 	CreateTrafficEvent(ctx context.Context, event bo.TrafficEvent) (bo.TrafficEvent, error)
+	GetTrafficEvent(ctx context.Context, id uint64) (bo.TrafficEvent, bool, error)
 	ListTrafficEvents(ctx context.Context, query bo.TrafficQuery) (bo.TrafficEventList, error)
 }
 
@@ -57,6 +58,7 @@ type namespaceTableDAO interface {
 
 type trafficTableDAO interface {
 	CreateTrafficEvent(ctx context.Context, event modeldo.TrafficEvent, indexes []modeldo.TrafficEventIndex) (modeldo.TrafficEvent, error)
+	GetTrafficEvent(ctx context.Context, id uint64) (modeldo.TrafficEvent, bool, error)
 	ListTrafficEvents(ctx context.Context, query bo.TrafficQuery, eventIDs []uint64) ([]modeldo.TrafficEvent, uint64, error)
 	ListTrafficEventIndexesByEventIDs(ctx context.Context, eventIDs []uint64) (map[uint64][]modeldo.TrafficEventIndex, error)
 	ListTrafficEventIDsByIndexFilter(ctx context.Context, query bo.TrafficQuery, filter bo.TrafficIndexFilter, valueHash uint64) ([]uint64, error)

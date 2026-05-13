@@ -247,6 +247,20 @@ export const useMockserverStore = defineStore('mockserver', () => {
     }
   }
 
+  async function fetchTrafficSummary(query: TrafficQueryParams = {}) {
+    const response: ListTrafficEventsResponse = await mockserverApi.listTrafficEvents({
+      limit: 1,
+      ...query,
+    })
+    trafficStats.value = response.stats
+    trafficTotal.value = response.total
+    return response
+  }
+
+  async function fetchTrafficEvent(id: number) {
+    return mockserverApi.getTrafficEvent(id)
+  }
+
   function setCurrentDraft(ruleSet: RuleSet | null) {
     currentDraft.value = ruleSet
     validation.value = null
@@ -291,6 +305,8 @@ export const useMockserverStore = defineStore('mockserver', () => {
     simulatePublished,
     fetchMetrics,
     fetchTrafficEvents,
+    fetchTrafficSummary,
+    fetchTrafficEvent,
     setCurrentDraft,
   }
 })

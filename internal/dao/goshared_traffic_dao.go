@@ -60,6 +60,18 @@ func (d *gosharedTrafficTableDAO) CreateTrafficEvent(ctx context.Context, event 
 	return event, nil
 }
 
+func (d *gosharedTrafficTableDAO) GetTrafficEvent(ctx context.Context, id uint64) (modeldo.TrafficEvent, bool, error) {
+	limit := 1
+	items, err := d.eventStore.FindNotDeleted(ctx, dbhelper.Q(d.eventFields.ID.Eq(&id)), dbhelper.NewPagination().WithLimit(&limit))
+	if err != nil {
+		return modeldo.TrafficEvent{}, false, fmt.Errorf("get traffic event %d: %w", id, err)
+	}
+	if len(items) == 0 || items[0] == nil {
+		return modeldo.TrafficEvent{}, false, nil
+	}
+	return *items[0], true, nil
+}
+
 func (d *gosharedTrafficTableDAO) ListTrafficEvents(ctx context.Context, query bo.TrafficQuery, eventIDs []uint64) ([]modeldo.TrafficEvent, uint64, error) {
 	dbQuery := d.buildEventQuery(query, eventIDs)
 	total, err := d.eventStore.CountNotDeleted(ctx, dbQuery)
@@ -179,6 +191,9 @@ func (d *gosharedTrafficTableDAO) buildEventQuery(query bo.TrafficQuery, eventID
 	}
 	if query.EndTime > 0 {
 		conditions = append(conditions, d.eventFields.EventTime.LtEq(&query.EndTime))
+	}
+	if query.EventID != "" {
+		conditions = append(conditions, d.eventFields.EventCode.Eq(&query.EventID))
 	}
 	if query.TraceID != "" {
 		conditions = append(conditions, d.eventFields.TraceID.Eq(&query.TraceID))

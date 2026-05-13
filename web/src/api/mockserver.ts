@@ -16,6 +16,7 @@ import type {
   RuntimeMetrics,
   SimulateRuleSetRequest,
   SimulateRuleSetResponse,
+  TrafficEvent,
   TrafficQueryParams,
   ValidateRuleSetResponse,
 } from '@/types'
@@ -111,5 +112,8 @@ export const mockserverApi = {
   },
   listTrafficEvents(params: TrafficQueryParams = {}): Promise<ListTrafficEventsResponse> {
     return http.get(`${adminBase}/traffic/events`, { params })
+  },
+  getTrafficEvent(id: number): Promise<TrafficEvent> {
+    return http.get(`${adminBase}/traffic/events/${encodeURIComponent(String(id))}`)
   },
 }

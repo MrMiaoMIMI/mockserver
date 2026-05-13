@@ -102,6 +102,20 @@ func (s *trafficService) ListTrafficEvents(ctx context.Context, query bo.Traffic
 	return s.repository.ListTrafficEvents(ctx, query)
 }
 
+func (s *trafficService) GetTrafficEvent(ctx context.Context, id uint64) (bo.TrafficEvent, error) {
+	if id == 0 {
+		return bo.TrafficEvent{}, fmt.Errorf("traffic event %d not found", id)
+	}
+	event, ok, err := s.repository.GetTrafficEvent(ctx, id)
+	if err != nil {
+		return bo.TrafficEvent{}, err
+	}
+	if !ok {
+		return bo.TrafficEvent{}, fmt.Errorf("traffic event %d not found", id)
+	}
+	return event, nil
+}
+
 func marshalTrafficJSON(value any) (string, error) {
 	raw, err := json.Marshal(value)
 	if err != nil {

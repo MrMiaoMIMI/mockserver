@@ -657,7 +657,8 @@ curl http://127.0.0.1:8080/mockserver/api/v1/admin/metrics/runtime
 查看 SDK decision traffic：
 
 ```bash
-curl 'http://127.0.0.1:8080/mockserver/api/v1/admin/traffic/events?limit=50&include_indexes=true'
+curl 'http://127.0.0.1:8080/mockserver/api/v1/admin/traffic/events?limit=50&offset=0'
+curl 'http://127.0.0.1:8080/mockserver/api/v1/admin/traffic/events/35'
 ```
 
 ## 一个最小规则示例

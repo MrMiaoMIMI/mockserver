@@ -102,9 +102,9 @@ type TrafficEventResponse struct {
 	DurationMS     uint32                      `json:"duration_ms"`
 	EventTime      uint64                      `json:"event_time"`
 	ExpireTime     uint64                      `json:"expire_time"`
-	Event          json.RawMessage             `json:"event"`
-	Decision       json.RawMessage             `json:"decision"`
-	Explain        json.RawMessage             `json:"explain"`
+	Event          *json.RawMessage            `json:"event,omitempty"`
+	Decision       *json.RawMessage            `json:"decision,omitempty"`
+	Explain        *json.RawMessage            `json:"explain,omitempty"`
 	ErrorMessage   string                      `json:"error_message,omitempty"`
 	Indexes        []TrafficEventIndexResponse `json:"indexes,omitempty"`
 }
@@ -118,7 +118,7 @@ type ListTrafficEventsResponse struct {
 func NewListTrafficEventsResponse(list bo.TrafficEventList) ListTrafficEventsResponse {
 	items := make([]TrafficEventResponse, 0, len(list.Items))
 	for _, item := range list.Items {
-		items = append(items, NewTrafficEventResponse(item))
+		items = append(items, newTrafficEventResponse(item, false, false))
 	}
 	return ListTrafficEventsResponse{
 		Items: items,
@@ -127,21 +127,27 @@ func NewListTrafficEventsResponse(list bo.TrafficEventList) ListTrafficEventsRes
 	}
 }
 
-func NewTrafficEventResponse(item bo.TrafficEvent) TrafficEventResponse {
+func NewTrafficEventDetailResponse(item bo.TrafficEvent) TrafficEventResponse {
+	return newTrafficEventResponse(item, true, true)
+}
+
+func newTrafficEventResponse(item bo.TrafficEvent, includePayload bool, includeIndexes bool) TrafficEventResponse {
 	indexes := make([]TrafficEventIndexResponse, 0, len(item.Indexes))
-	for _, index := range item.Indexes {
-		indexes = append(indexes, TrafficEventIndexResponse{
-			ID:                index.ID,
-			TrafficEventID:    index.TrafficEventID,
-			ProtocolName:      index.ProtocolName,
-			FieldPath:         index.FieldPath,
-			FieldValuePreview: index.FieldValuePreview,
-			FieldValueHash:    index.FieldValueHash,
-			FieldValueText:    index.FieldValueText,
-			EventTime:         index.EventTime,
-		})
+	if includeIndexes {
+		for _, index := range item.Indexes {
+			indexes = append(indexes, TrafficEventIndexResponse{
+				ID:                index.ID,
+				TrafficEventID:    index.TrafficEventID,
+				ProtocolName:      index.ProtocolName,
+				FieldPath:         index.FieldPath,
+				FieldValuePreview: index.FieldValuePreview,
+				FieldValueHash:    index.FieldValueHash,
+				FieldValueText:    index.FieldValueText,
+				EventTime:         index.EventTime,
+			})
+		}
 	}
-	return TrafficEventResponse{
+	response := TrafficEventResponse{
 		ID:             item.ID,
 		EventID:        item.EventID,
 		TraceID:        item.TraceID,
@@ -158,19 +164,24 @@ func NewTrafficEventResponse(item bo.TrafficEvent) TrafficEventResponse {
 		DurationMS:     item.DurationMS,
 		EventTime:      item.EventTime,
 		ExpireTime:     item.ExpireTime,
-		Event:          safeRawJSON(item.EventJSON),
-		Decision:       safeRawJSON(item.DecisionJSON),
-		Explain:        safeRawJSON(item.ExplainJSON),
 		ErrorMessage:   item.ErrorMessage,
 		Indexes:        indexes,
 	}
+	if includePayload {
+		response.Event = safeRawJSONPtr(item.EventJSON)
+		response.Decision = safeRawJSONPtr(item.DecisionJSON)
+		response.Explain = safeRawJSONPtr(item.ExplainJSON)
+	}
+	return response
 }
 
-func safeRawJSON(raw string) json.RawMessage {
+func safeRawJSONPtr(raw string) *json.RawMessage {
 	if raw == "" || !json.Valid([]byte(raw)) {
-		return json.RawMessage(`{}`)
+		value := json.RawMessage(`{}`)
+		return &value
 	}
-	return json.RawMessage(raw)
+	value := json.RawMessage(raw)
+	return &value
 }
 
 type ListProtocolsResponse struct {

@@ -28,6 +28,7 @@ func TestDefaultSchemaSQLFollowsMySQLDesignGuide(t *testing.T) {
 		"UNIQUE KEY idx_snapshot_code",
 		"UNIQUE KEY idx_namespace_code",
 		"UNIQUE KEY idx_event_code",
+		"KEY idx_traffic_source_event_time_id",
 		"KEY idx_mtime",
 		"KEY idx_ruleset_id_publish_time",
 		"KEY idx_namespace_id_protocol_event_time",

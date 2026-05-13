@@ -103,6 +103,7 @@ CREATE TABLE IF NOT EXISTS mockserver_traffic_event_tab (
     deleted TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Soft delete flag',
     PRIMARY KEY (id),
     UNIQUE KEY idx_event_code (event_code),
+    KEY idx_traffic_source_event_time_id (traffic_source, event_time, id),
     KEY idx_namespace_id_protocol_event_time (namespace_id, protocol_name, event_time),
     KEY idx_trace_id (trace_id),
     KEY idx_outcome_event_time (outcome, event_time),

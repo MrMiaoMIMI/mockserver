@@ -69,6 +69,7 @@ func NewWithTraffic(adminController *controller.AdminController, runtimeControll
 	}
 	if trafficController != nil {
 		admin.GET("/traffic/events", trafficController.ListEvents)
+		admin.GET("/traffic/events/:traffic_event_id", trafficController.GetEvent)
 	}
 	engine.POST("/mockserver/api/v1/sdk/decision", runtimeController.DecidePublished)
 	engine.Any("/mockserver/runtime/:namespace/http", runtimeController.HandleHTTP)

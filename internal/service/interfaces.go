@@ -40,5 +40,6 @@ type RuntimeService interface {
 
 type TrafficService interface {
 	RecordSDKDecision(ctx context.Context, event bo.Event, decision bo.RuntimeDecision, decisionErr error, durationMS uint32) (bo.TrafficEvent, error)
+	GetTrafficEvent(ctx context.Context, id uint64) (bo.TrafficEvent, error)
 	ListTrafficEvents(ctx context.Context, query bo.TrafficQuery) (bo.TrafficEventList, error)
 }

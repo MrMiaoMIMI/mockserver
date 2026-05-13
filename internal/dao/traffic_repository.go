@@ -64,11 +64,6 @@ func (r *trafficRepository) ListTrafficEvents(ctx context.Context, query bo.Traf
 		return bo.TrafficEventList{}, err
 	}
 	items := decodeTrafficEventRecords(records)
-	if query.IncludeIndexes {
-		if err := r.attachTrafficIndexes(ctx, items); err != nil {
-			return bo.TrafficEventList{}, err
-		}
-	}
 	statsRecords, err := r.tableDAO.ListTrafficEventsForStats(ctx, query, eventIDs, trafficStatsLimit)
 	if err != nil {
 		return bo.TrafficEventList{}, err
@@ -80,6 +75,21 @@ func (r *trafficRepository) ListTrafficEvents(ctx context.Context, query bo.Traf
 		Total: total,
 		Stats: stats,
 	}, nil
+}
+
+func (r *trafficRepository) GetTrafficEvent(ctx context.Context, id uint64) (bo.TrafficEvent, bool, error) {
+	record, ok, err := r.tableDAO.GetTrafficEvent(ctx, id)
+	if err != nil {
+		return bo.TrafficEvent{}, false, err
+	}
+	if !ok {
+		return bo.TrafficEvent{}, false, nil
+	}
+	items := []bo.TrafficEvent{decodeTrafficEventRecord(record)}
+	if err := r.attachTrafficIndexes(ctx, items); err != nil {
+		return bo.TrafficEvent{}, false, err
+	}
+	return items[0], true, nil
 }
 
 func (r *trafficRepository) resolveEventReferences(ctx context.Context, event bo.TrafficEvent) (bo.TrafficEvent, error) {

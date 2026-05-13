@@ -23,6 +23,14 @@ func (r *testTrafficRepository) ListTrafficEvents(ctx context.Context, query bo.
 	return bo.TrafficEventList{}, nil
 }
 
+func (r *testTrafficRepository) GetTrafficEvent(ctx context.Context, id uint64) (bo.TrafficEvent, bool, error) {
+	_ = ctx
+	if r.event.ID != id {
+		return bo.TrafficEvent{}, false, nil
+	}
+	return r.event, true, nil
+}
+
 func TestTrafficServiceRecordSDKDecisionBuildsMinimalQueryableIndexes(t *testing.T) {
 	repository := &testTrafficRepository{}
 	service := NewTrafficService(repository)
@@ -105,5 +113,22 @@ func TestTrafficServiceRecordSDKDecisionBuildsMinimalQueryableIndexes(t *testing
 	}
 	if indexes["decision.response.status"].FieldValueText != "202" {
 		t.Fatalf("unexpected response status index: %+v", indexes["decision.response.status"])
+	}
+}
+
+func TestTrafficServiceGetTrafficEventReturnsDetailOrNotFound(t *testing.T) {
+	repository := &testTrafficRepository{event: bo.TrafficEvent{ID: 12, EventID: "te_12"}}
+	service := NewTrafficService(repository)
+
+	got, err := service.GetTrafficEvent(context.Background(), 12)
+	if err != nil {
+		t.Fatalf("GetTrafficEvent() error = %v", err)
+	}
+	if got.EventID != "te_12" {
+		t.Fatalf("unexpected event: %+v", got)
+	}
+
+	if _, err := service.GetTrafficEvent(context.Background(), 13); err == nil {
+		t.Fatalf("expected not found error")
 	}
 }

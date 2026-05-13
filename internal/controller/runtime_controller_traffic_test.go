@@ -48,6 +48,11 @@ func (s *testTrafficServiceForController) ListTrafficEvents(ctx context.Context,
 	return bo.TrafficEventList{}, nil
 }
 
+func (s *testTrafficServiceForController) GetTrafficEvent(ctx context.Context, id uint64) (bo.TrafficEvent, error) {
+	_, _ = ctx, id
+	return bo.TrafficEvent{}, nil
+}
+
 func TestRuntimeControllerDecidePublishedRecordsSDKTraffic(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	trafficService := &testTrafficServiceForController{}

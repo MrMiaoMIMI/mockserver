@@ -55,7 +55,7 @@ async function refreshAll() {
     store.fetchPublished(),
     store.fetchNamespaces(),
     store.fetchMetrics(),
-    store.fetchTrafficEvents({ limit: 50, include_indexes: true }),
+    store.fetchTrafficSummary(),
   ])
 }
 
