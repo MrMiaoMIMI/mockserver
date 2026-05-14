@@ -396,6 +396,7 @@ GET /mockserver/runtime/default/http/api/v1/debug?q1=qv1
 
 如果一个请求同时命中多个 published ruleset，MockServer 会先按 selector 严格程度选出一个 ruleset，再只匹配该 ruleset 内部的 rules。当前排序规则是：
 
+- `selector.all` 必须至少包含一个条件，空 selector 会 validation failed
 - `selector.all` 只允许使用当前协议在 `ProtocolSpec.selectors` 中注册的字段
 - selector 条件全部命中后才会进入该 ruleset 的 rule 匹配
 - 严格度按 selector 条件累加，`eq` 高于 `prefix/suffix`，再高于 `contains/exists`
@@ -727,7 +728,8 @@ curl 'http://127.0.0.1:8080/mockserver/api/v1/admin/traffic/events/35'
 - `request.body` 的路径访问目前只覆盖基础 JSON 对象场景。
 - runtime 目前只实现了 HTTP adapter。
 - runtime metrics 当前是内存型，服务重启后会清零，仅作为 HTTP runtime 调试指标。
-- SDK decision traffic 会落库到 `mockserver_traffic_event_tab` 和 `mockserver_traffic_event_index_tab`；admin simulate 流量不落库。
+- SDK decision traffic 中的 `matched`、`rule_miss`、decision error 会落库到 `mockserver_traffic_event_tab` 和 `mockserver_traffic_event_index_tab`；`ruleset_miss` 只写入 runtime metrics，不落 raw traffic；admin simulate 流量不落库。
+- 已落库 traffic 的 `explain_json` 会记录 `ruleset_selection` 和 `rule_selection`，用于排查 selector 候选 ruleset、winner ruleset、候选 rule 和 winner rule。
 - traffic index 默认只展开低基数定位字段；HTTP `query/header/body`、cache `value`、SPEX `param/req` 等高基数或大字段保留在原始 event JSON 中。
 
 ## 已有验证

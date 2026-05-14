@@ -3,6 +3,7 @@ package dao
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/MrMiaoMIMI/goshared/db/dbhelper"
 	"github.com/MrMiaoMIMI/goshared/db/dbspi"
@@ -12,7 +13,7 @@ import (
 	modelfmo "github.com/MrMiaoMIMI/mockserver/internal/model/fmo"
 )
 
-const trafficStatsLimit = 5000
+const maxTrafficIndexFilterEventIDs = 5000
 
 type gosharedTrafficTableDAO struct {
 	manager     dbspi.Manager
@@ -107,25 +108,96 @@ func (d *gosharedTrafficTableDAO) ListTrafficEvents(ctx context.Context, query b
 	return result, total, nil
 }
 
-func (d *gosharedTrafficTableDAO) ListTrafficEventsForStats(ctx context.Context, query bo.TrafficQuery, eventIDs []uint64, limit int) ([]modeldo.TrafficEvent, error) {
-	if limit <= 0 || limit > trafficStatsLimit {
-		limit = trafficStatsLimit
-	}
-	dbQuery := d.buildEventQuery(query, eventIDs)
-	pagination := dbhelper.NewPagination().
-		WithLimit(&limit).
-		AppendOrder(dbhelper.Desc(d.eventFields.EventTime))
-	items, err := d.eventStore.FindNotDeleted(ctx, dbQuery, pagination)
+func (d *gosharedTrafficTableDAO) TrafficStats(ctx context.Context, query bo.TrafficQuery, eventIDs []uint64) (bo.TrafficStats, error) {
+	stats := emptyTrafficStats()
+	total, err := d.eventStore.CountNotDeleted(ctx, d.buildEventQuery(query, eventIDs))
 	if err != nil {
-		return nil, fmt.Errorf("list traffic events for stats: %w", err)
+		return bo.TrafficStats{}, fmt.Errorf("count traffic stats: %w", err)
 	}
-	result := make([]modeldo.TrafficEvent, 0, len(items))
-	for _, item := range items {
-		if item != nil {
-			result = append(result, *item)
+	stats.Total = total
+	outcomes, err := d.groupTrafficEvents(ctx, query, eventIDs, "outcome")
+	if err != nil {
+		return bo.TrafficStats{}, err
+	}
+	protocols, err := d.groupTrafficEvents(ctx, query, eventIDs, "protocol_name")
+	if err != nil {
+		return bo.TrafficStats{}, err
+	}
+	namespaces, err := d.groupTrafficEvents(ctx, query, eventIDs, "namespace_code")
+	if err != nil {
+		return bo.TrafficStats{}, err
+	}
+	stats.ByOutcome = outcomes
+	stats.ByProtocol = protocols
+	stats.ByNamespace = namespaces
+	return stats, nil
+}
+
+func (d *gosharedTrafficTableDAO) groupTrafficEvents(ctx context.Context, query bo.TrafficQuery, eventIDs []uint64, column string) (map[string]uint64, error) {
+	column, ok := trafficGroupColumn(column)
+	if !ok {
+		return nil, fmt.Errorf("unsupported traffic stats group column %q", column)
+	}
+	sqlStore, ok := d.eventStore.(dbspi.SQLTableStore[*modeldo.TrafficEvent])
+	if !ok {
+		return d.groupTrafficEventsFallback(ctx, query, eventIDs, column)
+	}
+	whereSQL, args := d.buildEventWhereSQL(query, eventIDs)
+	sql := fmt.Sprintf("SELECT %s, COUNT(*) AS id FROM mockserver_traffic_event_tab %s GROUP BY %s", column, whereSQL, column)
+	rows, err := sqlStore.Raw(ctx, sql, args...)
+	if err != nil {
+		return nil, fmt.Errorf("group traffic events by %s: %w", column, err)
+	}
+	result := make(map[string]uint64, len(rows))
+	for _, row := range rows {
+		if row == nil {
+			continue
+		}
+		key := trafficGroupKey(*row, column)
+		if key != "" {
+			result[key] = row.Id
 		}
 	}
 	return result, nil
+}
+
+func (d *gosharedTrafficTableDAO) groupTrafficEventsFallback(ctx context.Context, query bo.TrafficQuery, eventIDs []uint64, column string) (map[string]uint64, error) {
+	items, err := d.eventStore.FindNotDeleted(ctx, d.buildEventQuery(query, eventIDs), nil)
+	if err != nil {
+		return nil, fmt.Errorf("group traffic events fallback by %s: %w", column, err)
+	}
+	result := map[string]uint64{}
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		if key := trafficGroupKey(*item, column); key != "" {
+			result[key]++
+		}
+	}
+	return result, nil
+}
+
+func trafficGroupColumn(column string) (string, bool) {
+	switch column {
+	case "outcome", "protocol_name", "namespace_code":
+		return column, true
+	default:
+		return "", false
+	}
+}
+
+func trafficGroupKey(record modeldo.TrafficEvent, column string) string {
+	switch column {
+	case "outcome":
+		return record.Outcome
+	case "protocol_name":
+		return record.ProtocolName
+	case "namespace_code":
+		return record.NamespaceCode
+	default:
+		return ""
+	}
 }
 
 func (d *gosharedTrafficTableDAO) ListTrafficEventIndexesByEventIDs(ctx context.Context, eventIDs []uint64) (map[uint64][]modeldo.TrafficEventIndex, error) {
@@ -148,6 +220,7 @@ func (d *gosharedTrafficTableDAO) ListTrafficEventIndexesByEventIDs(ctx context.
 }
 
 func (d *gosharedTrafficTableDAO) ListTrafficEventIDsByIndexFilter(ctx context.Context, query bo.TrafficQuery, filter bo.TrafficIndexFilter, valueHash uint64) ([]uint64, error) {
+	limit := maxTrafficIndexFilterEventIDs + 1
 	conditions := []dbspi.Condition{
 		d.indexFields.FieldPath.Eq(&filter.FieldPath),
 		d.indexFields.FieldValueHash.Eq(&valueHash),
@@ -162,9 +235,16 @@ func (d *gosharedTrafficTableDAO) ListTrafficEventIDsByIndexFilter(ctx context.C
 	if query.EndTime > 0 {
 		conditions = append(conditions, d.indexFields.EventTime.LtEq(&query.EndTime))
 	}
-	items, err := d.indexStore.FindNotDeleted(ctx, dbhelper.Q(conditions...), nil)
+	pagination := dbhelper.NewPagination().
+		WithLimit(&limit).
+		AppendOrder(dbhelper.Desc(d.indexFields.EventTime)).
+		AppendOrder(dbhelper.Desc(d.indexFields.TrafficEventID))
+	items, err := d.indexStore.FindNotDeleted(ctx, dbhelper.Q(conditions...), pagination)
 	if err != nil {
 		return nil, fmt.Errorf("list traffic index filter %s: %w", filter.FieldPath, err)
+	}
+	if len(items) > maxTrafficIndexFilterEventIDs {
+		return nil, fmt.Errorf("traffic index filter %s is too broad; narrow the time range or add filters", filter.FieldPath)
 	}
 	ids := make([]uint64, 0, len(items))
 	seen := make(map[uint64]struct{}, len(items))
@@ -204,7 +284,12 @@ func (d *gosharedTrafficTableDAO) buildEventQuery(query bo.TrafficQuery, eventID
 	if query.ProtocolName != "" {
 		conditions = append(conditions, d.eventFields.ProtocolName.Eq(&query.ProtocolName))
 	}
-	if query.NamespaceDBID > 0 {
+	if query.NamespaceDBID > 0 && query.NamespaceID != "" {
+		conditions = append(conditions, dbhelper.Or(
+			d.eventFields.NamespaceID.Eq(&query.NamespaceDBID),
+			d.eventFields.NamespaceCode.Eq(&query.NamespaceID),
+		))
+	} else if query.NamespaceDBID > 0 {
 		conditions = append(conditions, d.eventFields.NamespaceID.Eq(&query.NamespaceDBID))
 	} else if query.NamespaceID != "" {
 		conditions = append(conditions, d.eventFields.NamespaceCode.Eq(&query.NamespaceID))
@@ -218,7 +303,12 @@ func (d *gosharedTrafficTableDAO) buildEventQuery(query bo.TrafficQuery, eventID
 	if query.DecisionKind != "" {
 		conditions = append(conditions, d.eventFields.DecisionKind.Eq(&query.DecisionKind))
 	}
-	if query.RuleSetDBID > 0 {
+	if query.RuleSetDBID > 0 && query.RuleSetID != "" {
+		conditions = append(conditions, dbhelper.Or(
+			d.eventFields.RuleSetID.Eq(&query.RuleSetDBID),
+			d.eventFields.RuleSetCode.Eq(&query.RuleSetID),
+		))
+	} else if query.RuleSetDBID > 0 {
 		conditions = append(conditions, d.eventFields.RuleSetID.Eq(&query.RuleSetDBID))
 	} else if query.RuleSetID != "" {
 		conditions = append(conditions, d.eventFields.RuleSetCode.Eq(&query.RuleSetID))
@@ -233,4 +323,60 @@ func (d *gosharedTrafficTableDAO) buildEventQuery(query bo.TrafficQuery, eventID
 		return nil
 	}
 	return dbhelper.Q(conditions...)
+}
+
+func (d *gosharedTrafficTableDAO) buildEventWhereSQL(query bo.TrafficQuery, eventIDs []uint64) (string, []any) {
+	conditions := []string{"deleted = 0"}
+	args := []any{}
+	appendInCondition := func(column string, ids []uint64) {
+		if len(ids) == 0 {
+			return
+		}
+		placeholders := make([]string, len(ids))
+		for i, id := range ids {
+			placeholders[i] = "?"
+			args = append(args, id)
+		}
+		conditions = append(conditions, fmt.Sprintf("%s IN (%s)", column, strings.Join(placeholders, ",")))
+	}
+	appendEqCondition := func(column string, value any, present bool) {
+		if !present {
+			return
+		}
+		conditions = append(conditions, column+" = ?")
+		args = append(args, value)
+	}
+	appendInCondition("id", eventIDs)
+	if query.StartTime > 0 {
+		conditions = append(conditions, "event_time >= ?")
+		args = append(args, query.StartTime)
+	}
+	if query.EndTime > 0 {
+		conditions = append(conditions, "event_time <= ?")
+		args = append(args, query.EndTime)
+	}
+	appendEqCondition("event_code", query.EventID, query.EventID != "")
+	appendEqCondition("trace_id", query.TraceID, query.TraceID != "")
+	appendEqCondition("traffic_source", query.TrafficSource, query.TrafficSource != "")
+	appendEqCondition("protocol_name", query.ProtocolName, query.ProtocolName != "")
+	if query.NamespaceDBID > 0 && query.NamespaceID != "" {
+		conditions = append(conditions, "(namespace_id = ? OR namespace_code = ?)")
+		args = append(args, query.NamespaceDBID, query.NamespaceID)
+	} else {
+		appendEqCondition("namespace_id", query.NamespaceDBID, query.NamespaceDBID > 0)
+		appendEqCondition("namespace_code", query.NamespaceID, query.NamespaceID != "")
+	}
+	appendEqCondition("operation_name", query.OperationName, query.OperationName != "")
+	appendEqCondition("outcome", query.Outcome, query.Outcome != "")
+	appendEqCondition("decision_kind", query.DecisionKind, query.DecisionKind != "")
+	if query.RuleSetDBID > 0 && query.RuleSetID != "" {
+		conditions = append(conditions, "(ruleset_id = ? OR ruleset_code = ?)")
+		args = append(args, query.RuleSetDBID, query.RuleSetID)
+	} else {
+		appendEqCondition("ruleset_id", query.RuleSetDBID, query.RuleSetDBID > 0)
+		appendEqCondition("ruleset_code", query.RuleSetID, query.RuleSetID != "")
+	}
+	appendEqCondition("rule_code", query.RuleID, query.RuleID != "")
+	appendEqCondition("fallback_reason", query.FallbackReason, query.FallbackReason != "")
+	return "WHERE " + strings.Join(conditions, " AND "), args
 }

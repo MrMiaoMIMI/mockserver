@@ -53,7 +53,7 @@
 
       <section class="dialog-section selector-builder">
         <div class="section-title">Selector</div>
-        <div v-if="!selectorRows.length" class="empty-selector">No selector conditions configured.</div>
+        <div v-if="!selectorRows.length" class="empty-selector">At least one selector condition is required.</div>
         <div v-for="row in selectorRows" :key="row.id" class="selector-row">
           <div class="selector-field-editor">
             <el-select
@@ -344,6 +344,9 @@ function validateSettings() {
   }
   if (store.protocols.length && !currentProtocolSpec.value) {
     issues.push(`Protocol ${form.protocol} is not registered`)
+  }
+  if (!selectorRows.value.length) {
+    issues.push('At least one selector condition is required')
   }
   for (const row of selectorRows.value) {
     if (!row.field) {

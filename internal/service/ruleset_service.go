@@ -416,7 +416,19 @@ func (s *rulesetService) SimulatePublished(ctx context.Context, event bo.Event, 
 }
 
 func attachPublishedSnapshotTrace(result *bo.SimulationResult, snapshots []bo.PublishedRuleSetSnapshot) {
-	if result == nil || result.Trace.RulesetID == "" {
+	if result == nil {
+		return
+	}
+	snapshotIDs := make(map[string]string, len(snapshots))
+	for _, snapshot := range snapshots {
+		snapshotIDs[snapshot.RuleSet.ID] = snapshot.SnapshotID
+	}
+	for i := range result.Explain.RuleSetCandidates {
+		if snapshotID := snapshotIDs[result.Explain.RuleSetCandidates[i].RuleSetID]; snapshotID != "" {
+			result.Explain.RuleSetCandidates[i].SnapshotID = snapshotID
+		}
+	}
+	if result.Trace.RulesetID == "" {
 		return
 	}
 	for _, snapshot := range snapshots {

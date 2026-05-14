@@ -80,6 +80,29 @@ func MatchWithOptions(ruleSets []CompiledRuleSet, event bo.Event, options MatchO
 		explainIndex := candidates[index].explainIndex
 		result.Explain.RuleSetExplanations[explainIndex].Message = "ruleset selector matched, but a more specific ruleset was selected"
 	}
+	if len(candidates) > 0 {
+		result.Explain.WinnerRuleSetID = candidates[0].ruleSet.RuleSet.ID
+		result.Explain.RuleSetCandidates = make([]bo.RuleSetCandidate, 0, len(candidates))
+		for index, candidate := range candidates {
+			selected := index == 0
+			message := "ruleset selector matched"
+			if selected {
+				message = "selected as winner ruleset"
+				if len(candidates) > 1 {
+					message = "selected as most specific ruleset"
+				}
+			} else {
+				message = "ruleset selector matched, but a more specific ruleset was selected"
+			}
+			result.Explain.RuleSetCandidates = append(result.Explain.RuleSetCandidates, bo.RuleSetCandidate{
+				RuleSetID:           candidate.ruleSet.RuleSet.ID,
+				SelectorMatched:     true,
+				Selected:            selected,
+				SelectorSpecificity: candidate.specificity,
+				Message:             message,
+			})
+		}
+	}
 	if len(candidates) > 1 {
 		candidates = candidates[:1]
 	}
@@ -88,6 +111,7 @@ func MatchWithOptions(ruleSets []CompiledRuleSet, event bo.Event, options MatchO
 		ruleSet := candidate.ruleSet
 		explainIndex := candidate.explainIndex
 		result.Explain.RuleSetID = ruleSet.RuleSet.ID
+		result.Trace.RulesetID = ruleSet.RuleSet.ID
 		result.Explain.RuleSetExplanations[explainIndex].CandidateRules = make([]string, 0)
 		result.Explain.RuleSetExplanations[explainIndex].RuleExplanations = make([]bo.RuleExplanation, 0)
 		candidateIndexes := candidateRuleIndexes(ruleSet, normalizedEvent)
@@ -288,6 +312,8 @@ func compactConditionExplanation(explanation bo.ConditionExplanation) bo.Conditi
 func summarizeExplain(explain bo.MatchExplanation) bo.MatchExplanation {
 	summarized := bo.MatchExplanation{
 		RuleSetID:           explain.RuleSetID,
+		WinnerRuleSetID:     explain.WinnerRuleSetID,
+		RuleSetCandidates:   append([]bo.RuleSetCandidate(nil), explain.RuleSetCandidates...),
 		RuleSetExplanations: make([]bo.RuleSetExplanation, 0, len(explain.RuleSetExplanations)),
 	}
 	for _, ruleset := range explain.RuleSetExplanations {

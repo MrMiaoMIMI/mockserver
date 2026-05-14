@@ -74,6 +74,7 @@ func (s *runtimeService) DecidePublished(ctx context.Context, event bo.Event) (b
 				Meta: bo.DecisionMeta{
 					TraceID: event.Meta.TraceID,
 				},
+				Diagnostics: decisionDiagnosticsFromSimulation(result),
 			}, nil
 		case eo.NamespaceFallbackTypeResponse:
 			if action.Response == nil {
@@ -92,6 +93,7 @@ func (s *runtimeService) DecidePublished(ctx context.Context, event bo.Event) (b
 				Meta: bo.DecisionMeta{
 					TraceID: event.Meta.TraceID,
 				},
+				Diagnostics: decisionDiagnosticsFromSimulation(result),
 			}, nil
 		default:
 			return bo.RuntimeDecision{}, fmt.Errorf("unsupported namespace fallback action type %q", action.Type)
@@ -109,7 +111,34 @@ func (s *runtimeService) DecidePublished(ctx context.Context, event bo.Event) (b
 		Meta: bo.DecisionMeta{
 			TraceID: event.Meta.TraceID,
 		},
+		Diagnostics: decisionDiagnosticsFromSimulation(result),
 	}, nil
+}
+
+func decisionDiagnosticsFromSimulation(result bo.SimulationResult) *bo.DecisionDiagnostics {
+	if len(result.Explain.RuleSetCandidates) == 0 && len(result.Candidates) == 0 && result.Trace.RuleID == "" {
+		return nil
+	}
+	diagnostics := &bo.DecisionDiagnostics{
+		RuleSetSelection: bo.RuleSetSelectionDiagnostics{
+			WinnerRuleSetID:  firstNonBlank(result.Trace.RulesetID, result.Explain.WinnerRuleSetID),
+			WinnerSnapshotID: result.Trace.SnapshotID,
+			Candidates:       append([]bo.RuleSetCandidate(nil), result.Explain.RuleSetCandidates...),
+		},
+		RuleSelection: bo.RuleSelectionDiagnostics{
+			CandidateRuleIDs: append([]string(nil), result.Candidates...),
+			WinnerRuleID:     result.Trace.RuleID,
+		},
+	}
+	if diagnostics.RuleSetSelection.WinnerSnapshotID == "" {
+		for _, candidate := range diagnostics.RuleSetSelection.Candidates {
+			if candidate.Selected {
+				diagnostics.RuleSetSelection.WinnerSnapshotID = candidate.SnapshotID
+				break
+			}
+		}
+	}
+	return diagnostics
 }
 
 func (s *runtimeService) resolveNamespaceFallback(ctx context.Context, event bo.Event, result bo.SimulationResult) (string, bo.NamespaceFallbackAction, error) {

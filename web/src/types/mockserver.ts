@@ -285,12 +285,23 @@ export interface RuntimeMetrics {
   error_requests: number
   total_duration_ms?: number
   average_duration_ms: number
+  sources?: Record<string, number>
+  protocols?: Record<string, number>
+  operations?: Record<string, number>
   ruleset_matches?: Record<string, number>
   rule_matches?: Record<string, number>
   last_matched_at_by_rule?: Record<string, string>
   fallback_reasons?: Record<string, number>
+  fallback_stats?: Record<string, RuntimeFallbackStat>
   status_codes?: Record<string, number>
   recent_requests?: RuntimeRequestRecord[]
+}
+
+export interface RuntimeFallbackStat {
+  total: number
+  by_protocol?: Record<string, number>
+  by_namespace?: Record<string, number>
+  by_operation?: Record<string, number>
 }
 
 export type RuntimeRequestOutcome = 'matched' | 'fallback' | 'unmatched' | 'error'
@@ -298,6 +309,9 @@ export type RuntimeRequestOutcome = 'matched' | 'fallback' | 'unmatched' | 'erro
 export interface RuntimeRequestRecord {
   id: number
   observed_at: string
+  source?: string
+  protocol?: string
+  operation?: string
   namespace?: string
   method?: string
   scheme?: string

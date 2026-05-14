@@ -642,6 +642,14 @@ func TestValidateRuleSetRejectsUnsafeOrAmbiguousRules(t *testing.T) {
 			wantReason: "must not contain CR or LF",
 		},
 		{
+			name: "empty selector",
+			mutate: func(ruleSet *bo.RuleSet) {
+				ruleSet.Selector = bo.Selector{}
+			},
+			wantPath:   "selector",
+			wantReason: "at least one condition",
+		},
+		{
 			name: "invalid selector field",
 			mutate: func(ruleSet *bo.RuleSet) {
 				ruleSet.Selector.All = []bo.Condition{{Field: "request.body.status", Op: eo.OperatorEQ, Value: "doing"}}
@@ -855,6 +863,7 @@ func TestMatchWithOptionsTrimExplainDepth(t *testing.T) {
 		Enabled:   true,
 		Protocol:  eo.ProtocolHTTP,
 		Namespace: "default",
+		Selector:  httpSelector(httpPathPrefixSelector("/")),
 		Rules: []bo.Rule{
 			{
 				ID:       "nested-rule",
@@ -919,6 +928,33 @@ func TestMatchSelectsMostSpecificRuleSetBySelector(t *testing.T) {
 	if result.Trace.RulesetID != "a-specific" {
 		t.Fatalf("expected more specific path selector to win, got %s", result.Trace.RulesetID)
 	}
+	if result.Explain.WinnerRuleSetID != "a-specific" {
+		t.Fatalf("expected winner ruleset diagnostic, got %s", result.Explain.WinnerRuleSetID)
+	}
+	if len(result.Explain.RuleSetCandidates) != 2 {
+		t.Fatalf("expected two ruleset candidates, got %#v", result.Explain.RuleSetCandidates)
+	}
+	if !result.Explain.RuleSetCandidates[0].Selected || result.Explain.RuleSetCandidates[0].RuleSetID != "a-specific" {
+		t.Fatalf("expected first candidate to be selected specific ruleset, got %#v", result.Explain.RuleSetCandidates)
+	}
+}
+
+func TestMatchSummaryPreservesRuleSetSelectionDiagnostics(t *testing.T) {
+	event := testHTTPEvent("/api/order/status")
+	broad := testStaticRuleSetWithSelector("z-broad", httpSelector(httpPathPrefixSelector("/api/")))
+	specific := testStaticRuleSetWithSelector("a-specific", httpSelector(httpPathPrefixSelector("/api/order/")))
+	compiled := mustCompileRuleSets(t, broad, specific)
+
+	result, err := MatchWithOptions(compiled, event, MatchOptions{ExplainSummary: true})
+	if err != nil {
+		t.Fatalf("MatchWithOptions() error = %v", err)
+	}
+	if result.Explain.WinnerRuleSetID != "a-specific" {
+		t.Fatalf("expected summarized winner ruleset, got %#v", result.Explain)
+	}
+	if len(result.Explain.RuleSetCandidates) != 2 || !result.Explain.RuleSetCandidates[0].Selected {
+		t.Fatalf("expected summarized ruleset candidates, got %#v", result.Explain.RuleSetCandidates)
+	}
 }
 
 func TestMatchSelectorHostSpecificityWinsBeforePath(t *testing.T) {
@@ -953,9 +989,22 @@ func TestMatchDoesNotFallbackAfterMostSpecificRuleSetSelected(t *testing.T) {
 	if result.Matched {
 		t.Fatalf("expected no fallback after the most specific ruleset has no matching rule, got %#v", result.Trace)
 	}
+	if result.Trace.RulesetID != "specific" || result.Explain.WinnerRuleSetID != "specific" {
+		t.Fatalf("expected rule miss to preserve selected ruleset, trace=%#v explain=%#v", result.Trace, result.Explain)
+	}
 }
 
 func mustMatchRuleSets(t *testing.T, event bo.Event, ruleSets ...bo.RuleSet) bo.SimulationResult {
+	t.Helper()
+	compiled := mustCompileRuleSets(t, ruleSets...)
+	result, err := Match(compiled, event)
+	if err != nil {
+		t.Fatalf("Match() error = %v", err)
+	}
+	return result
+}
+
+func mustCompileRuleSets(t *testing.T, ruleSets ...bo.RuleSet) []CompiledRuleSet {
 	t.Helper()
 	compiled := make([]CompiledRuleSet, 0, len(ruleSets))
 	for _, ruleSet := range ruleSets {
@@ -965,11 +1014,7 @@ func mustMatchRuleSets(t *testing.T, event bo.Event, ruleSets ...bo.RuleSet) bo.
 		}
 		compiled = append(compiled, item)
 	}
-	result, err := Match(compiled, event)
-	if err != nil {
-		t.Fatalf("Match() error = %v", err)
-	}
-	return result
+	return compiled
 }
 
 func testStaticRuleSetWithSelector(id string, selector bo.Selector) bo.RuleSet {

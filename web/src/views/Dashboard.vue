@@ -169,6 +169,44 @@
 
           <KeyValueGrid :items="detailFacts(selectedEvent)" />
 
+          <section v-if="selectedSelectionDiagnostics.hasDiagnostics" class="drawer-section selection-diagnostics">
+            <header>
+              <span>selection diagnostics</span>
+              <strong>{{ selectedSelectionDiagnostics.rulesetCandidates.length }} candidates</strong>
+            </header>
+            <div class="selection-summary">
+              <div>
+                <span>Winner ruleset</span>
+                <code>{{ selectedSelectionDiagnostics.winnerRuleSetId || '-' }}</code>
+              </div>
+              <div>
+                <span>Winner snapshot</span>
+                <code>{{ selectedSelectionDiagnostics.winnerSnapshotId || '-' }}</code>
+              </div>
+              <div>
+                <span>Winner rule</span>
+                <code>{{ selectedSelectionDiagnostics.winnerRuleId || '-' }}</code>
+              </div>
+            </div>
+            <div v-if="selectedSelectionDiagnostics.rulesetCandidates.length" class="candidate-list">
+              <div
+                v-for="candidate in selectedSelectionDiagnostics.rulesetCandidates"
+                :key="`${candidate.rulesetId}:${candidate.snapshotId}`"
+                class="candidate-row"
+                :class="{ 'is-selected': candidate.selected }"
+              >
+                <StateChip :label="candidate.selected ? 'winner' : 'candidate'" :tone="candidate.selected ? 'ok' : 'neutral'" />
+                <code>{{ candidate.rulesetId }}</code>
+                <small>specificity {{ candidate.selectorSpecificity }}</small>
+                <span>{{ candidate.message || '-' }}</span>
+              </div>
+            </div>
+            <div v-if="selectedSelectionDiagnostics.candidateRuleIds.length" class="rule-candidates">
+              <span>Candidate rules</span>
+              <code>{{ selectedSelectionDiagnostics.candidateRuleIds.join(', ') }}</code>
+            </div>
+          </section>
+
           <section class="drawer-section">
             <header>
               <span>indexed fields</span>
@@ -239,6 +277,7 @@ import StateChip from '@/components/common/StateChip.vue'
 import ResultInspector from '@/components/rulesets/ResultInspector.vue'
 import { useMockserverStore } from '@/store'
 import type { TrafficEvent } from '@/types'
+import { buildTrafficSelectionDiagnostics } from '@/utils/trafficSelectionDiagnostics'
 
 type TimeRange = '1h' | '24h' | '7d' | 'all'
 type ChipTone = 'neutral' | 'ok' | 'warn' | 'danger' | 'accent' | 'primary'
@@ -284,6 +323,7 @@ const outcomeOptions: FilterSegmentOption[] = [
 const total = computed(() => store.trafficTotal)
 const stats = computed(() => store.trafficStats)
 const events = computed(() => store.trafficEvents)
+const selectedSelectionDiagnostics = computed(() => buildTrafficSelectionDiagnostics(selectedEvent.value))
 const protocolOptions = computed(() => Object.keys(stats.value?.by_protocol || {}).sort())
 const namespaceOptions = computed(() => Object.keys(stats.value?.by_namespace || {}).sort())
 const protocolEntries = computed(() => rankedEntries(stats.value?.by_protocol || {}))
@@ -824,6 +864,88 @@ code {
   }
 }
 
+.selection-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--ms-space-2);
+
+  div {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--ms-space-2);
+    border: 1px solid var(--ms-border-light);
+    border-radius: var(--ms-radius-sm);
+    background: var(--ms-panel-muted);
+  }
+
+  span {
+    color: var(--ms-text-tertiary);
+    font-size: var(--ms-text-xs);
+    font-weight: var(--ms-font-semibold);
+    text-transform: uppercase;
+  }
+}
+
+.candidate-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ms-space-2);
+}
+
+.candidate-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(120px, 0.7fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--ms-space-2);
+  padding: var(--ms-space-2);
+  border: 1px solid var(--ms-border-light);
+  border-radius: var(--ms-radius-sm);
+  background: var(--ms-panel-bg);
+
+  &.is-selected {
+    border-color: var(--ms-green-400);
+    background: #f0fdf4;
+  }
+
+  code,
+  span,
+  small {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  span,
+  small {
+    color: var(--ms-text-tertiary);
+    font-size: var(--ms-text-sm);
+  }
+}
+
+.rule-candidates {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: var(--ms-space-2);
+  align-items: start;
+
+  span {
+    color: var(--ms-text-tertiary);
+    font-size: var(--ms-text-sm);
+    font-weight: var(--ms-font-semibold);
+  }
+
+  code {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
 .json-tabs {
   min-width: 0;
   min-height: 360px;
@@ -866,6 +988,12 @@ code {
 
   .traffic-toolbar :deep(.filter-segment button) {
     width: 100%;
+  }
+
+  .selection-summary,
+  .candidate-row,
+  .rule-candidates {
+    grid-template-columns: 1fr;
   }
 
   .pagination-bar {

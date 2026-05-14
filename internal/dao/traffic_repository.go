@@ -64,11 +64,10 @@ func (r *trafficRepository) ListTrafficEvents(ctx context.Context, query bo.Traf
 		return bo.TrafficEventList{}, err
 	}
 	items := decodeTrafficEventRecords(records)
-	statsRecords, err := r.tableDAO.ListTrafficEventsForStats(ctx, query, eventIDs, trafficStatsLimit)
+	stats, err := r.tableDAO.TrafficStats(ctx, query, eventIDs)
 	if err != nil {
 		return bo.TrafficEventList{}, err
 	}
-	stats := buildTrafficStats(statsRecords)
 	stats.Total = total
 	return bo.TrafficEventList{
 		Items: items,
@@ -129,20 +128,18 @@ func (r *trafficRepository) resolveQueryReferences(ctx context.Context, query bo
 		if err != nil {
 			return bo.TrafficQuery{}, false, err
 		}
-		if !ok {
-			return query, true, nil
+		if ok {
+			query.NamespaceDBID = namespace.Id
 		}
-		query.NamespaceDBID = namespace.Id
 	}
 	if query.RuleSetID != "" && r.ruleSetTableDAO != nil {
 		ruleSet, ok, err := r.ruleSetTableDAO.GetDraft(ctx, query.RuleSetID)
 		if err != nil {
 			return bo.TrafficQuery{}, false, err
 		}
-		if !ok {
-			return query, true, nil
+		if ok {
+			query.RuleSetDBID = ruleSet.Id
 		}
-		query.RuleSetDBID = ruleSet.Id
 	}
 	return query, true, nil
 }
@@ -294,16 +291,6 @@ func decodeTrafficEventIndexRecords(records []modeldo.TrafficEventIndex) []bo.Tr
 		})
 	}
 	return items
-}
-
-func buildTrafficStats(records []modeldo.TrafficEvent) bo.TrafficStats {
-	stats := emptyTrafficStats()
-	for _, record := range records {
-		stats.ByOutcome[record.Outcome]++
-		stats.ByProtocol[record.ProtocolName]++
-		stats.ByNamespace[record.NamespaceCode]++
-	}
-	return stats
 }
 
 func emptyTrafficStats() bo.TrafficStats {

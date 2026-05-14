@@ -8,6 +8,8 @@ type RuntimeDecision struct {
 	Response *ActionExecution `json:"response,omitempty"`
 	Forward  *ForwardDecision `json:"forward,omitempty"`
 	Meta     DecisionMeta     `json:"meta,omitempty"`
+
+	Diagnostics *DecisionDiagnostics `json:"-"`
 }
 
 type ForwardDecision struct {
@@ -16,4 +18,20 @@ type ForwardDecision struct {
 
 type DecisionMeta struct {
 	TraceID string `json:"trace_id,omitempty"`
+}
+
+type DecisionDiagnostics struct {
+	RuleSetSelection RuleSetSelectionDiagnostics `json:"ruleset_selection,omitempty"`
+	RuleSelection    RuleSelectionDiagnostics    `json:"rule_selection,omitempty"`
+}
+
+type RuleSetSelectionDiagnostics struct {
+	WinnerRuleSetID  string             `json:"winner_ruleset_id,omitempty"`
+	WinnerSnapshotID string             `json:"winner_snapshot_id,omitempty"`
+	Candidates       []RuleSetCandidate `json:"candidates,omitempty"`
+}
+
+type RuleSelectionDiagnostics struct {
+	CandidateRuleIDs []string `json:"candidate_rule_ids,omitempty"`
+	WinnerRuleID     string   `json:"winner_rule_id,omitempty"`
 }

@@ -62,6 +62,9 @@ export function buildRuntimeDiagnosticRow(record: RuntimeRequestRecord): Runtime
   const pathLabel = record.raw_query ? `${record.path || '/'}?${record.raw_query}` : record.path || '/'
   const searchableText = [
     record.id,
+    record.source,
+    record.protocol,
+    record.operation,
     record.namespace,
     record.method,
     record.host,

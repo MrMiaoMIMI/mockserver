@@ -26,6 +26,9 @@ func TestRuntimeMetricsRecordsRecentDiagnostics(t *testing.T) {
 	}
 
 	metrics.Observe(RuntimeObservation{
+		Source:    RuntimeSourceHTTP,
+		Protocol:  "http",
+		Operation: "GET",
 		Namespace: "default",
 		Method:    "GET",
 		Path:      "/api/hit",
@@ -38,6 +41,9 @@ func TestRuntimeMetricsRecordsRecentDiagnostics(t *testing.T) {
 		Event:     &event,
 	})
 	metrics.Observe(RuntimeObservation{
+		Source:         RuntimeSourceHTTP,
+		Protocol:       "http",
+		Operation:      "POST",
 		Namespace:      "default",
 		Method:         "POST",
 		Path:           "/api/rule-miss",
@@ -66,6 +72,12 @@ func TestRuntimeMetricsRecordsRecentDiagnostics(t *testing.T) {
 	if snapshot.FallbackReasons["rule_miss"] != 1 {
 		t.Fatalf("expected fallback reason count, got %+v", snapshot.FallbackReasons)
 	}
+	if snapshot.Sources[RuntimeSourceHTTP] != 2 || snapshot.Protocols["http"] != 2 || snapshot.Operations["POST"] != 1 {
+		t.Fatalf("expected source/protocol/operation counts, got sources=%+v protocols=%+v operations=%+v", snapshot.Sources, snapshot.Protocols, snapshot.Operations)
+	}
+	if snapshot.FallbackStats["rule_miss"].ByProtocol["http"] != 1 || snapshot.FallbackStats["rule_miss"].ByOperation["POST"] != 1 {
+		t.Fatalf("expected fallback dimensions, got %+v", snapshot.FallbackStats)
+	}
 	if snapshot.StatusCodes["2xx"] != 1 || snapshot.StatusCodes["5xx"] != 2 {
 		t.Fatalf("expected status class counts, got %+v", snapshot.StatusCodes)
 	}
@@ -77,6 +89,9 @@ func TestRuntimeMetricsRecordsRecentDiagnostics(t *testing.T) {
 	}
 	if snapshot.RecentRequests[2].Event == nil || snapshot.RecentRequests[2].Event.Meta.TraceID != "trace-hit" {
 		t.Fatalf("expected replayable event to be cloned, got %+v", snapshot.RecentRequests[2].Event)
+	}
+	if snapshot.RecentRequests[2].Source != RuntimeSourceHTTP || snapshot.RecentRequests[2].Protocol != "http" || snapshot.RecentRequests[2].Operation != "GET" {
+		t.Fatalf("expected recent request dimensions, got %+v", snapshot.RecentRequests[2])
 	}
 }
 

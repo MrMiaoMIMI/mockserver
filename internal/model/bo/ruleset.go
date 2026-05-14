@@ -137,9 +137,20 @@ type RuleSetExplanation struct {
 
 type MatchExplanation struct {
 	RuleSetID           string               `json:"ruleset_id,omitempty"`
+	WinnerRuleSetID     string               `json:"winner_ruleset_id,omitempty"`
 	CandidateRules      []string             `json:"candidate_rules,omitempty"`
+	RuleSetCandidates   []RuleSetCandidate   `json:"ruleset_candidates,omitempty"`
 	RuleExplanations    []RuleExplanation    `json:"rule_explanations,omitempty"`
 	RuleSetExplanations []RuleSetExplanation `json:"rule_set_explanations,omitempty"`
+}
+
+type RuleSetCandidate struct {
+	RuleSetID           string `json:"ruleset_id"`
+	SnapshotID          string `json:"snapshot_id,omitempty"`
+	SelectorMatched     bool   `json:"selector_matched"`
+	Selected            bool   `json:"selected,omitempty"`
+	SelectorSpecificity int    `json:"selector_specificity"`
+	Message             string `json:"message,omitempty"`
 }
 
 type RuleDiffSummary struct {

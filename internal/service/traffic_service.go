@@ -13,6 +13,7 @@ import (
 
 	"github.com/MrMiaoMIMI/mockserver/internal/dao"
 	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/eo"
 	"github.com/MrMiaoMIMI/mockserver/internal/trafficutil"
 )
 
@@ -27,6 +28,9 @@ func NewTrafficService(repository dao.TrafficRepository) TrafficService {
 }
 
 func (s *trafficService) RecordSDKDecision(ctx context.Context, event bo.Event, decision bo.RuntimeDecision, decisionErr error, durationMS uint32) (bo.TrafficEvent, error) {
+	if shouldSkipRawSDKTraffic(decision, decisionErr) {
+		return bo.TrafficEvent{}, nil
+	}
 	now := time.Now().UTC()
 	eventRaw, err := marshalTrafficJSON(event)
 	if err != nil {
@@ -36,9 +40,7 @@ func (s *trafficService) RecordSDKDecision(ctx context.Context, event bo.Event, 
 	if err != nil {
 		return bo.TrafficEvent{}, fmt.Errorf("marshal traffic decision: %w", err)
 	}
-	explainRaw, err := marshalTrafficJSON(map[string]any{
-		"trace": decision.Trace,
-	})
+	explainRaw, err := marshalTrafficJSON(decisionExplainDocument(decision))
 	if err != nil {
 		return bo.TrafficEvent{}, fmt.Errorf("marshal traffic explain: %w", err)
 	}
@@ -77,6 +79,22 @@ func (s *trafficService) RecordSDKDecision(ctx context.Context, event bo.Event, 
 	}
 	traffic.Indexes = buildTrafficIndexes(event, decision)
 	return s.repository.CreateTrafficEvent(ctx, traffic)
+}
+
+func shouldSkipRawSDKTraffic(decision bo.RuntimeDecision, decisionErr error) bool {
+	return decisionErr == nil && decision.Fallback && strings.TrimSpace(decision.Trace.FallbackReason) == eo.FallbackReasonRulesetMiss
+}
+
+func decisionExplainDocument(decision bo.RuntimeDecision) map[string]any {
+	document := map[string]any{
+		"trace": decision.Trace,
+	}
+	if decision.Diagnostics == nil {
+		return document
+	}
+	document["ruleset_selection"] = decision.Diagnostics.RuleSetSelection
+	document["rule_selection"] = decision.Diagnostics.RuleSelection
+	return document
 }
 
 func (s *trafficService) ListTrafficEvents(ctx context.Context, query bo.TrafficQuery) (bo.TrafficEventList, error) {

@@ -62,7 +62,7 @@ type trafficTableDAO interface {
 	ListTrafficEvents(ctx context.Context, query bo.TrafficQuery, eventIDs []uint64) ([]modeldo.TrafficEvent, uint64, error)
 	ListTrafficEventIndexesByEventIDs(ctx context.Context, eventIDs []uint64) (map[uint64][]modeldo.TrafficEventIndex, error)
 	ListTrafficEventIDsByIndexFilter(ctx context.Context, query bo.TrafficQuery, filter bo.TrafficIndexFilter, valueHash uint64) ([]uint64, error)
-	ListTrafficEventsForStats(ctx context.Context, query bo.TrafficQuery, eventIDs []uint64, limit int) ([]modeldo.TrafficEvent, error)
+	TrafficStats(ctx context.Context, query bo.TrafficQuery, eventIDs []uint64) (bo.TrafficStats, error)
 }
 
 type DB interface {

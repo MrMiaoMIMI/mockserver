@@ -11,6 +11,7 @@ import (
 
 	"github.com/MrMiaoMIMI/mockserver/internal/adapter/httpadapter"
 	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
+	"github.com/MrMiaoMIMI/mockserver/internal/model/eo"
 	"github.com/MrMiaoMIMI/mockserver/internal/model/request"
 	"github.com/MrMiaoMIMI/mockserver/internal/model/response"
 	"github.com/MrMiaoMIMI/mockserver/internal/observability"
@@ -126,6 +127,7 @@ func (c *RuntimeController) DecidePublished(ctx *gin.Context) {
 		return
 	}
 	decision, err := c.view.DecidePublished(ctx.Request.Context(), req.Event)
+	c.observeSuppressedSDKRulesetMiss(ctx, req.Event, decision, err, startedAt)
 	c.recordSDKDecision(ctx, req.Event, decision, err, startedAt)
 	if err != nil {
 		writeBusinessError(ctx, err)
@@ -155,19 +157,48 @@ func (c *RuntimeController) recordSDKDecision(ctx *gin.Context, event bo.Event, 
 	}
 }
 
+func (c *RuntimeController) observeSuppressedSDKRulesetMiss(ctx *gin.Context, event bo.Event, decision bo.RuntimeDecision, decisionErr error, startedAt time.Time) {
+	if c.runtimeMetrics == nil || decisionErr != nil || strings.TrimSpace(decision.Trace.FallbackReason) != eo.FallbackReasonRulesetMiss {
+		return
+	}
+	method := defaultString(bo.RequestString(event.Request, "method"), bo.RequestString(event.Request, "operation"))
+	path := defaultString(bo.RequestString(event.Request, "path"), bo.RequestString(event.Request, "cmd"))
+	path = defaultString(path, bo.RequestString(event.Request, "key"))
+	c.runtimeMetrics.Observe(observability.RuntimeObservation{
+		Source:         bo.TrafficSourceSDKDecision,
+		Protocol:       strings.TrimSpace(event.Protocol),
+		Operation:      sdkRuntimeOperation(event),
+		Namespace:      event.Namespace,
+		Method:         method,
+		Host:           bo.RequestString(event.Request, "host"),
+		Path:           path,
+		TraceID:        firstNonEmpty(event.Meta.TraceID, decision.Meta.TraceID),
+		Fallback:       true,
+		FallbackReason: decision.Trace.FallbackReason,
+		Message:        "sdk traffic ruleset_miss skipped raw persistence",
+		Duration:       time.Since(startedAt),
+	})
+}
+
 func (c *RuntimeController) observeRuntime(r *http.Request, event *bo.Event, observation observability.RuntimeObservation, startedAt time.Time) {
 	duration := time.Since(startedAt)
 	observation.Duration = duration
 	if event != nil {
+		observation.Protocol = defaultString(observation.Protocol, event.Protocol)
+		observation.Operation = defaultString(observation.Operation, event.Operation)
 		observation.Namespace = defaultString(observation.Namespace, event.Namespace)
 		observation.Method = defaultString(observation.Method, bo.RequestString(event.Request, "method"))
+		observation.Operation = defaultString(observation.Operation, bo.RequestString(event.Request, "operation"))
 		observation.Scheme = defaultString(observation.Scheme, bo.RequestString(event.Request, "scheme"))
 		observation.Host = defaultString(observation.Host, bo.RequestString(event.Request, "host"))
 		observation.Path = defaultString(observation.Path, bo.RequestString(event.Request, "path"))
 		observation.TraceID = defaultString(observation.TraceID, event.Meta.TraceID)
 		observation.Event = event
 	}
+	observation.Source = defaultString(observation.Source, observability.RuntimeSourceHTTP)
+	observation.Protocol = defaultString(observation.Protocol, eo.ProtocolHTTP)
 	observation.Method = defaultString(observation.Method, r.Method)
+	observation.Operation = defaultString(observation.Operation, observation.Method)
 	observation.Host = defaultString(observation.Host, r.Host)
 	observation.Path = defaultString(observation.Path, r.URL.Path)
 	observation.RawQuery = defaultString(observation.RawQuery, r.URL.RawQuery)
@@ -204,6 +235,28 @@ func defaultString(current string, fallback string) string {
 		return current
 	}
 	return fallback
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func sdkRuntimeOperation(event bo.Event) string {
+	if value := strings.TrimSpace(event.Operation); value != "" {
+		return value
+	}
+	if value := bo.RequestString(event.Request, "operation"); value != "" {
+		return value
+	}
+	if value := bo.RequestString(event.Request, "method"); value != "" {
+		return strings.ToUpper(value)
+	}
+	return ""
 }
 
 func extractRuntimeTargetFromGin(ctx *gin.Context) (string, string, bool) {

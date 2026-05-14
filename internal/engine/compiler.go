@@ -55,7 +55,11 @@ func ValidateRuleSet(ruleSet bo.RuleSet) bo.ValidationResult {
 	if strings.TrimSpace(ruleSet.Namespace) == "" {
 		issues = append(issues, bo.ValidationIssue{Path: "namespace", Message: "namespace is required"})
 	}
-	validateSelector(ruleSet.Protocol, ruleSet.Selector, "selector", &issues)
+	if len(ruleSet.Selector.All) == 0 {
+		issues = append(issues, bo.ValidationIssue{Path: "selector", Message: "selector must contain at least one condition"})
+	} else {
+		validateSelector(ruleSet.Protocol, ruleSet.Selector, "selector", &issues)
+	}
 	if len(ruleSet.Rules) == 0 {
 		issues = append(issues, bo.ValidationIssue{Path: "rules", Message: "rules must contain at least one rule"})
 	}

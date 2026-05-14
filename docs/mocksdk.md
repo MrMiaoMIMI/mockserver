@@ -37,8 +37,10 @@ POST /mockserver/api/v1/sdk/decision
 ```
 
 This endpoint evaluates published rulesets only. Draft rules do not affect SDK decisions until they are published.
+Rulesets must declare at least one selector condition, so unrelated SDK traffic that does not enter a declared ruleset boundary becomes `ruleset_miss`.
 
 The endpoint returns MockServer's standard response envelope. The payload is `data.decision`.
+MockServer records raw SDK traffic for matched decisions, `rule_miss`, and decision errors. `ruleset_miss` is counted in runtime metrics but is not persisted as raw traffic.
 
 ### Response Decision
 
