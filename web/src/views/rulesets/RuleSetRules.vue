@@ -110,7 +110,7 @@
           </div>
         </section>
 
-        <div class="rules-workspace">
+        <div :class="['rules-workspace', { 'is-editor-mode': activeWorkbenchMode === 'editor' }]">
           <main class="rules-main">
             <RuleManager
               :rule-set="currentDraft"
@@ -1190,6 +1190,10 @@ onMounted(loadRuleSet)
   display: grid;
   grid-template-columns: minmax(420px, 0.42fr) minmax(640px, 0.58fr);
   gap: var(--ms-space-3);
+}
+
+.rules-workspace.is-editor-mode {
+  grid-template-columns: minmax(360px, 0.34fr) minmax(760px, 0.66fr);
 }
 
 .rules-main,

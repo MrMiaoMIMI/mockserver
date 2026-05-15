@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { RuleSet } from '@/types'
+import type { ProtocolSpec, RuleSet } from '@/types'
 import {
   applyConditionPreset,
   buildDraftOverride,
@@ -41,6 +41,23 @@ const ruleSet: RuleSet = {
   ],
 }
 
+const httpSpec: ProtocolSpec = {
+  name: 'http',
+  fields: [],
+  response: {
+    defaults: {
+      status: 200,
+      headers: { 'content-type': ['application/json'] },
+      body: {},
+    },
+    fields: [
+      { path: 'status', type: 'number', required: true, default: 200, min: 100, max: 599 },
+      { path: 'headers', type: 'object', default: { 'content-type': ['application/json'] } },
+      { path: 'body', type: 'json', default: {} },
+    ],
+  },
+}
+
 describe('rule authoring helper', () => {
   it('creates backend-compatible conditions from common presets', () => {
     const header = updateConditionPresetKey(applyConditionPreset({}, 'header'), 'X-Env')
@@ -77,7 +94,7 @@ describe('rule authoring helper', () => {
   })
 
   it('builds readiness, event suggestions, and an unsaved draft override', () => {
-    const form = defaultRuleForm(ruleSet)
+    const form = defaultRuleForm(ruleSet, httpSpec)
     form.name = 'New checkout response'
     form.id = 'rule-002'
     form.conditionTree = {
@@ -89,6 +106,7 @@ describe('rule authoring helper', () => {
 
     const view = buildRuleAuthoringView(form, ruleSet, {
       existingRuleIds: ruleSet.rules.map((rule) => rule.id),
+      protocolSpec: httpSpec,
     })
 
     expect(view.errors).toEqual([])
@@ -100,11 +118,13 @@ describe('rule authoring helper', () => {
   })
 
   it('replaces the edited rule in the temporary draft override', () => {
-    const form = ruleToForm(ruleSet.rules[0])
-    form.bodyJson = '{"status":200,"body":{"updated":true}}'
+    const form = ruleToForm(ruleSet.rules[0], httpSpec)
+    form.responsePayload.body = { updated: true }
+    form.responseFieldDrafts.body = '{"updated":true}'
     const view = buildRuleAuthoringView(form, ruleSet, {
       existingRuleIds: ruleSet.rules.map((rule) => rule.id),
       lockedRuleId: 'rule-001',
+      protocolSpec: httpSpec,
     })
     const override = buildDraftOverride(ruleSet, view.rule!, 'rule-001')
 

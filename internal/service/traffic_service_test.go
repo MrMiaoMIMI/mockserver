@@ -187,7 +187,7 @@ func TestTrafficServiceRecordSDKDecisionSkipsRulesetMissResponseFallback(t *test
 		Trace:    bo.MatchTrace{FallbackReason: eo.FallbackReasonRulesetMiss},
 		Response: &bo.ProtocolResponse{
 			Protocol: eo.ProtocolSPEX,
-			Payload:  map[string]any{"code": 404, "resp": "{}"},
+			Payload:  map[string]any{"code": 404, "resp": map[string]any{}},
 		},
 	}
 

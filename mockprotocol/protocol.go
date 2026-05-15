@@ -244,11 +244,11 @@ func SPEXSpec() ProtocolSpec {
 		Response: ResponseSpec{
 			Defaults: map[string]any{
 				"code": 0,
-				"resp": "{}",
+				"resp": map[string]any{},
 			},
 			Fields: []ResponseFieldSpec{
 				{Path: "code", Type: FieldTypeNumber, Required: true, Default: 0},
-				{Path: "resp", Type: FieldTypeString, Required: true, Default: "{}", Format: "json_string"},
+				{Path: "resp", Type: FieldTypeJSON, Required: true, Default: map[string]any{}},
 			},
 		},
 		Actions: defaultResponseActionSpecs(),

@@ -9,14 +9,14 @@
     </header>
 
     <div v-if="modelValue.type === 'respond'" class="editor-fields">
-      <el-form-item :label="`${protocolLabel} Response Payload JSON`">
-        <el-input
-          :model-value="modelValue.responsePayload"
-          type="textarea"
-          :rows="6"
-          @update:model-value="patch({ responsePayload: $event })"
-        />
-      </el-form-item>
+      <ProtocolResponseEditor
+        :model-value="modelValue.responsePayload"
+        :drafts="modelValue.responseFieldDrafts"
+        :protocol-spec="protocolSpec"
+        :json-editor-height="150"
+        @update:model-value="patch({ responsePayload: $event })"
+        @update:drafts="patch({ responseFieldDrafts: $event })"
+      />
     </div>
 
     <div v-else class="editor-fields">
@@ -38,20 +38,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { NamespaceFallbackForm, NamespaceFallbackType } from '@/types'
+import ProtocolResponseEditor from '@/components/rulesets/ProtocolResponseEditor.vue'
+import type { NamespaceFallbackForm, NamespaceFallbackType, ProtocolSpec } from '@/types'
 
 const props = defineProps<{
   modelValue: NamespaceFallbackForm
   title: string
   protocol?: string
+  protocolSpec?: ProtocolSpec
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: NamespaceFallbackForm]
 }>()
-
-const protocolLabel = computed(() => (props.protocol || 'http').toUpperCase())
 
 function setType(value: string | number | boolean | undefined) {
   patch({ type: String(value || 'respond') as NamespaceFallbackType })

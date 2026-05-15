@@ -198,44 +198,43 @@
               </div>
             </el-form-item>
 
-            <template v-if="requiresStatus">
-              <div class="form-grid action-grid">
-                <el-form-item label="Status" :error="fieldError('status')">
-                  <el-input-number
-                    v-model="form.status"
-                    :min="100"
-                    :max="599"
-                    controls-position="right"
-                  />
-                </el-form-item>
-              </div>
-              <el-form-item label="Headers JSON" :error="fieldError('headersJson')">
-                <el-input v-model="form.headersJson" type="textarea" :rows="4" />
-              </el-form-item>
-            </template>
-
-            <el-form-item
+            <ProtocolResponseEditor
               v-if="form.actionType === 'static'"
-              label="Response Payload JSON"
-              :error="fieldError('bodyJson')"
-            >
-              <el-input v-model="form.bodyJson" type="textarea" :rows="7" />
-            </el-form-item>
+              v-model="form.responsePayload"
+              v-model:drafts="form.responseFieldDrafts"
+              :protocol-spec="protocolSpec"
+              :field-errors="responseFieldErrors('responsePayload')"
+              :json-editor-height="180"
+            />
 
             <el-form-item
               v-if="form.actionType === 'template'"
               label="Response Payload Template"
               :error="fieldError('bodyTemplate')"
+              class="action-payload-item"
             >
-              <el-input v-model="form.bodyTemplate" type="textarea" :rows="7" />
+              <JsonEditor
+                v-model="form.bodyTemplate"
+                title="Response Payload Template"
+                :placeholder="templatePayloadPlaceholder"
+                :min-height="260"
+                :show-format="false"
+              />
             </el-form-item>
 
             <el-form-item
               v-if="form.actionType === 'cel'"
               label="Response Payload Expression"
               :error="fieldError('bodyExpression')"
+              class="action-payload-item"
             >
-              <el-input v-model="form.bodyExpression" type="textarea" :rows="7" />
+              <JsonEditor
+                v-model="form.bodyExpression"
+                title="Response Payload CEL"
+                :placeholder="celPayloadPlaceholder"
+                :min-height="260"
+                :show-format="false"
+              />
             </el-form-item>
           </el-form>
 
@@ -285,9 +284,13 @@
                 </div>
               </header>
               <el-form label-position="top" class="editor-form">
-                <el-form-item label="Response Payload JSON" :error="fieldError(`sequenceSteps.${index}.bodyJson`)">
-                  <el-input v-model="step.bodyJson" type="textarea" :rows="5" />
-                </el-form-item>
+                <ProtocolResponseEditor
+                  v-model="step.responsePayload"
+                  v-model:drafts="step.responseFieldDrafts"
+                  :protocol-spec="protocolSpec"
+                  :field-errors="responseFieldErrors(`sequenceSteps.${index}.responsePayload`)"
+                  :json-editor-height="150"
+                />
               </el-form>
             </article>
           </div>
@@ -381,6 +384,7 @@ import { ArrowDown, ArrowUp, Delete, InfoFilled, Plus, Refresh, Upload } from '@
 import JsonEditor from '@/components/common/JsonEditor.vue'
 import ConditionTreePreview from '@/components/rulesets/ConditionTreePreview.vue'
 import ConditionTreeEditor from '@/components/rulesets/ConditionTreeEditor.vue'
+import ProtocolResponseEditor from '@/components/rulesets/ProtocolResponseEditor.vue'
 import ResultInspector from '@/components/rulesets/ResultInspector.vue'
 import { useMockserverStore } from '@/store'
 import type { MockEvent, Rule, RuleSet } from '@/types'
@@ -435,9 +439,6 @@ const sections: Array<{ name: EditorSection; label: string }> = [
   { name: 'preview', label: 'Preview' },
 ]
 
-const requiresStatus = computed(() => {
-  return false
-})
 const actionTitle = computed(() => {
   if (form.actionType === 'sequence') return 'Ordered response sequence'
   if (form.actionType === 'webhook') return 'Forward to external webhook'
@@ -446,14 +447,15 @@ const actionTitle = computed(() => {
   return 'Static mock response'
 })
 const existingRuleIds = computed(() => props.ruleSet?.rules.map((rule) => rule.id) || [])
-const buildOptions = computed(() => ({
-  existingRuleIds: existingRuleIds.value,
-  lockedRuleId: props.mode === 'edit' ? props.rule?.id : undefined,
-}))
-const authoringView = computed(() => buildRuleAuthoringView(form, props.ruleSet, buildOptions.value))
 const protocolSpec = computed(() => {
   return props.ruleSet ? store.protocolMap.get(props.ruleSet.protocol) : undefined
 })
+const buildOptions = computed(() => ({
+  existingRuleIds: existingRuleIds.value,
+  lockedRuleId: props.mode === 'edit' ? props.rule?.id : undefined,
+  protocolSpec: protocolSpec.value,
+}))
+const authoringView = computed(() => buildRuleAuthoringView(form, props.ruleSet, buildOptions.value))
 const liveErrors = computed(() => authoringView.value.errors)
 const displayErrors = computed(() => (formErrors.value.length ? formErrors.value : liveErrors.value))
 const overallTone = computed(() => {
@@ -471,6 +473,8 @@ const overallStatusLabel = computed(() => {
 const compactSummaryLabel = computed(() => {
   return `${form.conditionMode.toUpperCase()} / ${form.actionType.replace(/_response$/, '')}`
 })
+const templatePayloadPlaceholder = computed(() => payloadExampleForAction('template'))
+const celPayloadPlaceholder = computed(() => payloadExampleForAction('cel'))
 const editorTitle = computed(() => {
   if (props.mode === 'create') return form.name.trim() || 'New rule'
   return form.name.trim() || form.id || 'Rule'
@@ -485,7 +489,7 @@ const previewEventModel = computed({
 })
 
 watch(
-  () => [props.mode, props.rule?.id, props.ruleSet?.id, props.seedRule?.id],
+  () => [props.mode, props.rule?.id, props.ruleSet?.id, props.seedRule?.id, protocolSpec.value?.name],
   () => resetForm(),
   { immediate: true }
 )
@@ -522,14 +526,15 @@ watch(
 
 function resetForm() {
   const nextForm = props.mode === 'edit' && props.rule
-    ? ruleToForm(props.rule)
+    ? ruleToForm(props.rule, protocolSpec.value)
     : props.mode === 'create' && props.seedRule
-      ? ruleToForm(props.seedRule)
-      : defaultRuleForm(props.ruleSet)
+      ? ruleToForm(props.seedRule, protocolSpec.value)
+      : defaultRuleForm(props.ruleSet, protocolSpec.value)
   Object.assign(form, nextForm)
   const nextView = buildRuleAuthoringView(nextForm, props.ruleSet, {
     existingRuleIds: existingRuleIds.value,
     lockedRuleId: props.mode === 'edit' ? props.rule?.id : undefined,
+    protocolSpec: protocolSpec.value,
   })
   formErrors.value = []
   previewEventJson.value = nextView.eventJson
@@ -577,14 +582,14 @@ function loadRawJson() {
     ...buildOptions.value,
   })
   if (handleBuildErrors(result.errors) || !result.rule) return
-  Object.assign(form, ruleToForm(result.rule))
+  Object.assign(form, ruleToForm(result.rule, protocolSpec.value))
   formErrors.value = []
   activeSection.value = 'identity'
   ElMessage.success('Form loaded from Raw JSON')
 }
 
 function appendSequenceStep() {
-  form.sequenceSteps.push(newSequenceStepForm(form.sequenceSteps.length + 1))
+  form.sequenceSteps.push(newSequenceStepForm(form.sequenceSteps.length + 1, protocolSpec.value))
 }
 
 function removeSequenceStep(index: number) {
@@ -660,6 +665,84 @@ function handleBuildErrors(errors: RuleFormError[]) {
 
 function fieldError(field: string) {
   return displayErrors.value.find((error) => error.field === field)?.message || ''
+}
+
+function responseFieldErrors(prefix: string) {
+  const result: Record<string, string> = {}
+  const marker = `${prefix}.`
+  displayErrors.value.forEach((error) => {
+    if (error.field.startsWith(marker)) {
+      result[error.field.slice(marker.length)] = error.message
+    }
+  })
+  return result
+}
+
+function payloadExampleForAction(actionType: 'template' | 'cel') {
+  const protocol = (protocolSpec.value?.name || props.ruleSet?.protocol || form.protocol || 'http').toLowerCase()
+  if (actionType === 'template') return templatePayloadExample(protocol)
+  return celPayloadExample(protocol)
+}
+
+function templatePayloadExample(protocol: string) {
+  if (protocol === 'spex') {
+    return `{
+  "code": 0,
+  "resp": {
+    "message": "hello {{ field . "request.cmd" }}",
+    "request": {{ toJSON (field . "request.req") }}
+  }
+}`
+  }
+  if (protocol === 'cache') {
+    return `{
+  "hit": true,
+  "value": {
+    "key": "{{ field . "request.key" }}"
+  }
+}`
+  }
+  return `{
+  "status": 200,
+  "headers": {
+    "content-type": ["application/json"]
+  },
+  "body": {
+    "message": "hello {{ query . "q1" }}",
+    "path": "{{ field . "request.path" }}"
+  }
+}`
+}
+
+function celPayloadExample(protocol: string) {
+  if (protocol === 'spex') {
+    return `{
+  "code": 0,
+  "resp": {
+    "cmd": request.cmd,
+    "req": request.req
+  }
+}`
+  }
+  if (protocol === 'cache') {
+    return `{
+  "hit": true,
+  "value": {
+    "operation": request.operation,
+    "key": request.key
+  }
+}`
+  }
+  return `{
+  "status": 200,
+  "headers": {
+    "content-type": ["application/json"]
+  },
+  "body": {
+    "path": request.path,
+    "score": request.body.score
+  }
+}`
 }
 
 function sectionHasError(section: EditorSection) {
@@ -994,6 +1077,18 @@ function toErrorMessage(error: unknown) {
   display: flex;
   flex-direction: column;
   gap: var(--ms-space-1);
+}
+
+.action-payload-item {
+  min-width: 0;
+
+  :deep(.el-form-item__content) {
+    min-width: 0;
+  }
+
+  :deep(.json-editor) {
+    width: 100%;
+  }
 }
 
 .generated-id-card {

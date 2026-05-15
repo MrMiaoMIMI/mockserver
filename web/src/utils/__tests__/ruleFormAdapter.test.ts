@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Rule, RuleSet } from '@/types'
+import type { ProtocolSpec, Rule, RuleSet } from '@/types'
 import {
   applyRawRuleJson,
   defaultRuleForm,
@@ -37,6 +37,47 @@ const ruleSet: RuleSet = {
   ],
 }
 
+const httpSpec: ProtocolSpec = {
+  name: 'http',
+  fields: [],
+  response: {
+    defaults: {
+      status: 200,
+      headers: { 'content-type': ['application/json'] },
+      body: {},
+    },
+    fields: [
+      { path: 'status', type: 'number', required: true, default: 200, min: 100, max: 599 },
+      { path: 'headers', type: 'object', default: { 'content-type': ['application/json'] } },
+      { path: 'body', type: 'json', default: {} },
+    ],
+  },
+}
+
+const cacheSpec: ProtocolSpec = {
+  name: 'cache',
+  fields: [],
+  response: {
+    defaults: { hit: true, value: null },
+    fields: [
+      { path: 'hit', type: 'bool', required: true, default: true },
+      { path: 'value', type: 'json' },
+    ],
+  },
+}
+
+const spexSpec: ProtocolSpec = {
+  name: 'spex',
+  fields: [],
+  response: {
+    defaults: { code: 0, resp: {} },
+    fields: [
+      { path: 'code', type: 'number', required: true, default: 0 },
+      { path: 'resp', type: 'json', required: true, default: {} },
+    ],
+  },
+}
+
 const staticRule: Rule = {
   id: 'static-rule',
   name: 'Static rule',
@@ -63,30 +104,49 @@ const staticRule: Rule = {
 
 describe('rule form adapter', () => {
   it('round-trips a static rule without changing API payload shape', () => {
-    const form = ruleToForm(staticRule)
+    const form = ruleToForm(staticRule, httpSpec)
     const result = formToRule(form, {
       existingRuleIds: ruleSet.rules.map((rule) => rule.id),
       lockedRuleId: staticRule.id,
+      protocolSpec: httpSpec,
     })
 
     expect(result.errors).toEqual([])
-    expect(result.rule).toEqual(staticRule)
+    expect(result.rule).toEqual({
+      ...staticRule,
+      action: {
+        ...staticRule.action,
+        response: {
+          protocol: 'http',
+          payload: staticRule.action.response?.payload,
+        },
+      },
+    })
   })
 
   it('builds sequence response payloads from ordered step forms', () => {
-    const form = defaultRuleForm(ruleSet)
+    const form = defaultRuleForm(ruleSet, httpSpec)
     form.name = 'Sequence rule'
     form.id = 'sequence-rule'
     form.priority = 30
     form.actionType = 'sequence'
     form.sequenceStrategy = 'loop'
     form.sequenceSteps = [
-      { ...newSequenceStepForm(1), bodyJson: '{"status":202,"body":{"step":1}}' },
-      { ...newSequenceStepForm(2), bodyJson: '{"status":203,"body":{"step":2}}' },
+      {
+        ...newSequenceStepForm(1, httpSpec),
+        responsePayload: { status: 202, headers: {}, body: { step: 1 } },
+        responseFieldDrafts: { body: '{"step":1}' },
+      },
+      {
+        ...newSequenceStepForm(2, httpSpec),
+        responsePayload: { status: 203, headers: {}, body: { step: 2 } },
+        responseFieldDrafts: { body: '{"step":2}' },
+      },
     ]
 
     const result = formToRule(form, {
       existingRuleIds: ruleSet.rules.map((rule) => rule.id),
+      protocolSpec: httpSpec,
     })
 
     expect(result.errors).toEqual([])
@@ -102,7 +162,7 @@ describe('rule form adapter', () => {
   })
 
   it('uses cache-friendly default conditions for cache rulesets', () => {
-    const form = defaultRuleForm({ ...ruleSet, protocol: 'cache' })
+    const form = defaultRuleForm({ ...ruleSet, protocol: 'cache' }, cacheSpec)
 
     expect(form.conditionTree).toMatchObject({
       all: [
@@ -113,7 +173,7 @@ describe('rule form adapter', () => {
   })
 
   it('uses spex-friendly default conditions for spex rulesets', () => {
-    const form = defaultRuleForm({ ...ruleSet, protocol: 'spex' })
+    const form = defaultRuleForm({ ...ruleSet, protocol: 'spex' }, spexSpec)
 
     expect(form.conditionTree).toMatchObject({
       all: [
@@ -124,7 +184,7 @@ describe('rule form adapter', () => {
   })
 
   it('validates raw JSON mode and preserves locked rule IDs', () => {
-    const form = ruleToForm(staticRule)
+    const form = ruleToForm(staticRule, httpSpec)
     form.rawRuleJson = JSON.stringify({ ...staticRule, id: 'changed-id' })
 
     const result = applyRawRuleJson(form)
@@ -138,11 +198,12 @@ describe('rule form adapter', () => {
   })
 
   it('requires rule names for normal form and raw JSON payloads', () => {
-    const form = defaultRuleForm(ruleSet)
+    const form = defaultRuleForm(ruleSet, httpSpec)
     form.name = ''
 
     const result = formToRule(form, {
       existingRuleIds: ruleSet.rules.map((rule) => rule.id),
+      protocolSpec: httpSpec,
     })
 
     expect(result.errors.some((error) => error.field === 'name')).toBe(true)

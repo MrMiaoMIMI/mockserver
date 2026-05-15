@@ -823,7 +823,7 @@ func TestSDKDecisionEndpointSPEXDecisionEndToEnd(t *testing.T) {
 						{"field": "request.req.order_id", "op": "eq", "value": "1001"},
 					},
 				},
-				"action": spexStaticActionPayload(0, `{"order_status":"mocked"}`),
+				"action": spexStaticActionPayload(0, map[string]any{"order_status": "mocked"}),
 			},
 		},
 	}, http.StatusOK)
@@ -846,7 +846,7 @@ func TestSDKDecisionEndpointSPEXDecisionEndToEnd(t *testing.T) {
 	assertBytesContain(t, hitBody, `"matched":true`)
 	assertBytesContain(t, hitBody, `"ruleset_id":"spex-sdk"`)
 	assertBytesContain(t, hitBody, `"rule_id":"spex-get-order"`)
-	assertBytesContain(t, hitBody, `\"order_status\":\"mocked\"`)
+	assertBytesContain(t, hitBody, `"order_status":"mocked"`)
 
 	missDecision := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/sdk/decision", map[string]any{
 		"event": map[string]any{
@@ -1612,7 +1612,7 @@ func httpStaticActionPayloadWithHeaders(status int, headers map[string]any, body
 	}
 }
 
-func spexStaticActionPayload(code int, resp string) map[string]any {
+func spexStaticActionPayload(code int, resp any) map[string]any {
 	return map[string]any{
 		"type":     "respond",
 		"renderer": "static",

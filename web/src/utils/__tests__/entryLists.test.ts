@@ -66,7 +66,7 @@ const draftSpex: RuleSet = {
       enabled: true,
       priority: 10,
       when: { field: 'request.method', op: 'eq', value: 'GetPayment' },
-      action: { type: 'respond', renderer: 'static', response: { payload: { code: 0, resp: '{}' } } },
+      action: { type: 'respond', renderer: 'static', response: { payload: { code: 0, resp: {} } } },
     },
   ],
   version: 1,
@@ -124,7 +124,7 @@ const namespaces: NamespaceConfig[] = [
         rule_miss_action: { type: 'forward', forward: { timeout_ms: 1000 } },
       },
       spex: {
-        ruleset_miss_action: { type: 'respond', renderer: 'static', response: { payload: { code: 404, resp: '{}' } } },
+        ruleset_miss_action: { type: 'respond', renderer: 'static', response: { payload: { code: 404, resp: {} } } },
         rule_miss_action: { type: 'forward', forward: { timeout_ms: 2000 } },
       },
     },

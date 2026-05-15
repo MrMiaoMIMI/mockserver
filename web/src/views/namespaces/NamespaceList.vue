@@ -203,7 +203,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="editingNamespace ? 'Manage namespace' : 'Create namespace'"
-      width="min(1120px, calc(100vw - 32px))"
+      width="min(1480px, calc(100vw - 24px))"
       append-to-body
       destroy-on-close
     >
@@ -264,8 +264,14 @@
                   v-model="activePolicy.rulesetMiss"
                   title="Ruleset miss"
                   :protocol="form.activeProtocol"
+                  :protocol-spec="activeProtocolSpec"
                 />
-                <FallbackEditor v-model="activePolicy.ruleMiss" title="Rule miss" :protocol="form.activeProtocol" />
+                <FallbackEditor
+                  v-model="activePolicy.ruleMiss"
+                  title="Rule miss"
+                  :protocol="form.activeProtocol"
+                  :protocol-spec="activeProtocolSpec"
+                />
               </div>
             </div>
           </section>
@@ -322,6 +328,11 @@ import type {
   NamespaceFallbackForm,
   NamespacePolicy,
 } from '@/types'
+import {
+  buildResponsePayload,
+  defaultResponsePayload,
+  responseFieldDraftsFromPayload,
+} from '@/utils/responseSpec'
 import {
   buildNamespaceEntryMetrics,
   buildNamespaceEntryRows,
@@ -414,6 +425,7 @@ const protocolFilterOptions = computed<Array<{ label: string; value: NamespacePr
     })),
 ])
 const activePolicy = computed(() => ensurePolicyForm(form.activeProtocol))
+const activeProtocolSpec = computed(() => protocolSpecFor(activeProtocolKey()))
 const activePolicyUsage = computed(() => {
   const namespaceID = editingNamespace.value?.id || form.id
   const protocol = activeProtocolKey()
@@ -432,8 +444,8 @@ const activePolicyUsage = computed(() => {
 })
 const validationIssues = computed(() => validateForm())
 const previewActions = computed(() => ({
-  rulesetMiss: fallbackFormToAction(activePolicy.value.rulesetMiss),
-  ruleMiss: fallbackFormToAction(activePolicy.value.ruleMiss),
+  rulesetMiss: fallbackFormToAction(activePolicy.value.rulesetMiss, activeProtocolSpec.value),
+  ruleMiss: fallbackFormToAction(activePolicy.value.ruleMiss, activeProtocolSpec.value),
 }))
 
 async function loadAll() {
@@ -513,15 +525,21 @@ function validateForm() {
     issues.push('Namespace ID can only contain letters, numbers, underscores, and hyphens')
   }
   for (const [protocol, policy] of Object.entries(form.policies)) {
-    validateFallbackForm(policy.rulesetMiss, `${protocol} ruleset miss`, issues)
-    validateFallbackForm(policy.ruleMiss, `${protocol} rule miss`, issues)
+    validateFallbackForm(policy.rulesetMiss, `${protocol} ruleset miss`, issues, protocolSpecFor(protocol))
+    validateFallbackForm(policy.ruleMiss, `${protocol} rule miss`, issues, protocolSpecFor(protocol))
   }
   return issues
 }
 
-function validateFallbackForm(fallback: NamespaceFallbackForm, label: string, issues: string[]) {
+function validateFallbackForm(
+  fallback: NamespaceFallbackForm,
+  label: string,
+  issues: string[],
+  protocolSpec = activeProtocolSpec.value
+) {
   if (fallback.type === 'respond') {
-    parseResponsePayload(fallback.responsePayload, `${label} response payload`, issues)
+    const result = buildResponsePayload(protocolSpec, fallback.responsePayload, fallback.responseFieldDrafts)
+    result.issues.forEach((issue) => issues.push(`${label} ${issue.message}`))
     return
   }
   if (fallback.forwardTimeoutMs < 0 || fallback.forwardTimeoutMs > 30000) {
@@ -529,7 +547,10 @@ function validateFallbackForm(fallback: NamespaceFallbackForm, label: string, is
   }
 }
 
-function fallbackFormToAction(fallback: NamespaceFallbackForm): NamespaceFallbackAction {
+function fallbackFormToAction(
+  fallback: NamespaceFallbackForm,
+  protocolSpec = activeProtocolSpec.value
+): NamespaceFallbackAction {
   if (fallback.type === 'forward') {
     return {
       type: 'forward',
@@ -538,11 +559,13 @@ function fallbackFormToAction(fallback: NamespaceFallbackForm): NamespaceFallbac
       },
     }
   }
+  const response = buildResponsePayload(protocolSpec, fallback.responsePayload, fallback.responseFieldDrafts)
   return {
     type: 'respond',
     renderer: 'static',
     response: {
-      payload: parseResponsePayload(fallback.responsePayload, 'response payload', []) || {},
+      protocol: protocolSpec?.name,
+      payload: response.payload,
     },
   }
 }
@@ -555,14 +578,17 @@ function actionToFallbackForm(action: NamespaceFallbackAction | undefined, proto
     fallback.forwardTimeoutMs = action.forward?.timeout_ms || 0
     return fallback
   }
-  fallback.responsePayload = prettyJSON(action.response?.payload ?? defaultResponsePayload(protocol))
+  fallback.responsePayload = action.response?.payload ?? defaultResponsePayload(protocolSpecFor(protocol))
+  fallback.responseFieldDrafts = responseFieldDraftsFromPayload(protocolSpecFor(protocol), fallback.responsePayload)
   return fallback
 }
 
 function createFallbackForm(protocol = 'http'): NamespaceFallbackForm {
+  const payload = defaultResponsePayload(protocolSpecFor(protocol))
   return {
     type: 'forward',
-    responsePayload: prettyJSON(defaultResponsePayload(protocol)),
+    responsePayload: payload,
+    responseFieldDrafts: responseFieldDraftsFromPayload(protocolSpecFor(protocol), payload),
     forwardTimeoutMs: 5000,
   }
 }
@@ -590,8 +616,8 @@ function policiesFromForm(): Record<string, NamespacePolicy> {
       .map(([protocol, policy]) => [
         protocol.trim().toLowerCase(),
         {
-          ruleset_miss_action: fallbackFormToAction(policy.rulesetMiss),
-          rule_miss_action: fallbackFormToAction(policy.ruleMiss),
+          ruleset_miss_action: fallbackFormToAction(policy.rulesetMiss, protocolSpecFor(protocol)),
+          rule_miss_action: fallbackFormToAction(policy.ruleMiss, protocolSpecFor(protocol)),
         },
       ])
   )
@@ -620,36 +646,8 @@ function activeProtocolKey() {
   return form.activeProtocol.trim().toLowerCase() || 'http'
 }
 
-function defaultResponsePayload(protocol = 'http') {
-  if (protocol === 'spex') return { code: 0, resp: '{}' }
-  if (protocol === 'cache') return { hit: true, value: null }
-  return {
-    status: 404,
-    headers: { 'content-type': ['application/json'] },
-    body: { message: 'no mock matched' },
-  }
-}
-
-function parseResponsePayload(value: string, label: string, issues: string[]) {
-  const trimmed = value.trim()
-  if (!trimmed) return {}
-  try {
-    const parsed = JSON.parse(trimmed)
-    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
-      issues.push(`${label} must be a JSON object`)
-      return null
-    }
-    return parsed as Record<string, unknown>
-  } catch {
-    issues.push(`${label} is not valid JSON`)
-    return null
-  }
-}
-
-function prettyJSON(value: unknown) {
-  if (value === undefined || value === null) return ''
-  if (typeof value === 'string') return value
-  return JSON.stringify(value, null, 2)
+function protocolSpecFor(protocol: string) {
+  return store.protocolMap.get(protocol.trim().toLowerCase())
 }
 
 onMounted(loadAll)
@@ -1087,7 +1085,7 @@ watch(
 
 .dialog-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
   grid-template-areas:
     "profile preview"
     "policy preview";

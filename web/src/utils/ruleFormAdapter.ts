@@ -1,4 +1,10 @@
-import type { Condition, Rule, RuleAction, RuleSet, SequenceStep } from '@/types'
+import type { Condition, ProtocolSpec, Rule, RuleAction, RuleSet, SequenceStep } from '@/types'
+import {
+  buildResponsePayload,
+  defaultResponsePayload,
+  responseFieldDraftsFromPayload,
+  type ResponseFieldDrafts,
+} from '@/utils/responseSpec'
 
 export type RuleEditorMode = 'create' | 'edit'
 export type RuleConditionMode = 'tree' | 'expr' | 'raw'
@@ -6,9 +12,8 @@ export type RuleFormBuildSource = 'form' | 'raw'
 
 export interface RuleSequenceStepForm {
   key: string
-  status: number
-  headersJson: string
-  bodyJson: string
+  responsePayload: Record<string, unknown>
+  responseFieldDrafts: ResponseFieldDrafts
 }
 
 export interface RuleFormState {
@@ -22,9 +27,8 @@ export interface RuleFormState {
   conditionExpr: string
   conditionJson: string
   actionType: string
-  status: number
-  headersJson: string
-  bodyJson: string
+  responsePayload: Record<string, unknown>
+  responseFieldDrafts: ResponseFieldDrafts
   bodyTemplate: string
   bodyExpression: string
   sequenceStrategy: string
@@ -46,6 +50,7 @@ export interface BuildRuleOptions {
   source?: RuleFormBuildSource
   existingRuleIds?: string[]
   lockedRuleId?: string
+  protocolSpec?: ProtocolSpec
 }
 
 export interface BuildRuleResult {
@@ -53,31 +58,32 @@ export interface BuildRuleResult {
   errors: RuleFormError[]
 }
 
-const responseRenderers = new Set(['static', 'template', 'cel'])
-
-export function defaultRuleForm(ruleSet?: RuleSet | null): RuleFormState {
+export function defaultRuleForm(ruleSet?: RuleSet | null, protocolSpec?: ProtocolSpec): RuleFormState {
+  const protocol = ruleSet?.protocol || protocolSpec?.name || 'http'
   const rule: Rule = {
     id: nextRuleId(ruleSet),
     name: '',
     enabled: true,
     priority: nextPriority(ruleSet),
-    when: defaultConditionTree(ruleSet?.protocol),
+    when: defaultConditionTree(protocol),
     action: {
       type: 'respond',
       renderer: 'static',
       response: {
-        protocol: ruleSet?.protocol || 'http',
-        payload: defaultResponsePayload(ruleSet?.protocol || 'http'),
+        protocol,
+        payload: defaultResponsePayload(protocolSpec),
       },
     },
   }
-  return ruleToForm(rule)
+  return ruleToForm(rule, protocolSpec)
 }
 
-export function ruleToForm(rule: Rule): RuleFormState {
+export function ruleToForm(rule: Rule, protocolSpec?: ProtocolSpec): RuleFormState {
   const conditionMode = conditionModeFromRule(rule.when)
+  const protocol = rule.action.response?.protocol || protocolSpec?.name || ''
+  const responsePayload = clone(rule.action.response?.payload || defaultResponsePayload(protocolSpec))
   const form: RuleFormState = {
-    protocol: rule.action.response?.protocol || '',
+    protocol,
     id: rule.id,
     name: rule.name || '',
     enabled: rule.enabled,
@@ -87,13 +93,12 @@ export function ruleToForm(rule: Rule): RuleFormState {
     conditionExpr: rule.when.expr || '',
     conditionJson: formatJSON(rule.when),
     actionType: rule.action.renderer || 'static',
-    status: Number(rule.action.response?.payload?.status || 200),
-    headersJson: formatJSON(rule.action.response?.payload?.headers || {}),
-    bodyJson: formatJSON(rule.action.response?.payload || defaultResponsePayload(rule.action.response?.protocol || 'http')),
+    responsePayload,
+    responseFieldDrafts: responseFieldDraftsFromPayload(protocolSpec, responsePayload),
     bodyTemplate: rule.action.response_template || '',
     bodyExpression: rule.action.response_expression || '',
     sequenceStrategy: rule.action.sequence_strategy || 'last',
-    sequenceSteps: stepsToForm(rule.action.sequence || defaultSequence()),
+    sequenceSteps: stepsToForm(rule.action.sequence || defaultSequence(protocolSpec), protocolSpec),
     webhookUrl: rule.action.webhook?.url || '',
     webhookMethod: rule.action.webhook?.method || 'POST',
     webhookTimeoutMS: rule.action.webhook?.timeout_ms || 3000,
@@ -107,7 +112,7 @@ export function ruleToForm(rule: Rule): RuleFormState {
 export function formToRule(form: RuleFormState, options: BuildRuleOptions = {}): BuildRuleResult {
   const errors: RuleFormError[] = []
   const source = options.source || 'form'
-  const rule = source === 'raw' ? parseRawRule(form.rawRuleJson, errors) : buildRuleFromForm(form, errors)
+  const rule = source === 'raw' ? parseRawRule(form.rawRuleJson, errors) : buildRuleFromForm(form, errors, options)
 
   if (rule) {
     validateRuleIdentity(rule, errors, options)
@@ -132,12 +137,12 @@ export function applyRawRuleJson(form: RuleFormState): BuildRuleResult {
   return result
 }
 
-export function newSequenceStepForm(index: number): RuleSequenceStepForm {
+export function newSequenceStepForm(index: number, protocolSpec?: ProtocolSpec): RuleSequenceStepForm {
+  const responsePayload = defaultResponsePayload(protocolSpec)
   return {
     key: `step-${Date.now()}-${index}`,
-    status: 200,
-    headersJson: '{}',
-    bodyJson: formatJSON(defaultResponsePayload('http')),
+    responsePayload,
+    responseFieldDrafts: responseFieldDraftsFromPayload(protocolSpec, responsePayload),
   }
 }
 
@@ -151,7 +156,7 @@ export function generateRuleIdFromName(
   return uniqueRuleId(slug || fallback, ruleSet, lockedRuleId)
 }
 
-function buildRuleFromForm(form: RuleFormState, errors: RuleFormError[]): Rule | undefined {
+function buildRuleFromForm(form: RuleFormState, errors: RuleFormError[], options: BuildRuleOptions): Rule | undefined {
   const id = form.id.trim()
   const name = form.name.trim()
   if (!id) {
@@ -165,7 +170,7 @@ function buildRuleFromForm(form: RuleFormState, errors: RuleFormError[]): Rule |
   }
 
   const when = buildCondition(form, errors)
-  const action = buildAction(form, errors)
+  const action = buildAction(form, errors, options.protocolSpec)
   if (!id || !name || !when || !action || errors.length) return undefined
 
   return {
@@ -206,7 +211,7 @@ function buildCondition(form: RuleFormState, errors: RuleFormError[]): Condition
   return validationErrors.length ? undefined : clone(form.conditionTree)
 }
 
-function buildAction(form: RuleFormState, errors: RuleFormError[]): RuleAction | undefined {
+function buildAction(form: RuleFormState, errors: RuleFormError[], protocolSpec?: ProtocolSpec): RuleAction | undefined {
   const action: RuleAction = {
     type: 'respond',
     renderer: form.actionType || 'static',
@@ -218,13 +223,11 @@ function buildAction(form: RuleFormState, errors: RuleFormError[]): RuleAction |
   }
 
   if (action.renderer === 'static') {
+    const response = buildResponsePayload(protocolSpec, form.responsePayload, form.responseFieldDrafts)
+    appendResponseIssues(response.issues, errors, 'responsePayload')
     action.response = {
-      payload: parseJSON<Record<string, unknown>>(form.bodyJson || '{}', {
-        section: 'action',
-        field: 'bodyJson',
-        label: 'Response Payload JSON',
-        errors,
-      }),
+      protocol: form.protocol || protocolSpec?.name,
+      payload: response.payload,
     }
   }
   if (action.renderer === 'template') {
@@ -241,7 +244,7 @@ function buildAction(form: RuleFormState, errors: RuleFormError[]): RuleAction |
   }
   if (action.renderer === 'sequence') {
     action.sequence_strategy = form.sequenceStrategy || 'last'
-    action.sequence = buildSequence(form.sequenceSteps, errors)
+    action.sequence = buildSequence(form.sequenceSteps, errors, protocolSpec, form.protocol)
   }
   if (action.renderer === 'webhook') {
     if (!form.webhookUrl.trim()) {
@@ -270,22 +273,39 @@ function buildAction(form: RuleFormState, errors: RuleFormError[]): RuleAction |
   return errors.some((error) => error.section === 'action') ? undefined : action
 }
 
-function buildSequence(steps: RuleSequenceStepForm[], errors: RuleFormError[]): SequenceStep[] {
+function buildSequence(
+  steps: RuleSequenceStepForm[],
+  errors: RuleFormError[],
+  protocolSpec?: ProtocolSpec,
+  protocol?: string
+): SequenceStep[] {
   if (!steps.length) {
     errors.push({ section: 'action', field: 'sequenceSteps', message: 'At least one sequence step is required' })
     return []
   }
   return steps.map((step, index) => {
+    const response = buildResponsePayload(protocolSpec, step.responsePayload, step.responseFieldDrafts)
+    appendResponseIssues(response.issues, errors, `sequenceSteps.${index}.responsePayload`)
     return {
       response: {
-        payload: parseJSON<Record<string, unknown>>(step.bodyJson || '{}', {
-          section: 'action',
-          field: `sequenceSteps.${index}.bodyJson`,
-          label: `Step ${index + 1} Response Payload JSON`,
-          errors,
-        }),
+        protocol: protocol || protocolSpec?.name,
+        payload: response.payload,
       },
     }
+  })
+}
+
+function appendResponseIssues(
+  issues: Array<{ field: string; message: string }>,
+  errors: RuleFormError[],
+  prefix: string
+) {
+  issues.forEach((issue) => {
+    errors.push({
+      section: 'action',
+      field: `${prefix}.${issue.field}`,
+      message: issue.message,
+    })
   })
 }
 
@@ -375,31 +395,31 @@ function conditionModeFromRule(condition: Condition): RuleConditionMode {
   return 'tree'
 }
 
-function stepsToForm(steps: SequenceStep[]): RuleSequenceStepForm[] {
+function stepsToForm(steps: SequenceStep[], protocolSpec?: ProtocolSpec): RuleSequenceStepForm[] {
   return steps.map((step, index) => ({
     key: `step-${index + 1}`,
-    status: Number(step.response?.payload?.status || 200),
-    headersJson: formatJSON(step.response?.payload?.headers || {}),
-    bodyJson: formatJSON(step.response?.payload || defaultResponsePayload('http')),
+    responsePayload: clone(step.response?.payload || defaultResponsePayload(protocolSpec)),
+    responseFieldDrafts: responseFieldDraftsFromPayload(
+      protocolSpec,
+      clone(step.response?.payload || defaultResponsePayload(protocolSpec))
+    ),
   }))
 }
 
-function defaultSequence(): SequenceStep[] {
+function defaultSequence(protocolSpec?: ProtocolSpec): SequenceStep[] {
+  const first = defaultResponsePayload(protocolSpec)
+  const second = defaultResponsePayload(protocolSpec)
   return [
     {
       response: {
-        payload: {
-          status: 202,
-          body: { state: 'pending' },
-        },
+        protocol: protocolSpec?.name,
+        payload: first,
       },
     },
     {
       response: {
-        payload: {
-          status: 200,
-          body: { state: 'done' },
-        },
+        protocol: protocolSpec?.name,
+        payload: second,
       },
     },
   ]
@@ -489,13 +509,15 @@ function actionFromFormUnsafe(form: RuleFormState): RuleAction {
     type: 'respond',
     renderer: form.actionType,
   }
-  if (action.renderer === 'static') action.response = { payload: JSON.parse(form.bodyJson || '{}') }
+  if (action.renderer === 'static') {
+    action.response = { protocol: form.protocol || undefined, payload: clone(form.responsePayload) }
+  }
   if (action.renderer === 'template') action.response_template = form.bodyTemplate
   if (action.renderer === 'cel') action.response_expression = form.bodyExpression
   if (action.renderer === 'sequence') {
     action.sequence_strategy = form.sequenceStrategy
     action.sequence = form.sequenceSteps.map((step) => ({
-      response: { payload: JSON.parse(step.bodyJson || '{}') },
+      response: { protocol: form.protocol || undefined, payload: clone(step.responsePayload) },
     }))
   }
   if (action.renderer === 'webhook') {
@@ -507,20 +529,6 @@ function actionFromFormUnsafe(form: RuleFormState): RuleAction {
     }
   }
   return action
-}
-
-function defaultResponsePayload(protocol = 'http'): Record<string, unknown> {
-  if (protocol === 'spex') {
-    return { code: 0, resp: '{}' }
-  }
-  if (protocol === 'cache') {
-    return { hit: true, value: null }
-  }
-  return {
-    status: 200,
-    headers: { 'content-type': ['application/json'] },
-    body: { message: 'hello mockserver' },
-  }
 }
 
 function parseJSON<T>(

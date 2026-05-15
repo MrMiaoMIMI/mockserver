@@ -88,7 +88,8 @@ export interface NamespaceConfig {
 
 export interface NamespaceFallbackForm {
   type: NamespaceFallbackType
-  responsePayload: string
+  responsePayload: Record<string, unknown>
+  responseFieldDrafts: Record<string, string>
   forwardTimeoutMs: number
 }
 
@@ -208,6 +209,11 @@ export interface ProtocolFieldSpec {
   type: ProtocolFieldType
   dynamic_path?: boolean
   operators?: string[]
+  required?: boolean
+  default?: unknown
+  min?: number
+  max?: number
+  format?: string
 }
 
 export interface ProtocolSelectorSpec {
@@ -221,7 +227,7 @@ export interface ProtocolSpec {
   fields: ProtocolFieldSpec[]
   selectors?: ProtocolSelectorSpec[]
   response?: {
-    fields?: Array<ProtocolFieldSpec & { required?: boolean; default?: unknown; format?: string }>
+    fields?: ProtocolFieldSpec[]
     defaults?: Record<string, unknown>
   }
   actions?: Array<{

@@ -7,7 +7,7 @@
       </div>
       <div class="editor-actions">
         <slot name="actions" />
-        <el-button size="small" :icon="MagicStick" :disabled="readonly" @click="formatJson">
+        <el-button v-if="showFormat" size="small" :icon="MagicStick" :disabled="readonly" @click="formatJson">
           Format
         </el-button>
         <el-button size="small" :icon="CopyDocument" @click="copyJson">Copy</el-button>
@@ -72,11 +72,13 @@ const props = withDefaults(
     readonly?: boolean
     minHeight?: number
     showExpand?: boolean
+    showFormat?: boolean
   }>(),
   {
     placeholder: 'JSON',
     minHeight: 180,
     showExpand: true,
+    showFormat: true,
   }
 )
 
@@ -149,6 +151,8 @@ watch(
 
 <style lang="scss" scoped>
 .json-editor {
+  width: 100%;
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;

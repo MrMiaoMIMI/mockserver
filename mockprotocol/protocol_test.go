@@ -95,3 +95,34 @@ func TestRegisteredSpecsExposeEffectiveOperators(t *testing.T) {
 		t.Fatalf("spex cmd selector should allow prefix")
 	}
 }
+
+func TestSPEXResponseSpecUsesDirectJSONResp(t *testing.T) {
+	spec, ok := DefaultRegistry().Get("spex")
+	if !ok {
+		t.Fatalf("expected spex spec")
+	}
+	if got := spec.Response.Defaults["resp"]; got == nil {
+		t.Fatalf("expected resp default")
+	} else if _, ok := got.(map[string]any); !ok {
+		t.Fatalf("expected resp default to be JSON object, got %#v", got)
+	}
+	var respField ResponseFieldSpec
+	for _, field := range spec.Response.Fields {
+		if field.Path == "resp" {
+			respField = field
+			break
+		}
+	}
+	if respField.Path == "" {
+		t.Fatalf("expected resp field")
+	}
+	if respField.Type != FieldTypeJSON || respField.Format != "" {
+		t.Fatalf("unexpected resp field: %+v", respField)
+	}
+	if _, err := spec.NormalizeResponsePayload(map[string]any{
+		"code": 0,
+		"resp": map[string]any{"order_status": "mocked"},
+	}); err != nil {
+		t.Fatalf("NormalizeResponsePayload() error = %v", err)
+	}
+}
