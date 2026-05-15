@@ -10,5 +10,6 @@
 - 决策包含2类：返回Response 和 告知 mockinject 转发原始请求。
 - 转发原始请求的具体实现由 mockinject 结合业务技术栈负责，例如 HTTP client、SPEX/gRPC client、cache client 或 MQ client。
 - Event 使用通用 `request map[string]any`，字段由 mockserver 代码注册的 `ProtocolSpec` 约束；mocksdk 通过代码 normalizer 将具体协议调用转换成 Event，不从数据库动态读取 ProtocolSpec 来转换。
+- ResponseDecision 使用 `json.RawMessage` 保存完整 `payload`，协议 adapter 提供类型化解析函数，例如 `httpadapter.PayloadFromDecision`、`spexadapter.PayloadFromDecision`、`cacheadapter.PayloadFromDecision`。SPEX 的 `resp` 会解析成 raw JSON。mockinject 不应直接读取 payload 内部字段。
 - 第一版提供 HTTP normalizer 和 cache event builder。HTTP 提供 `request.method/path/headers/query/body/raw_body` 等字段；cache 提供 `request.operation/key/ttl_ms/value`。
 - 支持通过环境变量设置特殊信息，并且优先级最高，例如：namespace_id、mockserver_host。

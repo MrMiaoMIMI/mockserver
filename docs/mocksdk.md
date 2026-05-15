@@ -13,7 +13,7 @@ It supports Go 1.17+ and uses only the Go standard library so injected business 
 ## Tool Chain Roles
 
 - `mockserver` manages namespaces, draft rulesets, published snapshots, matching, fallback policy, and the SDK decision endpoint.
-- `mocksdk` converts protocol-specific calls into MockServer events, calls the SDK decision endpoint, and exposes typed decisions. It does not execute upstream forwarding.
+- `mocksdk` converts protocol-specific calls into MockServer events, calls the SDK decision endpoint, and exposes typed decisions plus protocol payload decoders. It does not execute upstream forwarding.
 - `mockinject` is external to this repository. It injects code before business compilation, calls `mocksdk`, and owns protocol-specific execution such as forwarding the original request.
 
 ## Environment Variables
@@ -61,7 +61,7 @@ Important fields:
 - `trace.fallback_reason`: `ruleset_miss` or `rule_miss` for fallback responses.
 - `protocol`: selected protocol for this decision.
 - `response.protocol`: protocol of the response payload.
-- `response.payload`: protocol-native response payload. HTTP adapters use `status`, `headers`, and `body`; SPEX adapters use `code` and `resp`.
+- `response.payload`: protocol-native response payload. The SDK stores it as one raw JSON payload and protocol adapters decode it into typed payloads. HTTP adapters decode `status`, `headers`, and `body`; SPEX adapters decode `code` and raw JSON `resp`; cache adapters decode `hit` and `value`.
 - `meta.trace_id`: trace ID propagated from the original request event.
 
 ### Forward Decision
@@ -105,6 +105,26 @@ case mocksdk.DecisionKindForward:
 default:
     return fmt.Errorf("unsupported mock decision kind %q", decision.Kind)
 }
+```
+
+If mockinject needs the decoded response payload instead of directly applying
+it, use the protocol adapter helper:
+
+```go
+payload, err := httpadapter.PayloadFromDecision(decision)
+if err != nil {
+    return err
+}
+status := payload.Status
+headers := payload.Headers
+body := payload.Body
+```
+
+The same pattern is available for SPEX and cache:
+
+```go
+spexPayload, err := spexadapter.PayloadFromDecision(decision)
+cachePayload, err := cacheadapter.PayloadFromDecision(decision)
 ```
 
 ## Event Projection
