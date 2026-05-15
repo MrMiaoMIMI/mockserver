@@ -93,11 +93,10 @@ func (v *ruleSetView) ListDrafts(ctx context.Context) (response.ListRuleSetsResp
 
 func (v *namespaceView) UpsertNamespace(ctx context.Context, req request.UpsertNamespaceRequest) (response.NamespaceResponse, error) {
 	namespace, err := v.service.UpsertNamespace(ctx, bo.Namespace{
-		ID:                req.ID,
-		Name:              req.Name,
-		Description:       req.Description,
-		RulesetMissAction: req.RulesetMissAction,
-		RuleMissAction:    req.RuleMissAction,
+		ID:          req.ID,
+		Name:        req.Name,
+		Description: req.Description,
+		Policies:    req.Policies,
 	})
 	if err != nil {
 		return response.NamespaceResponse{}, err
@@ -265,11 +264,10 @@ func toRuleSetResponse(ruleSet bo.RuleSet) response.RuleSetResponse {
 
 func toNamespaceResponse(namespace bo.Namespace) response.NamespaceResponse {
 	return response.NamespaceResponse{
-		ID:                namespace.ID,
-		Name:              namespace.Name,
-		Description:       namespace.Description,
-		RulesetMissAction: namespace.RulesetMissAction,
-		RuleMissAction:    namespace.RuleMissAction,
+		ID:          namespace.ID,
+		Name:        namespace.Name,
+		Description: namespace.Description,
+		Policies:    namespace.Policies,
 	}
 }
 

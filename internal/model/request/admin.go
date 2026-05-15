@@ -13,11 +13,10 @@ type UpsertRuleSetRequest struct {
 }
 
 type UpsertNamespaceRequest struct {
-	ID                string                     `json:"id"`
-	Name              string                     `json:"name,omitempty"`
-	Description       string                     `json:"description,omitempty"`
-	RulesetMissAction bo.NamespaceFallbackAction `json:"ruleset_miss_action"`
-	RuleMissAction    bo.NamespaceFallbackAction `json:"rule_miss_action"`
+	ID          string                        `json:"id"`
+	Name        string                        `json:"name,omitempty"`
+	Description string                        `json:"description,omitempty"`
+	Policies    map[string]bo.NamespacePolicy `json:"policies"`
 }
 
 type SimulateRuleSetRequest struct {

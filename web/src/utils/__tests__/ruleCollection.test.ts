@@ -27,7 +27,7 @@ const ruleSet: RuleSet = {
       enabled: false,
       priority: 20,
       when: { field: 'request.path', op: 'prefix', value: '/api/fallback' },
-      action: { type: 'template_response', status: 202, body_template: '{{ request.path }}' },
+      action: { type: 'respond', renderer: 'template', response_template: '{"status":202,"body":"{{ request.path }}"}' },
     },
     {
       id: 'primary-rule',
@@ -40,7 +40,7 @@ const ruleSet: RuleSet = {
           { field: 'request.path', op: 'eq', value: '/api/checkout' },
         ],
       },
-      action: { type: 'static_response', status: 200, body: { ok: true } },
+      action: { type: 'respond', renderer: 'static', response: { payload: { status: 200, body: { ok: true } } } },
     },
   ],
 }
@@ -59,7 +59,7 @@ describe('rule collection view helpers', () => {
     const filters = defaultRuleFilters()
     filters.query = 'fallback'
     filters.enabled = 'disabled'
-    filters.actionType = 'template_response'
+    filters.actionType = 'template'
     filters.status = 'invalid'
 
     const rows = buildRuleRows(ruleSet, filters, '', {

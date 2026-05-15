@@ -34,7 +34,7 @@ type CompiledRule struct {
 	Specificity       int
 	Template          *template.Template
 	ConditionPrograms map[string]cel.Program
-	BodyProgram       cel.Program
+	ResponseProgram   cel.Program
 	ExactMethod       string
 	ExactHost         string
 	ExactPath         string
@@ -116,8 +116,8 @@ func CompileRuleSet(ruleSet bo.RuleSet) (CompiledRuleSet, error) {
 			ExactHost:         strings.ToLower(exactHost),
 			ExactPath:         exactPath,
 		}
-		if rule.Action.Type == eo.ActionTypeTemplateResponse && rule.Action.BodyTemplate != "" {
-			tpl, err := newRuleTemplate(rule.ID, rule.Action.BodyTemplate)
+		if actionRenderer(rule.Action) == eo.ActionRendererTemplate && rule.Action.ResponseTemplate != "" {
+			tpl, err := newRuleTemplate(rule.ID, rule.Action.ResponseTemplate)
 			if err != nil {
 				return CompiledRuleSet{}, fmt.Errorf("parse template for rule %s: %w", rule.ID, err)
 			}
@@ -130,12 +130,12 @@ func CompileRuleSet(ruleSet bo.RuleSet) (CompiledRuleSet, error) {
 			}
 			entry.ConditionPrograms[expression] = program
 		}
-		if rule.Action.Type == eo.ActionTypeCELResponse && strings.TrimSpace(rule.Action.BodyExpression) != "" {
-			program, err := compileCELBody(rule.Action.BodyExpression)
+		if actionRenderer(rule.Action) == eo.ActionRendererCEL && strings.TrimSpace(rule.Action.ResponseExpression) != "" {
+			program, err := compileCELBody(rule.Action.ResponseExpression)
 			if err != nil {
-				return CompiledRuleSet{}, fmt.Errorf("compile CEL body for rule %s: %w", rule.ID, err)
+				return CompiledRuleSet{}, fmt.Errorf("compile CEL response for rule %s: %w", rule.ID, err)
 			}
-			entry.BodyProgram = program
+			entry.ResponseProgram = program
 		}
 		compiled.Compiled = append(compiled.Compiled, entry)
 	}
@@ -301,45 +301,7 @@ func validateRule(protocol string, rule bo.Rule, path string, issues *[]bo.Valid
 	if strings.TrimSpace(rule.Name) == "" {
 		*issues = append(*issues, bo.ValidationIssue{Path: path + ".name", Message: "rule name is required"})
 	}
-	if rule.Action.Type == "" {
-		*issues = append(*issues, bo.ValidationIssue{Path: path + ".action.type", Message: "action type is required"})
-	}
-	if requiresTopLevelStatus(rule.Action.Type) && rule.Action.Status == 0 {
-		*issues = append(*issues, bo.ValidationIssue{Path: path + ".action.status", Message: "action status is required"})
-	}
-	if rule.Action.Status != 0 && (rule.Action.Status < 100 || rule.Action.Status > 599) {
-		*issues = append(*issues, bo.ValidationIssue{Path: path + ".action.status", Message: "status must be between 100 and 599"})
-	}
-	validateHeaders(rule.Action.Headers, path+".action.headers", issues)
-	if rule.Action.Type != eo.ActionTypeStaticResponse &&
-		rule.Action.Type != eo.ActionTypeTemplateResponse &&
-		rule.Action.Type != eo.ActionTypeCELResponse &&
-		rule.Action.Type != eo.ActionTypeSequenceResponse &&
-		rule.Action.Type != eo.ActionTypeWebhookResponse {
-		*issues = append(*issues, bo.ValidationIssue{Path: path + ".action.type", Message: "unsupported action type"})
-	}
-	if rule.Action.Type == eo.ActionTypeTemplateResponse && strings.TrimSpace(rule.Action.BodyTemplate) == "" {
-		*issues = append(*issues, bo.ValidationIssue{Path: path + ".action.body_template", Message: "body_template is required for template response"})
-	}
-	if rule.Action.Type == eo.ActionTypeTemplateResponse && strings.TrimSpace(rule.Action.BodyTemplate) != "" {
-		if _, err := newRuleTemplate(rule.ID, rule.Action.BodyTemplate); err != nil {
-			*issues = append(*issues, bo.ValidationIssue{Path: path + ".action.body_template", Message: err.Error()})
-		}
-	}
-	if rule.Action.Type == eo.ActionTypeCELResponse && strings.TrimSpace(rule.Action.BodyExpression) == "" {
-		*issues = append(*issues, bo.ValidationIssue{Path: path + ".action.body_expression", Message: "body_expression is required for cel response"})
-	}
-	if rule.Action.Type == eo.ActionTypeCELResponse && strings.TrimSpace(rule.Action.BodyExpression) != "" {
-		if _, err := compileCELBody(rule.Action.BodyExpression); err != nil {
-			*issues = append(*issues, bo.ValidationIssue{Path: path + ".action.body_expression", Message: err.Error()})
-		}
-	}
-	if rule.Action.Type == eo.ActionTypeSequenceResponse {
-		validateSequenceAction(rule.Action, path+".action", issues)
-	}
-	if rule.Action.Type == eo.ActionTypeWebhookResponse {
-		validateWebhookAction(rule.Action, path+".action", issues)
-	}
+	validateRuleAction(protocol, rule, path+".action", issues)
 	validateCondition(protocol, rule.When, path+".when", issues)
 }
 
@@ -354,12 +316,6 @@ func isValidRuleCode(id string) bool {
 		return false
 	}
 	return true
-}
-
-func requiresTopLevelStatus(actionType string) bool {
-	return actionType == eo.ActionTypeStaticResponse ||
-		actionType == eo.ActionTypeTemplateResponse ||
-		actionType == eo.ActionTypeCELResponse
 }
 
 type stringConstraint struct {
@@ -544,7 +500,64 @@ func formatConstraint(constraint stringConstraint) string {
 	return fmt.Sprintf("%s %s %q", constraint.Field, constraint.Op, value)
 }
 
-func validateSequenceAction(action bo.Action, path string, issues *[]bo.ValidationIssue) {
+func validateRuleAction(protocol string, rule bo.Rule, path string, issues *[]bo.ValidationIssue) {
+	action := rule.Action
+	if strings.TrimSpace(action.Type) == "" {
+		*issues = append(*issues, bo.ValidationIssue{Path: path + ".type", Message: "action type is required"})
+		return
+	}
+	if action.Type != eo.ActionTypeRespond {
+		*issues = append(*issues, bo.ValidationIssue{Path: path + ".type", Message: "rule action type must be respond"})
+		return
+	}
+	renderer := actionRenderer(action)
+	switch renderer {
+	case eo.ActionRendererStatic:
+		validateProtocolResponse(protocol, action.Response, path+".response", issues)
+	case eo.ActionRendererTemplate:
+		if strings.TrimSpace(action.ResponseTemplate) == "" {
+			*issues = append(*issues, bo.ValidationIssue{Path: path + ".response_template", Message: "response_template is required for template renderer"})
+		} else if _, err := newRuleTemplate(rule.ID, action.ResponseTemplate); err != nil {
+			*issues = append(*issues, bo.ValidationIssue{Path: path + ".response_template", Message: err.Error()})
+		}
+	case eo.ActionRendererCEL:
+		if strings.TrimSpace(action.ResponseExpression) == "" {
+			*issues = append(*issues, bo.ValidationIssue{Path: path + ".response_expression", Message: "response_expression is required for cel renderer"})
+		} else if _, err := compileCELBody(action.ResponseExpression); err != nil {
+			*issues = append(*issues, bo.ValidationIssue{Path: path + ".response_expression", Message: err.Error()})
+		}
+	case eo.ActionRendererSequence:
+		validateSequenceAction(protocol, action, path, issues)
+	case eo.ActionRendererWebhook:
+		validateWebhookAction(action, path, issues)
+	default:
+		*issues = append(*issues, bo.ValidationIssue{Path: path + ".renderer", Message: "unsupported response renderer"})
+	}
+}
+
+func validateProtocolResponse(protocol string, response *bo.ProtocolResponse, path string, issues *[]bo.ValidationIssue) {
+	if response == nil {
+		if _, err := mockprotocol.NormalizeResponsePayload(protocol, nil); err != nil {
+			*issues = append(*issues, bo.ValidationIssue{Path: path + ".payload", Message: err.Error()})
+		}
+		return
+	}
+	responseProtocol := strings.TrimSpace(response.Protocol)
+	if responseProtocol != "" && !strings.EqualFold(responseProtocol, protocol) {
+		*issues = append(*issues, bo.ValidationIssue{Path: path + ".protocol", Message: "response protocol must match ruleset protocol"})
+		return
+	}
+	payload, err := mockprotocol.NormalizeResponsePayload(protocol, response.Payload)
+	if err != nil {
+		*issues = append(*issues, bo.ValidationIssue{Path: path + ".payload", Message: err.Error()})
+		return
+	}
+	if err := validateHTTPHeadersForProtocolPayload(protocol, payload, path+".payload", issues); err != nil {
+		*issues = append(*issues, bo.ValidationIssue{Path: path + ".payload", Message: err.Error()})
+	}
+}
+
+func validateSequenceAction(protocol string, action bo.Action, path string, issues *[]bo.ValidationIssue) {
 	if len(action.Sequence) == 0 {
 		*issues = append(*issues, bo.ValidationIssue{Path: path + ".sequence", Message: "sequence must contain at least one step"})
 		return
@@ -556,10 +569,8 @@ func validateSequenceAction(action bo.Action, path string, issues *[]bo.Validati
 	}
 	for i, step := range action.Sequence {
 		stepPath := fmt.Sprintf("%s.sequence[%d]", path, i)
-		if step.Status < 100 || step.Status > 599 {
-			*issues = append(*issues, bo.ValidationIssue{Path: stepPath + ".status", Message: "status must be between 100 and 599"})
-		}
-		validateHeaders(step.Headers, stepPath+".headers", issues)
+		response := step.Response
+		validateProtocolResponse(protocol, &response, stepPath+".response", issues)
 	}
 }
 
@@ -594,6 +605,70 @@ func validateHeaders(headers map[string][]string, path string, issues *[]bo.Vali
 			}
 		}
 	}
+}
+
+func validateHTTPHeadersForProtocolPayload(protocol string, payload map[string]any, path string, issues *[]bo.ValidationIssue) error {
+	if !strings.EqualFold(protocol, eo.ProtocolHTTP) {
+		return nil
+	}
+	raw, ok := payload["headers"]
+	if !ok || raw == nil {
+		return nil
+	}
+	headers, err := headersFromAny(raw)
+	if err != nil {
+		return fmt.Errorf("headers must be an object whose values are strings or string arrays")
+	}
+	validateHeaders(headers, path+".headers", issues)
+	return nil
+}
+
+func headersFromAny(raw any) (map[string][]string, error) {
+	switch typed := raw.(type) {
+	case nil:
+		return nil, nil
+	case map[string][]string:
+		return typed, nil
+	case map[string]string:
+		headers := make(map[string][]string, len(typed))
+		for key, value := range typed {
+			headers[key] = []string{value}
+		}
+		return headers, nil
+	case map[string]any:
+		headers := make(map[string][]string, len(typed))
+		for key, value := range typed {
+			switch values := value.(type) {
+			case string:
+				headers[key] = []string{values}
+			case []string:
+				headers[key] = append([]string(nil), values...)
+			case []any:
+				items := make([]string, 0, len(values))
+				for _, item := range values {
+					text, ok := item.(string)
+					if !ok {
+						return nil, fmt.Errorf("header %s contains non-string value", key)
+					}
+					items = append(items, text)
+				}
+				headers[key] = items
+			default:
+				return nil, fmt.Errorf("header %s has unsupported value type", key)
+			}
+		}
+		return headers, nil
+	default:
+		return nil, fmt.Errorf("headers has unsupported type")
+	}
+}
+
+func actionRenderer(action bo.Action) string {
+	renderer := strings.ToLower(strings.TrimSpace(action.Renderer))
+	if renderer == "" && action.Type == eo.ActionTypeRespond {
+		return eo.ActionRendererStatic
+	}
+	return renderer
 }
 
 func isValidHeaderName(value string) bool {

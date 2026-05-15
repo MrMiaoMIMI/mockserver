@@ -215,31 +215,31 @@
             </template>
 
             <el-form-item
-              v-if="form.actionType === 'static_response'"
-              label="Body JSON"
+              v-if="form.actionType === 'static'"
+              label="Response Payload JSON"
               :error="fieldError('bodyJson')"
             >
               <el-input v-model="form.bodyJson" type="textarea" :rows="7" />
             </el-form-item>
 
             <el-form-item
-              v-if="form.actionType === 'template_response'"
-              label="Body Template"
+              v-if="form.actionType === 'template'"
+              label="Response Payload Template"
               :error="fieldError('bodyTemplate')"
             >
               <el-input v-model="form.bodyTemplate" type="textarea" :rows="7" />
             </el-form-item>
 
             <el-form-item
-              v-if="form.actionType === 'cel_response'"
-              label="Body Expression"
+              v-if="form.actionType === 'cel'"
+              label="Response Payload Expression"
               :error="fieldError('bodyExpression')"
             >
               <el-input v-model="form.bodyExpression" type="textarea" :rows="7" />
             </el-form-item>
           </el-form>
 
-          <div v-if="form.actionType === 'sequence_response'" class="sequence-editor">
+          <div v-if="form.actionType === 'sequence'" class="sequence-editor">
             <div class="sequence-toolbar">
               <el-select v-model="form.sequenceStrategy" size="small">
                 <el-option label="loop" value="loop" />
@@ -285,24 +285,7 @@
                 </div>
               </header>
               <el-form label-position="top" class="editor-form">
-                <el-form-item
-                  label="Status"
-                  :error="fieldError(`sequenceSteps.${index}.status`)"
-                >
-                  <el-input-number
-                    v-model="step.status"
-                    :min="100"
-                    :max="599"
-                    controls-position="right"
-                  />
-                </el-form-item>
-                <el-form-item
-                  label="Headers JSON"
-                  :error="fieldError(`sequenceSteps.${index}.headersJson`)"
-                >
-                  <el-input v-model="step.headersJson" type="textarea" :rows="3" />
-                </el-form-item>
-                <el-form-item label="Body JSON" :error="fieldError(`sequenceSteps.${index}.bodyJson`)">
+                <el-form-item label="Response Payload JSON" :error="fieldError(`sequenceSteps.${index}.bodyJson`)">
                   <el-input v-model="step.bodyJson" type="textarea" :rows="5" />
                 </el-form-item>
               </el-form>
@@ -310,7 +293,7 @@
           </div>
 
           <el-form
-            v-if="form.actionType === 'webhook_response'"
+            v-if="form.actionType === 'webhook'"
             label-position="top"
             class="editor-form"
           >
@@ -453,17 +436,13 @@ const sections: Array<{ name: EditorSection; label: string }> = [
 ]
 
 const requiresStatus = computed(() => {
-  return (
-    form.actionType === 'static_response' ||
-    form.actionType === 'template_response' ||
-    form.actionType === 'cel_response'
-  )
+  return false
 })
 const actionTitle = computed(() => {
-  if (form.actionType === 'sequence_response') return 'Ordered response sequence'
-  if (form.actionType === 'webhook_response') return 'Forward to external webhook'
-  if (form.actionType === 'template_response') return 'Template response body'
-  if (form.actionType === 'cel_response') return 'CEL-generated response'
+  if (form.actionType === 'sequence') return 'Ordered response sequence'
+  if (form.actionType === 'webhook') return 'Forward to external webhook'
+  if (form.actionType === 'template') return 'Template response payload'
+  if (form.actionType === 'cel') return 'CEL-generated response'
   return 'Static mock response'
 })
 const existingRuleIds = computed(() => props.ruleSet?.rules.map((rule) => rule.id) || [])

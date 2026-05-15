@@ -1,28 +1,43 @@
 <template>
   <PageContainer title="Namespaces" eyebrow="fallback">
     <template #meta>
-      <span class="meta-pill">{{ metrics.shown }}/{{ metrics.total }} shown</span>
+      <span class="meta-pill">{{ metrics.shown }}/{{ metrics.total }} namespaces</span>
       <span class="meta-pill">{{ metrics.used }} used</span>
       <span class="meta-pill">{{ metrics.forward }} forward</span>
+      <span class="meta-pill">{{ metrics.response }} response</span>
     </template>
     <template #actions>
       <el-button :icon="Refresh" :loading="store.loading" @click="loadAll">Refresh</el-button>
       <el-button type="primary" :icon="Plus" @click="openCreateDialog">Create namespace</el-button>
     </template>
 
-    <div class="namespace-entry-page">
-      <section class="entry-toolbar panel-surface">
+    <div class="namespace-page">
+      <section class="namespace-toolbar panel-surface">
         <el-input
           v-model="filters.query"
           clearable
           :prefix-icon="Search"
-          placeholder="Search id, name, fallback, ruleset"
+          placeholder="Search namespace, protocol, fallback, ruleset"
         />
         <el-select v-model="filters.sort" placeholder="Sort">
           <el-option v-for="option in sortOptions" :key="option.value" :label="option.label" :value="option.value" />
         </el-select>
 
         <div class="filter-row">
+          <div class="filter-block">
+            <span>Protocol</span>
+            <div class="filter-group" aria-label="protocol filter">
+              <button
+                v-for="option in protocolFilterOptions"
+                :key="option.value"
+                type="button"
+                :class="{ active: filters.protocol === option.value }"
+                @click="filters.protocol = option.value"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+          </div>
           <div class="filter-block">
             <span>Usage</span>
             <div class="filter-group" aria-label="usage filter">
@@ -76,15 +91,17 @@
       </section>
 
       <el-empty v-if="!filteredRows.length && !store.loading" description="No namespaces match the current filters" />
-      <section v-else v-loading="store.loading" class="namespace-list panel-surface" aria-label="Namespace policies">
+      <section v-else v-loading="store.loading" class="namespace-list panel-surface" aria-label="Namespaces">
         <div class="namespace-list-header" aria-hidden="true">
           <span>Namespace</span>
+          <span>Protocols</span>
           <span>Usage</span>
           <span>Ruleset miss</span>
           <span>Rule miss</span>
           <span>Linked rulesets</span>
           <span>Actions</span>
         </div>
+
         <article v-for="row in filteredRows" :key="row.namespace.id" class="namespace-row">
           <div class="namespace-cell identity-cell">
             <div class="namespace-title">
@@ -94,6 +111,10 @@
             <p v-if="row.namespace.description" class="namespace-description">
               {{ row.namespace.description }}
             </p>
+          </div>
+
+          <div class="namespace-cell protocol-cell">
+            <span v-for="protocol in row.protocols" :key="protocol" class="protocol-chip">{{ protocol }}</span>
           </div>
 
           <div class="namespace-cell usage-cell">
@@ -108,12 +129,28 @@
             </div>
           </div>
 
-          <div class="namespace-cell fallback-cell">
-            <FallbackSummary :action="row.namespace.ruleset_miss_action" />
+          <div class="namespace-cell policy-cell">
+            <div class="policy-stack">
+              <div v-for="policy in visiblePolicies(row)" :key="`${policy.protocol}:ruleset`" class="policy-summary">
+                <span class="policy-protocol">{{ policy.protocol }}</span>
+                <FallbackSummary :action="policy.policy.ruleset_miss_action" />
+              </div>
+              <button v-if="hiddenPolicyCount(row)" type="button" class="more-policies" @click="openEditDialog(row.namespace)">
+                +{{ hiddenPolicyCount(row) }} protocols
+              </button>
+            </div>
           </div>
 
-          <div class="namespace-cell fallback-cell">
-            <FallbackSummary :action="row.namespace.rule_miss_action" />
+          <div class="namespace-cell policy-cell">
+            <div class="policy-stack">
+              <div v-for="policy in visiblePolicies(row)" :key="`${policy.protocol}:rule`" class="policy-summary">
+                <span class="policy-protocol">{{ policy.protocol }}</span>
+                <FallbackSummary :action="policy.policy.rule_miss_action" />
+              </div>
+              <button v-if="hiddenPolicyCount(row)" type="button" class="more-policies" @click="openEditDialog(row.namespace)">
+                +{{ hiddenPolicyCount(row) }} protocols
+              </button>
+            </div>
           </div>
 
           <div class="namespace-cell linked-cell">
@@ -122,16 +159,17 @@
                 v-for="ruleSet in visibleUsage(row)"
                 :key="ruleSet.id"
                 type="button"
-                :title="ruleSet.id"
+                :title="`${ruleSet.name} · ${ruleSet.protocol}`"
                 @click="goRuleset(ruleSet.id)"
               >
-                {{ ruleSet.name }}
+                <span>{{ ruleSet.name }}</span>
+                <code>{{ ruleSet.protocol }}</code>
               </button>
               <el-popover
                 v-if="hiddenUsageCount(row)"
                 trigger="click"
                 placement="bottom-start"
-                width="320"
+                width="340"
                 popper-class="namespace-ruleset-popover"
               >
                 <template #reference>
@@ -146,6 +184,7 @@
                     @click="goRuleset(ruleSet.id)"
                   >
                     <strong>{{ ruleSet.name }}</strong>
+                    <span>{{ ruleSet.protocol.toUpperCase() }}</span>
                     <code>{{ ruleSet.id }}</code>
                   </button>
                 </div>
@@ -155,7 +194,7 @@
           </div>
 
           <div class="namespace-cell action-cell">
-            <el-button :icon="EditPen" @click="openEditDialog(row.namespace)">Edit policy</el-button>
+            <el-button :icon="EditPen" @click="openEditDialog(row.namespace)">Manage</el-button>
           </div>
         </article>
       </section>
@@ -163,43 +202,79 @@
 
     <el-dialog
       v-model="dialogVisible"
-      :title="editingNamespace ? 'Edit namespace' : 'Create namespace'"
-      width="min(1040px, calc(100vw - 32px))"
+      :title="editingNamespace ? 'Manage namespace' : 'Create namespace'"
+      width="min(1120px, calc(100vw - 32px))"
       append-to-body
       destroy-on-close
     >
       <el-form label-position="top" class="namespace-form">
         <div class="dialog-grid">
-          <div class="dialog-main">
-            <section class="dialog-section">
-              <div v-if="editingNamespace" class="generated-id-row">
-                <span>Namespace ID</span>
-                <code>{{ form.id }}</code>
-              </div>
-              <div class="form-grid">
-                <el-form-item label="Name">
-                  <el-input v-model="form.name" placeholder="default" />
-                </el-form-item>
-                <el-form-item label="Description">
-                  <el-input v-model="form.description" placeholder="optional" />
-                </el-form-item>
-              </div>
-            </section>
-
-            <el-alert v-if="validationIssues.length" type="warning" :closable="false">
-              <ul>
-                <li v-for="issue in validationIssues" :key="issue">{{ issue }}</li>
-              </ul>
-            </el-alert>
-
-            <div class="fallback-grid">
-              <FallbackEditor v-model="form.rulesetMiss" title="Ruleset Miss" />
-              <FallbackEditor v-model="form.ruleMiss" title="Rule Miss" />
+          <section class="profile-section">
+            <header class="section-heading">
+              <strong>Profile</strong>
+              <span>Namespace-level fields shared by every protocol policy.</span>
+            </header>
+            <div v-if="editingNamespace" class="generated-id-row">
+              <span>Namespace ID</span>
+              <code>{{ form.id }}</code>
             </div>
-          </div>
+            <div class="form-grid">
+              <el-form-item label="Name">
+                <el-input v-model="form.name" placeholder="default" />
+              </el-form-item>
+              <el-form-item label="Description">
+                <el-input v-model="form.description" placeholder="optional" />
+              </el-form-item>
+            </div>
+          </section>
+
+          <section class="policy-section">
+            <header class="section-heading">
+              <strong>Protocol policies</strong>
+              <span>Fallback behavior is scoped per protocol under this namespace.</span>
+            </header>
+            <el-tabs v-model="form.activeProtocol" class="policy-tabs" type="card" @tab-change="onPolicyTabChange">
+              <el-tab-pane
+                v-for="option in protocolOptions"
+                :key="option.value"
+                :name="option.value"
+                :label="option.label"
+              />
+            </el-tabs>
+
+            <div class="policy-workspace">
+              <div class="policy-context">
+                <span class="protocol-chip">{{ form.activeProtocol }}</span>
+                <div>
+                  <strong>{{ activePolicyUsage.rulesetCount }}</strong>
+                  <span>rulesets</span>
+                  <strong>{{ activePolicyUsage.ruleCount }}</strong>
+                  <span>rules</span>
+                </div>
+              </div>
+
+              <el-alert v-if="validationIssues.length" type="warning" :closable="false">
+                <ul>
+                  <li v-for="issue in validationIssues" :key="issue">{{ issue }}</li>
+                </ul>
+              </el-alert>
+
+              <div class="fallback-grid">
+                <FallbackEditor
+                  v-model="activePolicy.rulesetMiss"
+                  title="Ruleset miss"
+                  :protocol="form.activeProtocol"
+                />
+                <FallbackEditor v-model="activePolicy.ruleMiss" title="Rule miss" :protocol="form.activeProtocol" />
+              </div>
+            </div>
+          </section>
 
           <aside class="policy-preview">
-            <span>Fallback preview</span>
+            <header class="section-heading">
+              <strong>Preview</strong>
+              <span>{{ form.activeProtocol.toUpperCase() }} fallback result</span>
+            </header>
             <div class="preview-row">
               <small>ruleset miss</small>
               <FallbackSummary :action="previewActions.rulesetMiss" />
@@ -208,24 +283,32 @@
               <small>rule miss</small>
               <FallbackSummary :action="previewActions.ruleMiss" />
             </div>
-            <p>
-              Forward keeps the original request flowing to the upstream service. Response returns the
-              configured mock response when no match is found.
-            </p>
+            <div class="linked-preview">
+              <small>linked rulesets</small>
+              <button
+                v-for="ruleSet in activePolicyUsage.rulesets"
+                :key="ruleSet.id"
+                type="button"
+                @click="goRuleset(ruleSet.id)"
+              >
+                {{ ruleSet.name }}
+              </button>
+              <code v-if="!activePolicyUsage.rulesets.length">none</code>
+            </div>
           </aside>
         </div>
       </el-form>
 
       <template #footer>
         <el-button @click="dialogVisible = false">Cancel</el-button>
-        <el-button type="primary" :loading="store.saving" @click="submit">Save</el-button>
+        <el-button type="primary" :loading="store.saving" @click="submit">Save namespace</el-button>
       </template>
     </el-dialog>
   </PageContainer>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { EditPen, Plus, Refresh, Search } from '@element-plus/icons-vue'
@@ -237,6 +320,7 @@ import type {
   NamespaceConfig,
   NamespaceFallbackAction,
   NamespaceFallbackForm,
+  NamespacePolicy,
 } from '@/types'
 import {
   buildNamespaceEntryMetrics,
@@ -245,6 +329,8 @@ import {
   type EntryTone,
   type NamespaceEntryRow,
   type NamespaceFallbackFilter,
+  type NamespacePolicySummary,
+  type NamespaceProtocolFilter,
   type NamespaceSortKey,
   type NamespaceUsageFilter,
 } from '@/utils/entryLists'
@@ -253,6 +339,11 @@ interface NamespaceForm {
   id: string
   name: string
   description: string
+  activeProtocol: string
+  policies: Record<string, NamespacePolicyForm>
+}
+
+interface NamespacePolicyForm {
   rulesetMiss: NamespaceFallbackForm
   ruleMiss: NamespaceFallbackForm
 }
@@ -263,7 +354,7 @@ const store = useMockserverStore()
 const fallbackOptions: Array<{ label: string; value: NamespaceFallbackFilter }> = [
   { label: 'All', value: 'all' },
   { label: 'Forward', value: 'forward' },
-  { label: 'Response', value: 'response' },
+  { label: 'Response', value: 'respond' },
 ]
 const usageOptions: Array<{ label: string; value: NamespaceUsageFilter }> = [
   { label: 'All', value: 'all' },
@@ -272,9 +363,9 @@ const usageOptions: Array<{ label: string; value: NamespaceUsageFilter }> = [
 ]
 const sortOptions: Array<{ label: string; value: NamespaceSortKey }> = [
   { label: 'ID', value: 'id' },
+  { label: 'Name', value: 'name' },
+  { label: 'Protocols', value: 'protocols' },
   { label: 'Usage', value: 'usage' },
-  { label: 'Ruleset miss', value: 'ruleset_miss' },
-  { label: 'Rule miss', value: 'rule_miss' },
 ]
 const filters = reactive(defaultNamespaceEntryFilters())
 const dialogVisible = ref(false)
@@ -284,8 +375,10 @@ const form = reactive<NamespaceForm>({
   id: '',
   name: '',
   description: '',
-  rulesetMiss: createFallbackForm(),
-  ruleMiss: createFallbackForm(),
+  activeProtocol: 'http',
+  policies: {
+    http: createPolicyForm('http'),
+  },
 })
 
 const allRows = computed(() => buildNamespaceEntryRows(store.namespaces, store.drafts, defaultNamespaceEntryFilters()))
@@ -293,19 +386,58 @@ const filteredRows = computed(() => buildNamespaceEntryRows(store.namespaces, st
 const metrics = computed(() => buildNamespaceEntryMetrics(allRows.value, filteredRows.value))
 const summaryCards = computed<Array<{ label: string; value: number; tone: EntryTone }>>(() => [
   { label: 'Namespaces', value: metrics.value.total, tone: 'neutral' },
+  { label: 'Shown', value: metrics.value.shown, tone: 'neutral' },
   { label: 'Used', value: metrics.value.used, tone: 'ok' },
   { label: 'Unused', value: metrics.value.unused, tone: 'neutral' },
   { label: 'Forward fallback', value: metrics.value.forward, tone: 'warn' },
   { label: 'Response fallback', value: metrics.value.response, tone: 'accent' },
 ])
+const protocolOptions = computed(() => {
+  const names = new Set(store.protocols.map((protocol) => protocol.name.toLowerCase()))
+  Object.keys(form.policies).forEach((protocol) => names.add(protocol.toLowerCase()))
+  if (!names.size) names.add('http')
+  return Array.from(names)
+    .filter(Boolean)
+    .sort()
+    .map((protocol) => ({
+      label: protocol.toUpperCase(),
+      value: protocol,
+    }))
+})
+const protocolFilterOptions = computed<Array<{ label: string; value: NamespaceProtocolFilter }>>(() => [
+  { label: 'All', value: 'all' },
+  ...Array.from(new Set(allRows.value.flatMap((row) => row.protocols)))
+    .sort()
+    .map((protocol) => ({
+      label: protocol.toUpperCase(),
+      value: protocol,
+    })),
+])
+const activePolicy = computed(() => ensurePolicyForm(form.activeProtocol))
+const activePolicyUsage = computed(() => {
+  const namespaceID = editingNamespace.value?.id || form.id
+  const protocol = activeProtocolKey()
+  const related = store.drafts.filter(
+    (ruleSet) => ruleSet.namespace === namespaceID && ruleSet.protocol.toLowerCase() === protocol
+  )
+  return {
+    rulesetCount: related.length,
+    ruleCount: related.reduce((count, ruleSet) => count + ruleSet.rules.length, 0),
+    rulesets: related.map((ruleSet) => ({
+      id: ruleSet.id,
+      name: ruleSet.name || ruleSet.id,
+      protocol: ruleSet.protocol.toLowerCase(),
+    })),
+  }
+})
 const validationIssues = computed(() => validateForm())
 const previewActions = computed(() => ({
-  rulesetMiss: fallbackFormToAction(form.rulesetMiss),
-  ruleMiss: fallbackFormToAction(form.ruleMiss),
+  rulesetMiss: fallbackFormToAction(activePolicy.value.rulesetMiss),
+  ruleMiss: fallbackFormToAction(activePolicy.value.ruleMiss),
 }))
 
 async function loadAll() {
-  await Promise.all([store.fetchNamespaces(), store.fetchDrafts()])
+  await Promise.all([store.fetchNamespaces(), store.fetchDrafts(), store.fetchProtocols()])
 }
 
 function openCreateDialog() {
@@ -314,9 +446,9 @@ function openCreateDialog() {
   dialogVisible.value = true
 }
 
-function openEditDialog(namespace: NamespaceConfig) {
+function openEditDialog(namespace: NamespaceConfig, protocol?: string) {
   editingNamespace.value = namespace
-  resetForm(namespace)
+  resetForm(namespace, protocol)
   dialogVisible.value = true
 }
 
@@ -329,36 +461,47 @@ async function submit() {
     id: editingNamespace.value ? form.id.trim().toLowerCase() : '',
     name: form.name.trim(),
     description: form.description.trim(),
-    ruleset_miss_action: fallbackFormToAction(form.rulesetMiss),
-    rule_miss_action: fallbackFormToAction(form.ruleMiss),
+    policies: policiesFromForm(),
   }
   await store.saveNamespace(payload)
   dialogVisible.value = false
   await loadAll()
 }
 
-function resetForm(namespace: NamespaceConfig | null) {
+function resetForm(namespace: NamespaceConfig | null, protocol?: string) {
   form.id = namespace?.id || ''
   form.name = namespace?.name || ''
   form.description = namespace?.description || ''
-  form.rulesetMiss = actionToFallbackForm(namespace?.ruleset_miss_action)
-  form.ruleMiss = actionToFallbackForm(namespace?.rule_miss_action)
+  form.policies = namespace ? policyFormsFromNamespace(namespace) : { http: createPolicyForm('http') }
+  form.activeProtocol = protocol || preferredProtocol(namespace)
+}
+
+function visiblePolicies(row: NamespaceEntryRow): NamespacePolicySummary[] {
+  return row.policies.slice(0, 3)
+}
+
+function hiddenPolicyCount(row: NamespaceEntryRow) {
+  return Math.max(row.policies.length - 3, 0)
 }
 
 function visibleUsage(row: NamespaceEntryRow) {
-  return row.usage.rulesets.slice(0, 2)
+  return row.usage.rulesets.slice(0, 3)
 }
 
 function hiddenUsage(row: NamespaceEntryRow) {
-  return row.usage.rulesets.slice(2)
+  return row.usage.rulesets.slice(3)
 }
 
 function hiddenUsageCount(row: NamespaceEntryRow) {
-  return Math.max(row.usage.rulesets.length - 2, 0)
+  return Math.max(row.usage.rulesets.length - 3, 0)
 }
 
 function goRuleset(rulesetId: string) {
   router.push(`/rulesets/${encodeURIComponent(rulesetId)}/rules`)
+}
+
+function onPolicyTabChange() {
+  ensurePolicyForm(form.activeProtocol)
 }
 
 function validateForm() {
@@ -369,18 +512,16 @@ function validateForm() {
   if (editingNamespace.value && !/^[a-zA-Z0-9_-]+$/.test(form.id.trim())) {
     issues.push('Namespace ID can only contain letters, numbers, underscores, and hyphens')
   }
-  validateFallbackForm(form.rulesetMiss, 'Ruleset miss', issues)
-  validateFallbackForm(form.ruleMiss, 'Rule miss', issues)
+  for (const [protocol, policy] of Object.entries(form.policies)) {
+    validateFallbackForm(policy.rulesetMiss, `${protocol} ruleset miss`, issues)
+    validateFallbackForm(policy.ruleMiss, `${protocol} rule miss`, issues)
+  }
   return issues
 }
 
 function validateFallbackForm(fallback: NamespaceFallbackForm, label: string, issues: string[]) {
-  if (fallback.type === 'response') {
-    if (fallback.responseStatus < 100 || fallback.responseStatus > 599) {
-      issues.push(`${label} response status must be between 100 and 599`)
-    }
-    if (!parseHeadersJSON(fallback.responseHeaders, `${label} Response headers`, issues)) return
-    parseBody(fallback.responseBody)
+  if (fallback.type === 'respond') {
+    parseResponsePayload(fallback.responsePayload, `${label} response payload`, issues)
     return
   }
   if (fallback.forwardTimeoutMs < 0 || fallback.forwardTimeoutMs > 30000) {
@@ -398,40 +539,98 @@ function fallbackFormToAction(fallback: NamespaceFallbackForm): NamespaceFallbac
     }
   }
   return {
-    type: 'response',
+    type: 'respond',
+    renderer: 'static',
     response: {
-      status: fallback.responseStatus,
-      headers: parseHeadersJSON(fallback.responseHeaders, 'headers', []) || undefined,
-      body: parseBody(fallback.responseBody),
+      payload: parseResponsePayload(fallback.responsePayload, 'response payload', []) || {},
     },
   }
 }
 
-function actionToFallbackForm(action?: NamespaceFallbackAction): NamespaceFallbackForm {
-  const fallback = createFallbackForm()
+function actionToFallbackForm(action: NamespaceFallbackAction | undefined, protocol = 'http'): NamespaceFallbackForm {
+  const fallback = createFallbackForm(protocol)
   if (!action) return fallback
   fallback.type = action.type
   if (action.type === 'forward') {
     fallback.forwardTimeoutMs = action.forward?.timeout_ms || 0
     return fallback
   }
-  fallback.responseStatus = action.response?.status || 404
-  fallback.responseHeaders = prettyJSON(action.response?.headers || {})
-  fallback.responseBody = prettyJSON(action.response?.body ?? { message: 'no mock matched' })
+  fallback.responsePayload = prettyJSON(action.response?.payload ?? defaultResponsePayload(protocol))
   return fallback
 }
 
-function createFallbackForm(): NamespaceFallbackForm {
+function createFallbackForm(protocol = 'http'): NamespaceFallbackForm {
   return {
     type: 'forward',
-    responseStatus: 404,
-    responseHeaders: '{}',
-    responseBody: '{\n  "message": "no mock matched"\n}',
+    responsePayload: prettyJSON(defaultResponsePayload(protocol)),
     forwardTimeoutMs: 5000,
   }
 }
 
-function parseHeadersJSON(value: string, label: string, issues: string[]) {
+function createPolicyForm(protocol = 'http'): NamespacePolicyForm {
+  return {
+    rulesetMiss: createFallbackForm(protocol),
+    ruleMiss: createFallbackForm(protocol),
+  }
+}
+
+function ensurePolicyForm(protocol: string): NamespacePolicyForm {
+  const key = protocol.trim().toLowerCase() || 'http'
+  if (!form.policies[key]) {
+    form.policies[key] = createPolicyForm(key)
+  }
+  return form.policies[key]
+}
+
+function policiesFromForm(): Record<string, NamespacePolicy> {
+  ensurePolicyForm(form.activeProtocol)
+  return Object.fromEntries(
+    Object.entries(form.policies)
+      .filter(([protocol]) => protocol.trim())
+      .map(([protocol, policy]) => [
+        protocol.trim().toLowerCase(),
+        {
+          ruleset_miss_action: fallbackFormToAction(policy.rulesetMiss),
+          rule_miss_action: fallbackFormToAction(policy.ruleMiss),
+        },
+      ])
+  )
+}
+
+function policyFormsFromNamespace(namespace: NamespaceConfig): Record<string, NamespacePolicyForm> {
+  const entries = Object.entries(namespace.policies || {})
+  if (!entries.length) return { http: createPolicyForm('http') }
+  return Object.fromEntries(
+    entries.map(([protocol, policy]) => [
+      protocol.toLowerCase(),
+      {
+        rulesetMiss: actionToFallbackForm(policy.ruleset_miss_action, protocol),
+        ruleMiss: actionToFallbackForm(policy.rule_miss_action, protocol),
+      },
+    ])
+  )
+}
+
+function preferredProtocol(namespace: NamespaceConfig | null) {
+  if (!namespace) return 'http'
+  return namespace.policies?.http ? 'http' : Object.keys(namespace.policies || {})[0]?.toLowerCase() || 'http'
+}
+
+function activeProtocolKey() {
+  return form.activeProtocol.trim().toLowerCase() || 'http'
+}
+
+function defaultResponsePayload(protocol = 'http') {
+  if (protocol === 'spex') return { code: 0, resp: '{}' }
+  if (protocol === 'cache') return { hit: true, value: null }
+  return {
+    status: 404,
+    headers: { 'content-type': ['application/json'] },
+    body: { message: 'no mock matched' },
+  }
+}
+
+function parseResponsePayload(value: string, label: string, issues: string[]) {
   const trimmed = value.trim()
   if (!trimmed) return {}
   try {
@@ -440,33 +639,10 @@ function parseHeadersJSON(value: string, label: string, issues: string[]) {
       issues.push(`${label} must be a JSON object`)
       return null
     }
-    const headers: Record<string, string[]> = {}
-    for (const [key, rawValue] of Object.entries(parsed)) {
-      if (typeof rawValue === 'string') {
-        headers[key] = [rawValue]
-        continue
-      }
-      if (Array.isArray(rawValue) && rawValue.every((item) => typeof item === 'string')) {
-        headers[key] = rawValue
-        continue
-      }
-      issues.push(`${label}.${key} must be string or string[]`)
-      return null
-    }
-    return headers
+    return parsed as Record<string, unknown>
   } catch {
     issues.push(`${label} is not valid JSON`)
     return null
-  }
-}
-
-function parseBody(value: string) {
-  const trimmed = value.trim()
-  if (!trimmed) return ''
-  try {
-    return JSON.parse(trimmed)
-  } catch {
-    return value
   }
 }
 
@@ -477,10 +653,19 @@ function prettyJSON(value: unknown) {
 }
 
 onMounted(loadAll)
+
+watch(
+  () => form.activeProtocol,
+  () => {
+    form.activeProtocol = activeProtocolKey()
+    ensurePolicyForm(form.activeProtocol)
+  },
+  { immediate: true }
+)
 </script>
 
 <style lang="scss" scoped>
-.namespace-entry-page {
+.namespace-page {
   height: 100%;
   min-height: 0;
   display: grid;
@@ -488,7 +673,7 @@ onMounted(loadAll)
   gap: var(--ms-space-3);
 }
 
-.entry-toolbar {
+.namespace-toolbar {
   display: grid;
   grid-template-columns: minmax(280px, 1fr) minmax(160px, 210px);
   gap: var(--ms-space-3);
@@ -586,10 +771,6 @@ onMounted(loadAll)
     color: var(--ms-amber-600);
   }
 
-  &.is-danger strong {
-    color: var(--ms-red-600);
-  }
-
   &.is-accent strong {
     color: var(--ms-blue-500);
   }
@@ -605,15 +786,16 @@ onMounted(loadAll)
 
 .namespace-list-header,
 .namespace-row {
-  min-width: 1080px;
+  min-width: 1220px;
   display: grid;
   grid-template-columns:
-    minmax(220px, 1.35fr)
-    minmax(148px, 0.78fr)
-    minmax(180px, 0.95fr)
-    minmax(180px, 0.95fr)
-    minmax(240px, 1.2fr)
-    116px;
+    minmax(210px, 1.12fr)
+    minmax(150px, 0.82fr)
+    minmax(128px, 0.7fr)
+    minmax(230px, 1.08fr)
+    minmax(230px, 1.08fr)
+    minmax(260px, 1.16fr)
+    104px;
   gap: var(--ms-space-3);
   align-items: center;
 }
@@ -633,7 +815,7 @@ onMounted(loadAll)
 }
 
 .namespace-row {
-  min-height: 92px;
+  min-height: 118px;
   padding: var(--ms-space-3) var(--ms-space-4);
   border-bottom: 1px solid var(--ms-border-light);
   transition:
@@ -649,13 +831,6 @@ onMounted(loadAll)
 .namespace-cell {
   min-width: 0;
   display: flex;
-  align-items: center;
-}
-
-.identity-cell,
-.usage-cell,
-.fallback-cell,
-.linked-cell {
   align-items: flex-start;
 }
 
@@ -692,6 +867,39 @@ onMounted(loadAll)
   }
 }
 
+.namespace-description {
+  display: -webkit-box;
+  overflow: hidden;
+  max-width: 100%;
+  margin: 0;
+  color: var(--ms-text-tertiary);
+  font-size: var(--ms-text-sm);
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.protocol-cell,
+.linked-rulesets {
+  flex-wrap: wrap;
+  gap: var(--ms-space-1);
+}
+
+.protocol-chip,
+.policy-protocol {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: var(--ms-radius-pill);
+  color: var(--ms-blue-500);
+  background: var(--ms-blue-50);
+  font-family: var(--ms-font-mono);
+  font-size: var(--ms-text-sm);
+  font-weight: var(--ms-font-semibold);
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
 .state-chip {
   display: inline-flex;
   align-items: center;
@@ -707,28 +915,6 @@ onMounted(loadAll)
     color: var(--ms-green-600);
     background: var(--ms-green-50);
   }
-
-  &.is-warn {
-    color: var(--ms-amber-600);
-    background: var(--ms-amber-50);
-  }
-
-  &.is-accent {
-    color: var(--ms-blue-500);
-    background: var(--ms-blue-50);
-  }
-}
-
-.namespace-description {
-  display: -webkit-box;
-  overflow: hidden;
-  max-width: 100%;
-  margin: 0;
-  color: var(--ms-text-tertiary);
-  font-size: var(--ms-text-sm);
-  line-height: 1.45;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
 }
 
 .usage-metrics {
@@ -747,42 +933,84 @@ onMounted(loadAll)
   }
 }
 
-.fallback-cell {
+.policy-cell {
   min-width: 0;
 }
 
-.fallback-cell :deep(.fallback-summary) {
+.policy-stack {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ms-space-2);
+}
+
+.policy-summary {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--ms-space-2);
+  align-items: center;
+}
+
+.policy-summary :deep(.fallback-summary) {
   max-width: 100%;
 }
 
-.linked-rulesets {
-  min-width: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--ms-space-1);
+.policy-protocol {
+  padding: 3px 7px;
+  font-size: var(--ms-text-xs);
+}
 
-  button {
-    max-width: 132px;
-    height: 28px;
-    padding: 0 9px;
-    overflow: hidden;
-    border: 1px solid transparent;
-    border-radius: var(--ms-radius-pill);
+.more-policies {
+  width: fit-content;
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--ms-border-light);
+  border-radius: var(--ms-radius-pill);
+  color: var(--ms-text-secondary);
+  background: var(--ms-control-bg);
+  font-size: var(--ms-text-sm);
+  font-weight: var(--ms-font-semibold);
+  cursor: pointer;
+
+  &:hover {
     color: var(--ms-teal-700);
     background: var(--ms-teal-50);
-    font-size: var(--ms-text-sm);
-    font-weight: var(--ms-font-semibold);
+  }
+}
+
+.linked-rulesets button {
+  max-width: 148px;
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ms-space-1);
+  padding: 0 9px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: var(--ms-radius-pill);
+  color: var(--ms-teal-700);
+  background: var(--ms-teal-50);
+  font-size: var(--ms-text-sm);
+  font-weight: var(--ms-font-semibold);
+  cursor: pointer;
+
+  &:hover {
+    border-color: rgba(13, 148, 136, 0.32);
+    background: var(--ms-teal-100);
+  }
+
+  span {
+    overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    cursor: pointer;
-    transition:
-      border-color var(--ms-transition-fast),
-      background var(--ms-transition-fast);
+  }
 
-    &:hover {
-      border-color: rgba(13, 148, 136, 0.32);
-      background: var(--ms-teal-100);
-    }
+  code {
+    flex: 0 0 auto;
+    color: var(--ms-text-tertiary);
+    font-size: var(--ms-text-xs);
+    text-transform: uppercase;
   }
 }
 
@@ -808,10 +1036,9 @@ onMounted(loadAll)
 
 :global(.namespace-ruleset-popover) .ruleset-popover-list button {
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px var(--ms-space-2);
   padding: var(--ms-space-2);
   border: none;
   border-radius: var(--ms-radius-md);
@@ -836,7 +1063,14 @@ onMounted(loadAll)
     font-size: var(--ms-text-sm);
   }
 
+  span {
+    color: var(--ms-blue-500);
+    font-size: var(--ms-text-xs);
+    font-weight: var(--ms-font-semibold);
+  }
+
   code {
+    grid-column: 1 / -1;
     color: var(--ms-text-tertiary);
     font-size: var(--ms-text-xs);
   }
@@ -853,23 +1087,58 @@ onMounted(loadAll)
 
 .dialog-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 260px;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  grid-template-areas:
+    "profile preview"
+    "policy preview";
   gap: var(--ms-space-4);
 }
 
-.dialog-main {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--ms-space-4);
-}
-
-.dialog-section,
+.profile-section,
+.policy-section,
 .policy-preview {
+  min-width: 0;
   padding: var(--ms-space-4);
   border: 1px solid var(--ms-border-light);
   border-radius: var(--ms-radius-lg);
   background: var(--ms-control-bg);
+}
+
+.profile-section {
+  grid-area: profile;
+}
+
+.policy-section {
+  grid-area: policy;
+}
+
+.policy-preview {
+  grid-area: preview;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ms-space-3);
+}
+
+.section-heading {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: var(--ms-space-3);
+
+  strong {
+    color: var(--ms-text-primary);
+    font-family: var(--ms-font-display);
+    font-size: var(--ms-text-md);
+    font-weight: var(--ms-font-bold);
+  }
+
+  span {
+    color: var(--ms-text-tertiary);
+    font-size: var(--ms-text-sm);
+    line-height: 1.45;
+  }
 }
 
 .form-grid,
@@ -897,28 +1166,44 @@ onMounted(loadAll)
   }
 }
 
-.policy-preview {
-  align-self: start;
+.policy-tabs {
+  margin-bottom: var(--ms-space-3);
+}
+
+.policy-workspace {
   display: flex;
   flex-direction: column;
   gap: var(--ms-space-3);
+}
 
-  > span {
-    color: var(--ms-text-primary);
-    font-family: var(--ms-font-display);
-    font-size: var(--ms-text-md);
-    font-weight: var(--ms-font-bold);
-  }
+.policy-context {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ms-space-2);
+  padding: var(--ms-space-2) var(--ms-space-3);
+  border: 1px solid var(--ms-border-light);
+  border-radius: var(--ms-radius-md);
+  background: var(--ms-panel-bg);
 
-  p {
-    margin: 0;
+  > div {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
     color: var(--ms-text-tertiary);
     font-size: var(--ms-text-sm);
-    line-height: 1.55;
+  }
+
+  strong {
+    color: var(--ms-text-primary);
+    font-size: var(--ms-text-base);
   }
 }
 
-.preview-row {
+.preview-row,
+.linked-preview {
   display: flex;
   flex-direction: column;
   gap: var(--ms-space-1);
@@ -931,12 +1216,41 @@ onMounted(loadAll)
   }
 }
 
-@media (max-width: 900px) {
-  .entry-toolbar,
+.linked-preview button {
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  padding: 0 var(--ms-space-2);
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: var(--ms-radius-md);
+  color: var(--ms-teal-700);
+  background: var(--ms-teal-50);
+  font-size: var(--ms-text-sm);
+  font-weight: var(--ms-font-semibold);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:hover {
+    border-color: rgba(13, 148, 136, 0.32);
+  }
+}
+
+@media (max-width: 980px) {
+  .namespace-toolbar,
   .dialog-grid,
   .form-grid,
   .fallback-grid {
     grid-template-columns: 1fr;
+  }
+
+  .dialog-grid {
+    grid-template-areas:
+      "profile"
+      "policy"
+      "preview";
   }
 
   .filter-block {
@@ -946,9 +1260,6 @@ onMounted(loadAll)
 
   .filter-group {
     width: 100%;
-  }
-
-  .filter-group {
     overflow-x: auto;
   }
 

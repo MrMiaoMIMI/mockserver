@@ -66,7 +66,10 @@ func TestRuntimeControllerDecidePublishedRecordsSDKTraffic(t *testing.T) {
 				RulesetID: "rs",
 				RuleID:    "rule",
 			},
-			Response: &bo.ActionExecution{Status: http.StatusAccepted},
+			Response: &bo.ProtocolResponse{
+				Protocol: eo.ProtocolHTTP,
+				Payload:  map[string]any{"status": http.StatusAccepted},
+			},
 		},
 	}, nil, trafficService)
 	engine := gin.New()

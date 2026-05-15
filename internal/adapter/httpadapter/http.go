@@ -2,6 +2,7 @@ package httpadapter
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -10,6 +11,12 @@ import (
 	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
 	"github.com/MrMiaoMIMI/mockserver/internal/model/eo"
 )
+
+type HTTPResponse struct {
+	Status  int
+	Headers map[string][]string
+	Body    any
+}
 
 func NormalizeHTTPRequest(r *http.Request, namespace string) (bo.Event, error) {
 	bodyBytes, err := io.ReadAll(r.Body)
@@ -74,6 +81,92 @@ func NormalizeHTTPRequest(r *http.Request, namespace string) (bo.Event, error) {
 	}, nil
 }
 
+func HTTPResponseFromProtocolResponse(response bo.ProtocolResponse) (HTTPResponse, error) {
+	if response.Protocol != "" && !strings.EqualFold(response.Protocol, eo.ProtocolHTTP) {
+		return HTTPResponse{}, fmt.Errorf("response protocol %q cannot be applied by HTTP adapter", response.Protocol)
+	}
+	payload := response.Payload
+	status, err := statusFromPayload(payload["status"])
+	if err != nil {
+		return HTTPResponse{}, err
+	}
+	headers, err := headersFromPayload(payload["headers"])
+	if err != nil {
+		return HTTPResponse{}, err
+	}
+	return HTTPResponse{
+		Status:  status,
+		Headers: headers,
+		Body:    payload["body"],
+	}, nil
+}
+
+func statusFromPayload(raw any) (int, error) {
+	switch value := raw.(type) {
+	case nil:
+		return 200, nil
+	case int:
+		if value < 100 || value > 599 {
+			return 0, fmt.Errorf("http response status must be between 100 and 599")
+		}
+		return value, nil
+	case float64:
+		status := int(value)
+		if float64(status) != value || status < 100 || status > 599 {
+			return 0, fmt.Errorf("http response status must be an integer between 100 and 599")
+		}
+		return status, nil
+	case json.Number:
+		parsed, err := value.Int64()
+		if err != nil || parsed < 100 || parsed > 599 {
+			return 0, fmt.Errorf("http response status must be an integer between 100 and 599")
+		}
+		return int(parsed), nil
+	default:
+		return 0, fmt.Errorf("http response status must be a number")
+	}
+}
+
+func headersFromPayload(raw any) (map[string][]string, error) {
+	switch value := raw.(type) {
+	case nil:
+		return nil, nil
+	case map[string][]string:
+		return cloneHeaders(value), nil
+	case map[string]string:
+		headers := make(map[string][]string, len(value))
+		for key, item := range value {
+			headers[key] = []string{item}
+		}
+		return headers, nil
+	case map[string]any:
+		headers := make(map[string][]string, len(value))
+		for key, item := range value {
+			switch typed := item.(type) {
+			case string:
+				headers[key] = []string{typed}
+			case []string:
+				headers[key] = append([]string(nil), typed...)
+			case []any:
+				items := make([]string, 0, len(typed))
+				for _, candidate := range typed {
+					text, ok := candidate.(string)
+					if !ok {
+						return nil, fmt.Errorf("http response header %s contains non-string value", key)
+					}
+					items = append(items, text)
+				}
+				headers[key] = items
+			default:
+				return nil, fmt.Errorf("http response header %s has unsupported value type", key)
+			}
+		}
+		return headers, nil
+	default:
+		return nil, fmt.Errorf("http response headers must be an object")
+	}
+}
+
 func schemeFor(r *http.Request) string {
 	if r.TLS != nil {
 		return "https"
@@ -94,4 +187,15 @@ func clientIPFor(r *http.Request) string {
 		return host
 	}
 	return r.RemoteAddr
+}
+
+func cloneHeaders(headers map[string][]string) map[string][]string {
+	if len(headers) == 0 {
+		return nil
+	}
+	cloned := make(map[string][]string, len(headers))
+	for key, values := range headers {
+		cloned[key] = append([]string(nil), values...)
+	}
+	return cloned
 }

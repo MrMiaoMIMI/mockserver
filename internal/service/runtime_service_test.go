@@ -59,7 +59,14 @@ func TestDecidePublishedRuleMissKeepsWinnerRuleSetDiagnostics(t *testing.T) {
 			Enabled:  true,
 			Priority: 10,
 			When:     bo.Condition{Field: "request.query.foo", Op: eo.OperatorEQ, Value: "bar"},
-			Action:   bo.Action{Type: eo.ActionTypeStaticResponse, Status: 200},
+			Action: bo.Action{
+				Type:     eo.ActionTypeRespond,
+				Renderer: eo.ActionRendererStatic,
+				Response: &bo.ProtocolResponse{
+					Protocol: eo.ProtocolHTTP,
+					Payload:  map[string]any{"status": 200},
+				},
+			},
 		}},
 	}, nil)
 	if err != nil {

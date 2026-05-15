@@ -49,7 +49,7 @@ MockServer records raw SDK traffic for matched decisions, `rule_miss`, and decis
 This can happen when:
 
 - A published rule matches and produces a mock response.
-- A namespace fallback policy is configured as `response`.
+- A namespace fallback policy is configured as `respond`.
 
 Important fields:
 
@@ -59,7 +59,9 @@ Important fields:
 - `trace.rule_id`: matched rule ID when available.
 - `trace.snapshot_id`: matched published snapshot ID when available.
 - `trace.fallback_reason`: `ruleset_miss` or `rule_miss` for fallback responses.
-- `response.status`, `response.headers`, `response.body`: HTTP response to apply.
+- `protocol`: selected protocol for this decision.
+- `response.protocol`: protocol of the response payload.
+- `response.payload`: protocol-native response payload. HTTP adapters use `status`, `headers`, and `body`; SPEX adapters use `code` and `resp`.
 - `meta.trace_id`: trace ID propagated from the original request event.
 
 ### Forward Decision

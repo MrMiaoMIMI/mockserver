@@ -2,6 +2,7 @@ import type {
   Condition,
   NamespaceConfig,
   NamespaceFallbackAction,
+  NamespacePolicy,
   PublishedRuleSetSnapshot,
   RuleSet,
   Selector,
@@ -47,12 +48,14 @@ export interface RulesetEntryMetrics {
   empty: number
 }
 
-export type NamespaceFallbackFilter = 'all' | 'forward' | 'response'
+export type NamespaceFallbackFilter = 'all' | 'forward' | 'respond'
 export type NamespaceUsageFilter = 'all' | 'used' | 'unused'
-export type NamespaceSortKey = 'id' | 'usage' | 'ruleset_miss' | 'rule_miss'
+export type NamespaceProtocolFilter = 'all' | string
+export type NamespaceSortKey = 'id' | 'name' | 'protocols' | 'usage'
 
 export interface NamespaceEntryFilters {
   query: string
+  protocol: NamespaceProtocolFilter
   rulesetMissType: NamespaceFallbackFilter
   ruleMissType: NamespaceFallbackFilter
   usage: NamespaceUsageFilter
@@ -60,7 +63,7 @@ export interface NamespaceEntryFilters {
 }
 
 export interface FallbackEntrySummary {
-  type: 'forward' | 'response'
+  type: 'forward' | 'respond'
   label: string
   detail: string
   tone: EntryTone
@@ -69,23 +72,33 @@ export interface FallbackEntrySummary {
 export interface NamespaceUsageSummary {
   rulesetCount: number
   ruleCount: number
-  rulesets: Array<{ id: string; name: string }>
+  rulesets: Array<{ id: string; name: string; protocol: string }>
   rulesetIds: string[]
   rulesetNames: string[]
+}
+
+export interface NamespacePolicySummary {
+  protocol: string
+  policy: NamespacePolicy
+  rulesetMiss: FallbackEntrySummary
+  ruleMiss: FallbackEntrySummary
+  usage: NamespaceUsageSummary
 }
 
 export interface NamespaceEntryRow {
   namespace: NamespaceConfig
   displayName: string
-  rulesetMiss: FallbackEntrySummary
-  ruleMiss: FallbackEntrySummary
+  policies: NamespacePolicySummary[]
+  protocols: string[]
   usage: NamespaceUsageSummary
+  primaryPolicy: NamespacePolicySummary
   searchableText: string
 }
 
 export interface NamespaceEntryMetrics {
   total: number
   shown: number
+  namespaces: number
   forward: number
   response: number
   used: number
@@ -106,6 +119,7 @@ export function defaultRulesetEntryFilters(): RulesetEntryFilters {
 export function defaultNamespaceEntryFilters(): NamespaceEntryFilters {
   return {
     query: '',
+    protocol: 'all',
     rulesetMissType: 'all',
     ruleMissType: 'all',
     usage: 'all',
@@ -141,7 +155,7 @@ export function buildRulesetEntryRow(
     publishStateLabel(publishState),
     ruleSet.enabled ? 'enabled' : 'disabled',
     ...selectorValues,
-    ...ruleSet.rules.map((rule) => `${rule.id} ${rule.name || ''} ${rule.action.type}`),
+    ...ruleSet.rules.map((rule) => `${rule.id} ${rule.name || ''} ${ruleActionKind(rule.action)}`),
   ]
     .filter(Boolean)
     .join(' ')
@@ -194,23 +208,41 @@ export function buildNamespaceEntryRows(
     .sort((left, right) => compareNamespaceEntryRows(left, right, filters.sort))
 }
 
-export function buildNamespaceEntryRow(
-  namespace: NamespaceConfig,
-  ruleSets: RuleSet[]
-): NamespaceEntryRow {
-  const usage = namespaceUsage(namespace.id, ruleSets)
-  const rulesetMiss = fallbackSummary(namespace.ruleset_miss_action)
-  const ruleMiss = fallbackSummary(namespace.rule_miss_action)
+export function buildNamespaceEntryRow(namespace: NamespaceConfig, ruleSets: RuleSet[]): NamespaceEntryRow {
+  const policies = namespacePolicyEntries(namespace).map(([protocol, policy]) => {
+    const normalizedProtocol = normalizeProtocol(protocol)
+    return {
+      protocol: normalizedProtocol,
+      policy,
+      rulesetMiss: fallbackSummary(policy.ruleset_miss_action),
+      ruleMiss: fallbackSummary(policy.rule_miss_action),
+      usage: namespaceUsage(namespace.id, normalizedProtocol, ruleSets),
+    }
+  })
+  const usage = namespaceUsage(namespace.id, '', ruleSets)
+  const protocols = policies.map((policy) => policy.protocol)
+  const primaryPolicy = policies[0] || {
+    protocol: 'http',
+    policy: defaultNamespacePolicy(),
+    rulesetMiss: fallbackSummary(defaultNamespacePolicy().ruleset_miss_action),
+    ruleMiss: fallbackSummary(defaultNamespacePolicy().rule_miss_action),
+    usage: namespaceUsage(namespace.id, 'http', ruleSets),
+  }
   const searchableText = [
     namespace.id,
     namespace.name,
     namespace.description,
-    rulesetMiss.type,
-    rulesetMiss.label,
-    rulesetMiss.detail,
-    ruleMiss.type,
-    ruleMiss.label,
-    ruleMiss.detail,
+    ...protocols,
+    ...policies.flatMap((policy) => [
+      policy.rulesetMiss.type,
+      policy.rulesetMiss.label,
+      policy.rulesetMiss.detail,
+      policy.ruleMiss.type,
+      policy.ruleMiss.label,
+      policy.ruleMiss.detail,
+      ...policy.usage.rulesetIds,
+      ...policy.usage.rulesetNames,
+    ]),
     ...usage.rulesetIds,
     ...usage.rulesetNames,
   ]
@@ -221,10 +253,28 @@ export function buildNamespaceEntryRow(
   return {
     namespace,
     displayName: namespace.name || namespace.id,
-    rulesetMiss,
-    ruleMiss,
+    policies,
+    protocols,
     usage,
+    primaryPolicy,
     searchableText,
+  }
+}
+
+function namespacePolicyEntries(namespace: NamespaceConfig): Array<[string, NamespacePolicy]> {
+  const policies = new Map<string, NamespacePolicy>()
+  Object.entries(namespace.policies || {}).forEach(([protocol, policy]) => {
+    const normalizedProtocol = normalizeProtocol(protocol)
+    if (normalizedProtocol) policies.set(normalizedProtocol, policy)
+  })
+  const entries = Array.from(policies.entries()).sort(([left], [right]) => compareText(left, right))
+  return entries.length ? entries : [['http', defaultNamespacePolicy()]]
+}
+
+function defaultNamespacePolicy(): NamespacePolicy {
+  return {
+    ruleset_miss_action: { type: 'forward', forward: { timeout_ms: 5000 } },
+    rule_miss_action: { type: 'forward', forward: { timeout_ms: 5000 } },
   }
 }
 
@@ -232,38 +282,53 @@ export function buildNamespaceEntryMetrics(
   allRows: NamespaceEntryRow[],
   shownRows: NamespaceEntryRow[]
 ): NamespaceEntryMetrics {
-  const shownIds = new Set(shownRows.map((row) => row.namespace.id))
-  return allRows.reduce<NamespaceEntryMetrics>(
+  const shownNamespaceIds = new Set(shownRows.map((row) => row.namespace.id))
+  const metrics = allRows.reduce<NamespaceEntryMetrics>(
     (metrics, row) => {
       metrics.total += 1
-      if (shownIds.has(row.namespace.id)) metrics.shown += 1
-      if (row.rulesetMiss.type === 'forward' || row.ruleMiss.type === 'forward') metrics.forward += 1
-      if (row.rulesetMiss.type === 'response' || row.ruleMiss.type === 'response') metrics.response += 1
+      if (shownNamespaceIds.has(row.namespace.id)) metrics.shown += 1
+      if (row.policies.some((policy) => policy.rulesetMiss.type === 'forward' || policy.ruleMiss.type === 'forward')) {
+        metrics.forward += 1
+      }
+      if (row.policies.some((policy) => policy.rulesetMiss.type === 'respond' || policy.ruleMiss.type === 'respond')) {
+        metrics.response += 1
+      }
       if (row.usage.rulesetCount > 0) metrics.used += 1
       else metrics.unused += 1
       return metrics
     },
-    { total: 0, shown: 0, forward: 0, response: 0, used: 0, unused: 0 }
+    { total: 0, shown: 0, namespaces: 0, forward: 0, response: 0, used: 0, unused: 0 }
   )
+  metrics.namespaces = shownNamespaceIds.size
+  return metrics
 }
 
-export function fallbackSummary(action: NamespaceFallbackAction): FallbackEntrySummary {
-  if (action.type === 'forward') {
+export function fallbackSummary(action?: NamespaceFallbackAction): FallbackEntrySummary {
+  if (!action || action.type === 'forward') {
+    const timeoutMs = action?.forward?.timeout_ms
     return {
       type: 'forward',
       label: 'Forward',
-      detail: action.forward?.timeout_ms
-        ? `original request / ${action.forward.timeout_ms}ms`
-        : 'original request',
+      detail: timeoutMs ? `original request / ${timeoutMs}ms` : 'original request',
       tone: 'warn',
     }
   }
+  const payload = action.response?.payload || {}
   return {
-    type: 'response',
+    type: 'respond',
     label: 'Response',
-    detail: `HTTP ${action.response?.status || 404}`,
+    detail:
+      payload.status !== undefined
+        ? `HTTP ${payload.status}`
+        : payload.code !== undefined
+          ? `SPEX ${payload.code}`
+          : 'protocol payload',
     tone: 'ok',
   }
+}
+
+function ruleActionKind(action: { type?: string; renderer?: string }) {
+  return action.renderer || action.type || ''
 }
 
 export function rulesetPublishState(
@@ -292,8 +357,19 @@ function rulesetEntryMatchesFilters(row: RulesetEntryRow, filters: RulesetEntryF
 function namespaceEntryMatchesFilters(row: NamespaceEntryRow, filters: NamespaceEntryFilters) {
   const query = filters.query.trim().toLowerCase()
   if (query && !row.searchableText.includes(query)) return false
-  if (filters.rulesetMissType !== 'all' && row.rulesetMiss.type !== filters.rulesetMissType) return false
-  if (filters.ruleMissType !== 'all' && row.ruleMiss.type !== filters.ruleMissType) return false
+  if (filters.protocol !== 'all' && !row.protocols.includes(normalizeProtocol(filters.protocol))) return false
+  if (
+    filters.rulesetMissType !== 'all' &&
+    !row.policies.some((policy) => policy.rulesetMiss.type === filters.rulesetMissType)
+  ) {
+    return false
+  }
+  if (
+    filters.ruleMissType !== 'all' &&
+    !row.policies.some((policy) => policy.ruleMiss.type === filters.ruleMissType)
+  ) {
+    return false
+  }
   if (filters.usage === 'used' && row.usage.rulesetCount === 0) return false
   if (filters.usage === 'unused' && row.usage.rulesetCount > 0) return false
   return true
@@ -308,21 +384,34 @@ function compareRulesetEntryRows(left: RulesetEntryRow, right: RulesetEntryRow, 
 }
 
 function compareNamespaceEntryRows(left: NamespaceEntryRow, right: NamespaceEntryRow, sort: NamespaceSortKey) {
-  if (sort === 'usage') return right.usage.rulesetCount - left.usage.rulesetCount || compareText(left.namespace.id, right.namespace.id)
-  if (sort === 'ruleset_miss') return compareText(left.rulesetMiss.type, right.rulesetMiss.type)
-  if (sort === 'rule_miss') return compareText(left.ruleMiss.type, right.ruleMiss.type)
-  return compareText(left.namespace.id, right.namespace.id)
+  const defaultOrder = compareText(left.namespace.id, right.namespace.id)
+  if (sort === 'name') return compareText(left.displayName, right.displayName) || defaultOrder
+  if (sort === 'protocols') return right.protocols.length - left.protocols.length || defaultOrder
+  if (sort === 'usage') return right.usage.rulesetCount - left.usage.rulesetCount || defaultOrder
+  return defaultOrder
 }
 
-function namespaceUsage(namespaceId: string, ruleSets: RuleSet[]): NamespaceUsageSummary {
-  const related = ruleSets.filter((ruleSet) => ruleSet.namespace === namespaceId)
+function namespaceUsage(namespaceId: string, protocol: string, ruleSets: RuleSet[]): NamespaceUsageSummary {
+  const normalizedProtocol = normalizeProtocol(protocol)
+  const related = ruleSets.filter(
+    (ruleSet) =>
+      ruleSet.namespace === namespaceId && (!normalizedProtocol || normalizeProtocol(ruleSet.protocol) === normalizedProtocol)
+  )
   return {
     rulesetCount: related.length,
     ruleCount: related.reduce((count, ruleSet) => count + ruleSet.rules.length, 0),
-    rulesets: related.map((ruleSet) => ({ id: ruleSet.id, name: ruleSet.name || ruleSet.id })),
+    rulesets: related.map((ruleSet) => ({
+      id: ruleSet.id,
+      name: ruleSet.name || ruleSet.id,
+      protocol: normalizeProtocol(ruleSet.protocol),
+    })),
     rulesetIds: related.map((ruleSet) => ruleSet.id),
     rulesetNames: related.map((ruleSet) => ruleSet.name).filter(Boolean),
   }
+}
+
+function normalizeProtocol(protocol: string) {
+  return protocol.trim().toLowerCase()
 }
 
 function publishStateLabel(state: RulesetPublishState) {

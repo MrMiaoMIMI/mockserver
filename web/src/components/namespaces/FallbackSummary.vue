@@ -13,7 +13,7 @@ import type { NamespaceFallbackAction } from '@/types'
 import { fallbackSummary } from '@/utils/entryLists'
 
 const props = defineProps<{
-  action: NamespaceFallbackAction
+  action?: NamespaceFallbackAction
 }>()
 
 const summary = computed(() => fallbackSummary(props.action))

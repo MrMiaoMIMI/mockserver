@@ -152,27 +152,27 @@ export const CONDITION_OPERATORS = [
 
 export const ACTION_AUTHORING_PROFILES: ActionAuthoringProfile[] = [
   {
-    type: 'static_response',
+    type: 'static',
     label: 'Static',
-    detail: 'Return a fixed status, headers, and body. Best for most mocks.',
+    detail: 'Return a fixed protocol response payload.',
   },
   {
-    type: 'template_response',
+    type: 'template',
     label: 'Template',
-    detail: 'Render a response body from request fields.',
+    detail: 'Render a protocol response payload from request fields.',
   },
   {
-    type: 'cel_response',
+    type: 'cel',
     label: 'CEL',
     detail: 'Build a response from an expression.',
   },
   {
-    type: 'sequence_response',
+    type: 'sequence',
     label: 'Sequence',
     detail: 'Return ordered responses across repeated calls.',
   },
   {
-    type: 'webhook_response',
+    type: 'webhook',
     label: 'Webhook',
     detail: 'Call another service and use its response.',
   },

@@ -38,21 +38,24 @@ type Condition struct {
 }
 
 type Action struct {
-	Type             string              `json:"type"`
-	Status           int                 `json:"status,omitempty"`
-	Headers          map[string][]string `json:"headers,omitempty"`
-	Body             any                 `json:"body,omitempty"`
-	BodyTemplate     string              `json:"body_template,omitempty"`
-	BodyExpression   string              `json:"body_expression,omitempty"`
-	Sequence         []SequenceStep      `json:"sequence,omitempty"`
-	SequenceStrategy string              `json:"sequence_strategy,omitempty"`
-	Webhook          *WebhookConfig      `json:"webhook,omitempty"`
+	Type               string                    `json:"type"`
+	Renderer           string                    `json:"renderer,omitempty"`
+	Response           *ProtocolResponse         `json:"response,omitempty"`
+	ResponseTemplate   string                    `json:"response_template,omitempty"`
+	ResponseExpression string                    `json:"response_expression,omitempty"`
+	Sequence           []SequenceStep            `json:"sequence,omitempty"`
+	SequenceStrategy   string                    `json:"sequence_strategy,omitempty"`
+	Webhook            *WebhookConfig            `json:"webhook,omitempty"`
+	Forward            *NamespaceForwardFallback `json:"forward,omitempty"`
+}
+
+type ProtocolResponse struct {
+	Protocol string         `json:"protocol,omitempty"`
+	Payload  map[string]any `json:"payload,omitempty"`
 }
 
 type SequenceStep struct {
-	Status  int                 `json:"status"`
-	Headers map[string][]string `json:"headers,omitempty"`
-	Body    any                 `json:"body,omitempty"`
+	Response ProtocolResponse `json:"response"`
 }
 
 type WebhookConfig struct {
@@ -178,18 +181,12 @@ type RollbackDiffSummary struct {
 	RuleDiffs         []RuleDiffSummary  `json:"rule_diffs,omitempty"`
 }
 
-type ActionExecution struct {
-	Status  int                 `json:"status"`
-	Headers map[string][]string `json:"headers,omitempty"`
-	Body    any                 `json:"body,omitempty"`
-}
-
 type SimulationResult struct {
 	Matched    bool             `json:"matched"`
 	Fallback   bool             `json:"fallback,omitempty"`
 	Trace      MatchTrace       `json:"trace"`
 	Candidates []string         `json:"candidates,omitempty"`
-	Response   ActionExecution  `json:"response,omitempty"`
+	Response   ProtocolResponse `json:"response,omitempty"`
 	Explain    MatchExplanation `json:"explain,omitempty"`
 }
 

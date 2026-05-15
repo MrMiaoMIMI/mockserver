@@ -30,7 +30,7 @@ const draftCurrent: RuleSet = {
       enabled: true,
       priority: 10,
       when: { field: 'request.path', op: 'eq', value: '/api/a' },
-      action: { type: 'static_response', status: 200 },
+      action: { type: 'respond', renderer: 'static', response: { payload: { status: 200 } } },
     },
   ],
   version: 2,
@@ -48,6 +48,28 @@ const draftChanged: RuleSet = {
     ],
   },
   version: 5,
+}
+
+const draftSpex: RuleSet = {
+  ...draftCurrent,
+  id: 'rs-spex',
+  name: 'SPEX Changed',
+  protocol: 'spex',
+  namespace: 'payments',
+  selector: {
+    all: [{ field: 'request.service', op: 'eq', value: 'payment.spex' }],
+  },
+  rules: [
+    {
+      id: 'rule-spex',
+      name: 'Rule SPEX',
+      enabled: true,
+      priority: 10,
+      when: { field: 'request.method', op: 'eq', value: 'GetPayment' },
+      action: { type: 'respond', renderer: 'static', response: { payload: { code: 0, resp: '{}' } } },
+    },
+  ],
+  version: 1,
 }
 
 const draftOnly: RuleSet = {
@@ -73,7 +95,7 @@ const published: PublishedRuleSetSnapshot[] = [
       rules: [
         {
           ...draftChanged.rules[0],
-          action: { type: 'static_response', status: 204 },
+          action: { type: 'respond', renderer: 'static', response: { payload: { status: 204 } } },
         },
       ],
       version: 4,
@@ -85,15 +107,27 @@ const namespaces: NamespaceConfig[] = [
   {
     id: 'default',
     name: 'Default',
-    ruleset_miss_action: { type: 'forward', forward: { timeout_ms: 5000 } },
-    rule_miss_action: { type: 'forward', forward: { timeout_ms: 5000 } },
+    policies: {
+      http: {
+        ruleset_miss_action: { type: 'forward', forward: { timeout_ms: 5000 } },
+        rule_miss_action: { type: 'forward', forward: { timeout_ms: 5000 } },
+      },
+    },
   },
   {
     id: 'payments',
     name: 'Payments',
     description: 'Payment mocks',
-    ruleset_miss_action: { type: 'response', response: { status: 404 } },
-    rule_miss_action: { type: 'forward', forward: { timeout_ms: 1000 } },
+    policies: {
+      http: {
+        ruleset_miss_action: { type: 'respond', renderer: 'static', response: { payload: { status: 404 } } },
+        rule_miss_action: { type: 'forward', forward: { timeout_ms: 1000 } },
+      },
+      spex: {
+        ruleset_miss_action: { type: 'respond', renderer: 'static', response: { payload: { code: 404, resp: '{}' } } },
+        rule_miss_action: { type: 'forward', forward: { timeout_ms: 2000 } },
+      },
+    },
   },
 ]
 
@@ -129,12 +163,12 @@ describe('ruleset entry view models', () => {
 
 describe('namespace entry view models', () => {
   it('summarizes forward and response fallback behavior', () => {
-    expect(fallbackSummary(namespaces[0].ruleset_miss_action)).toMatchObject({
+    expect(fallbackSummary(namespaces[0].policies.http.ruleset_miss_action)).toMatchObject({
       type: 'forward',
       detail: 'original request / 5000ms',
     })
-    expect(fallbackSummary(namespaces[1].ruleset_miss_action)).toMatchObject({
-      type: 'response',
+    expect(fallbackSummary(namespaces[1].policies.http.ruleset_miss_action)).toMatchObject({
+      type: 'respond',
       detail: 'HTTP 404',
     })
   })
@@ -142,27 +176,50 @@ describe('namespace entry view models', () => {
   it('filters, searches, sorts, and counts namespace rows with ruleset usage', () => {
     const filters = defaultNamespaceEntryFilters()
     filters.query = 'rs-changed'
-    filters.rulesetMissType = 'response'
+    filters.rulesetMissType = 'respond'
     filters.usage = 'used'
 
-    const allRows = buildNamespaceEntryRows(namespaces, [draftCurrent, draftChanged, draftOnly], {
+    const allRows = buildNamespaceEntryRows(namespaces, [draftCurrent, draftChanged, draftSpex, draftOnly], {
       ...defaultNamespaceEntryFilters(),
     })
-    const shownRows = buildNamespaceEntryRows(namespaces, [draftCurrent, draftChanged, draftOnly], filters)
+    const shownRows = buildNamespaceEntryRows(namespaces, [draftCurrent, draftChanged, draftSpex, draftOnly], filters)
 
     expect(shownRows.map((row) => row.namespace.id)).toEqual(['payments'])
+    expect(shownRows[0].protocols).toEqual(['http', 'spex'])
     expect(shownRows[0].usage).toMatchObject({
-      rulesetCount: 1,
-      ruleCount: 1,
+      rulesetCount: 2,
+      ruleCount: 2,
     })
     expect(buildNamespaceEntryMetrics(allRows, shownRows)).toMatchObject({
       total: 2,
       shown: 1,
+      namespaces: 1,
       forward: 2,
       response: 1,
       used: 2,
       unused: 0,
     })
+  })
+
+  it('expands namespace policies per protocol and scopes protocol filtering and usage', () => {
+    const filters = defaultNamespaceEntryFilters()
+    filters.protocol = 'spex'
+
+    const rows = buildNamespaceEntryRows(namespaces, [draftCurrent, draftChanged, draftSpex, draftOnly], filters)
+
+    expect(rows.map((row) => row.namespace.id)).toEqual(['payments'])
+    const spexPolicy = rows[0].policies.find((policy) => policy.protocol === 'spex')
+    expect(spexPolicy?.rulesetMiss).toMatchObject({
+      type: 'respond',
+      detail: 'SPEX 404',
+    })
+    expect(spexPolicy?.usage).toMatchObject({
+      rulesetCount: 1,
+      ruleCount: 1,
+      rulesetIds: ['rs-spex'],
+      rulesetNames: ['SPEX Changed'],
+    })
+    expect(rows[0].searchableText).toContain('spex')
   })
 
   it('keeps every linked ruleset available for explicit namespace navigation', () => {

@@ -18,6 +18,7 @@ import (
 
 	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
 	"github.com/MrMiaoMIMI/mockserver/internal/model/eo"
+	"github.com/MrMiaoMIMI/mockserver/mockprotocol"
 )
 
 var sequenceState = struct {
@@ -137,7 +138,7 @@ func MatchWithOptions(ruleSets []CompiledRuleSet, event bo.Event, options MatchO
 				continue
 			}
 
-			var action bo.ActionExecution
+			var action bo.ProtocolResponse
 			var actionExplain bo.ActionExplanation
 			if options.ExplainOnly {
 				actionExplain = bo.ActionExplanation{
@@ -685,66 +686,73 @@ func evalPredicateWithExplain(condition bo.Condition, event bo.Event) (bo.Condit
 	return explanation, nil
 }
 
-func executeActionWithExplain(ruleSetID string, compiledRule CompiledRule, event bo.Event) (bo.ActionExecution, bo.ActionExplanation, error) {
-	response := bo.ActionExecution{
-		Status:  compiledRule.Rule.Action.Status,
-		Headers: cloneHeaders(compiledRule.Rule.Action.Headers),
-	}
-
-	switch compiledRule.Rule.Action.Type {
-	case eo.ActionTypeStaticResponse:
-		response.Body = compiledRule.Rule.Action.Body
+func executeActionWithExplain(ruleSetID string, compiledRule CompiledRule, event bo.Event) (bo.ProtocolResponse, bo.ActionExplanation, error) {
+	action := compiledRule.Rule.Action
+	switch actionRenderer(action) {
+	case eo.ActionRendererStatic:
+		response, err := normalizeActionResponse(event.Protocol, action.Response)
+		if err != nil {
+			return bo.ProtocolResponse{}, bo.ActionExplanation{}, err
+		}
 		return response, bo.ActionExplanation{
-			Type:           eo.ActionTypeStaticResponse,
-			RenderedResult: response.Body,
+			Type:           eo.ActionRendererStatic,
+			RenderedResult: response.Payload,
 			Message:        "static response returned as configured",
 		}, nil
-	case eo.ActionTypeTemplateResponse:
+	case eo.ActionRendererTemplate:
 		var out bytes.Buffer
 		if err := compiledRule.Template.Execute(&out, buildEventDocument(event)); err != nil {
-			return bo.ActionExecution{}, bo.ActionExplanation{}, fmt.Errorf("execute template: %w", err)
+			return bo.ProtocolResponse{}, bo.ActionExplanation{}, fmt.Errorf("execute template: %w", err)
 		}
-		response.Body = out.String()
+		response, err := protocolResponseFromJSON(event.Protocol, out.Bytes())
+		if err != nil {
+			return bo.ProtocolResponse{}, bo.ActionExplanation{}, fmt.Errorf("decode template response payload: %w", err)
+		}
 		return response, bo.ActionExplanation{
-			Type:           eo.ActionTypeTemplateResponse,
-			Template:       compiledRule.Rule.Action.BodyTemplate,
-			RenderedResult: response.Body,
+			Type:           eo.ActionRendererTemplate,
+			Template:       action.ResponseTemplate,
+			RenderedResult: response.Payload,
 			Message:        "template rendered successfully",
 		}, nil
-	case eo.ActionTypeCELResponse:
-		body, err := evalCELValue(compiledRule.BodyProgram, buildCELInput(event))
+	case eo.ActionRendererCEL:
+		payload, err := evalCELValue(compiledRule.ResponseProgram, buildCELInput(event))
 		if err != nil {
-			return bo.ActionExecution{}, bo.ActionExplanation{}, fmt.Errorf("execute CEL body: %w", err)
+			return bo.ProtocolResponse{}, bo.ActionExplanation{}, fmt.Errorf("execute CEL response: %w", err)
 		}
-		response.Body = body
+		response, err := protocolResponseFromAny(event.Protocol, payload)
+		if err != nil {
+			return bo.ProtocolResponse{}, bo.ActionExplanation{}, err
+		}
 		return response, bo.ActionExplanation{
-			Type:           eo.ActionTypeCELResponse,
-			Expression:     compiledRule.Rule.Action.BodyExpression,
-			RenderedResult: response.Body,
+			Type:           eo.ActionRendererCEL,
+			Expression:     action.ResponseExpression,
+			RenderedResult: response.Payload,
 			Message:        "CEL response rendered successfully",
 		}, nil
-	case eo.ActionTypeSequenceResponse:
+	case eo.ActionRendererSequence:
 		step, index := nextSequenceStep(ruleSetID, compiledRule.Rule)
-		response.Status = step.Status
-		response.Headers = cloneHeaders(step.Headers)
-		response.Body = step.Body
+		stepResponse := step.Response
+		response, err := normalizeActionResponse(event.Protocol, &stepResponse)
+		if err != nil {
+			return bo.ProtocolResponse{}, bo.ActionExplanation{}, err
+		}
 		return response, bo.ActionExplanation{
-			Type:           eo.ActionTypeSequenceResponse,
-			RenderedResult: response.Body,
+			Type:           eo.ActionRendererSequence,
+			RenderedResult: response.Payload,
 			Message:        fmt.Sprintf("sequence step %d returned", index),
 		}, nil
-	case eo.ActionTypeWebhookResponse:
+	case eo.ActionRendererWebhook:
 		webhookResponse, err := executeWebhook(compiledRule.Rule.Action, event)
 		if err != nil {
-			return bo.ActionExecution{}, bo.ActionExplanation{}, err
+			return bo.ProtocolResponse{}, bo.ActionExplanation{}, err
 		}
 		return webhookResponse, bo.ActionExplanation{
-			Type:           eo.ActionTypeWebhookResponse,
-			RenderedResult: webhookResponse.Body,
+			Type:           eo.ActionRendererWebhook,
+			RenderedResult: webhookResponse.Payload,
 			Message:        "webhook response returned",
 		}, nil
 	default:
-		return bo.ActionExecution{}, bo.ActionExplanation{}, fmt.Errorf("unsupported action type: %s", compiledRule.Rule.Action.Type)
+		return bo.ProtocolResponse{}, bo.ActionExplanation{}, fmt.Errorf("unsupported response renderer: %s", action.Renderer)
 	}
 }
 
@@ -767,9 +775,9 @@ func nextSequenceStep(ruleSetID string, rule bo.Rule) (bo.SequenceStep, int) {
 	return rule.Action.Sequence[stepIndex], stepIndex
 }
 
-func executeWebhook(action bo.Action, event bo.Event) (bo.ActionExecution, error) {
+func executeWebhook(action bo.Action, event bo.Event) (bo.ProtocolResponse, error) {
 	if action.Webhook == nil {
-		return bo.ActionExecution{}, fmt.Errorf("webhook config is required")
+		return bo.ProtocolResponse{}, fmt.Errorf("webhook config is required")
 	}
 
 	method := strings.ToUpper(strings.TrimSpace(action.Webhook.Method))
@@ -787,13 +795,13 @@ func executeWebhook(action bo.Action, event bo.Event) (bo.ActionExecution, error
 			"event": buildEventDocument(event),
 		})
 		if err != nil {
-			return bo.ActionExecution{}, fmt.Errorf("marshal webhook request: %w", err)
+			return bo.ProtocolResponse{}, fmt.Errorf("marshal webhook request: %w", err)
 		}
 		body = bytes.NewReader(raw)
 	}
 	req, err := http.NewRequest(method, action.Webhook.URL, body)
 	if err != nil {
-		return bo.ActionExecution{}, fmt.Errorf("create webhook request: %w", err)
+		return bo.ProtocolResponse{}, fmt.Errorf("create webhook request: %w", err)
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -806,32 +814,50 @@ func executeWebhook(action bo.Action, event bo.Event) (bo.ActionExecution, error
 
 	resp, err := newWebhookHTTPClient(timeout).Do(req)
 	if err != nil {
-		return bo.ActionExecution{}, fmt.Errorf("execute webhook: %w", err)
+		return bo.ProtocolResponse{}, fmt.Errorf("execute webhook: %w", err)
 	}
 	defer resp.Body.Close()
 
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return bo.ActionExecution{}, fmt.Errorf("read webhook response: %w", err)
+		return bo.ProtocolResponse{}, fmt.Errorf("read webhook response: %w", err)
 	}
-	return bo.ActionExecution{
-		Status:  resp.StatusCode,
-		Headers: cloneHeaders(resp.Header),
-		Body:    decodeWebhookBody(raw, resp.Header.Get("Content-Type")),
+	return protocolResponseFromJSON(event.Protocol, raw)
+}
+
+func normalizeActionResponse(protocol string, response *bo.ProtocolResponse) (bo.ProtocolResponse, error) {
+	if response == nil {
+		response = &bo.ProtocolResponse{}
+	}
+	if strings.TrimSpace(response.Protocol) != "" && !strings.EqualFold(response.Protocol, protocol) {
+		return bo.ProtocolResponse{}, fmt.Errorf("response protocol %q does not match event protocol %q", response.Protocol, protocol)
+	}
+	payload, err := mockprotocol.NormalizeResponsePayload(protocol, response.Payload)
+	if err != nil {
+		return bo.ProtocolResponse{}, err
+	}
+	return bo.ProtocolResponse{
+		Protocol: strings.ToLower(strings.TrimSpace(protocol)),
+		Payload:  payload,
 	}, nil
 }
 
-func decodeWebhookBody(raw []byte, contentType string) any {
-	if len(raw) == 0 {
-		return nil
-	}
-	if strings.Contains(strings.ToLower(contentType), "application/json") {
-		var parsed any
-		if err := json.Unmarshal(raw, &parsed); err == nil {
-			return parsed
+func protocolResponseFromJSON(protocol string, raw []byte) (bo.ProtocolResponse, error) {
+	var payload map[string]any
+	if len(strings.TrimSpace(string(raw))) > 0 {
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			return bo.ProtocolResponse{}, err
 		}
 	}
-	return string(raw)
+	return protocolResponseFromAny(protocol, payload)
+}
+
+func protocolResponseFromAny(protocol string, value any) (bo.ProtocolResponse, error) {
+	payload, ok := value.(map[string]any)
+	if !ok && value != nil {
+		return bo.ProtocolResponse{}, fmt.Errorf("response renderer must return an object payload")
+	}
+	return normalizeActionResponse(protocol, &bo.ProtocolResponse{Payload: payload})
 }
 
 func normalizeEvent(event bo.Event) bo.Event {

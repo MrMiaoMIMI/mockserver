@@ -9,39 +9,41 @@ export function conditionSummary(condition: Condition): string {
 }
 
 export function actionSummary(action: RuleAction): string {
-  const status = action.status ? `HTTP ${action.status}` : ''
-  if (action.type === 'static_response') {
-    return ['static response', status, actionBodySummary(action.body)].filter(Boolean).join(' / ')
-  }
-  if (action.type === 'template_response') {
-    return ['template response', status, truncateValue(action.body_template || 'empty template')]
+  const renderer = action.renderer || action.type || 'static'
+  if (renderer === 'static') {
+    return ['static response', responsePayloadLabel(action.response?.payload), payloadSummary(action.response?.payload)]
       .filter(Boolean)
       .join(' / ')
   }
-  if (action.type === 'cel_response') {
-    return ['CEL response', status, truncateValue(action.body_expression || 'empty expression')]
+  if (renderer === 'template') {
+    return ['template response', truncateValue(action.response_template || 'empty template')]
       .filter(Boolean)
       .join(' / ')
   }
-  if (action.type === 'sequence_response') {
+  if (renderer === 'cel') {
+    return ['CEL response', truncateValue(action.response_expression || 'empty expression')]
+      .filter(Boolean)
+      .join(' / ')
+  }
+  if (renderer === 'sequence') {
     const strategy = action.sequence_strategy || 'last'
     return `sequence response / ${(action.sequence || []).length} steps / ${strategy}`
   }
-  if (action.type === 'webhook_response') {
+  if (renderer === 'webhook') {
     const method = action.webhook?.method || 'POST'
     const url = truncateValue(action.webhook?.url || 'missing url')
     const timeout = action.webhook?.timeout_ms ? `${action.webhook.timeout_ms}ms` : ''
     return ['webhook response', method, url, timeout].filter(Boolean).join(' / ')
   }
-  return [action.type || 'unknown action', status].filter(Boolean).join(' / ')
+  return [action.type || 'unknown action', payloadSummary(action.response?.payload)].filter(Boolean).join(' / ')
 }
 
 export function actionTypeLabel(actionType: string) {
-  if (actionType === 'static_response') return 'static'
-  if (actionType === 'template_response') return 'template'
-  if (actionType === 'cel_response') return 'CEL'
-  if (actionType === 'sequence_response') return 'sequence'
-  if (actionType === 'webhook_response') return 'webhook'
+  if (actionType === 'static') return 'static'
+  if (actionType === 'template') return 'template'
+  if (actionType === 'cel') return 'CEL'
+  if (actionType === 'sequence') return 'sequence'
+  if (actionType === 'webhook') return 'webhook'
   return actionType || 'unknown'
 }
 
@@ -101,10 +103,18 @@ function predicateSummary(condition: Condition) {
   return value ? `${field} ${op} ${value}` : `${field} ${op}`
 }
 
-function actionBodySummary(body: unknown) {
-  if (body === undefined) return ''
-  if (body === null) return 'null body'
-  if (Array.isArray(body)) return `${body.length} item body`
-  if (typeof body === 'object') return `${Object.keys(body as Record<string, unknown>).length} field body`
-  return truncateValue(String(body))
+function payloadSummary(payload: unknown) {
+  if (payload === undefined) return ''
+  if (payload === null) return 'null payload'
+  if (Array.isArray(payload)) return `${payload.length} item payload`
+  if (typeof payload === 'object') return `${Object.keys(payload as Record<string, unknown>).length} field payload`
+  return truncateValue(String(payload))
+}
+
+function responsePayloadLabel(payload?: Record<string, unknown>) {
+  if (!payload) return ''
+  if (payload.status !== undefined) return `HTTP ${payload.status}`
+  if (payload.code !== undefined) return `SPEX ${payload.code}`
+  if (payload.hit !== undefined) return `cache ${payload.hit ? 'hit' : 'miss'}`
+  return ''
 }

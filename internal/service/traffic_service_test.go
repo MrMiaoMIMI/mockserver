@@ -64,8 +64,11 @@ func TestTrafficServiceRecordSDKDecisionBuildsMinimalQueryableIndexes(t *testing
 			RulesetID: "rs-http",
 			RuleID:    "rule-hit",
 		},
-		Response: &bo.ActionExecution{Status: 202},
-		Forward:  &bo.ForwardDecision{TimeoutMS: 800},
+		Response: &bo.ProtocolResponse{
+			Protocol: eo.ProtocolHTTP,
+			Payload:  map[string]any{"status": 202},
+		},
+		Forward: &bo.ForwardDecision{TimeoutMS: 800},
 		Diagnostics: &bo.DecisionDiagnostics{
 			RuleSetSelection: bo.RuleSetSelectionDiagnostics{
 				WinnerRuleSetID: "rs-http",
@@ -130,7 +133,8 @@ func TestTrafficServiceRecordSDKDecisionBuildsMinimalQueryableIndexes(t *testing
 		"event.request.method",
 		"event.request.host",
 		"event.request.path",
-		"decision.response.status",
+		"decision.response.protocol",
+		"decision.response.payload.status",
 	} {
 		index, ok := indexes[path]
 		if !ok {
@@ -140,8 +144,8 @@ func TestTrafficServiceRecordSDKDecisionBuildsMinimalQueryableIndexes(t *testing
 			t.Fatalf("index %s should include full value and uint64 hash: %+v", path, index)
 		}
 	}
-	if indexes["decision.response.status"].FieldValueText != "202" {
-		t.Fatalf("unexpected response status index: %+v", indexes["decision.response.status"])
+	if indexes["decision.response.payload.status"].FieldValueText != "202" {
+		t.Fatalf("unexpected response status index: %+v", indexes["decision.response.payload.status"])
 	}
 }
 
@@ -181,7 +185,10 @@ func TestTrafficServiceRecordSDKDecisionSkipsRulesetMissResponseFallback(t *test
 		Kind:     eo.DecisionKindResponse,
 		Fallback: true,
 		Trace:    bo.MatchTrace{FallbackReason: eo.FallbackReasonRulesetMiss},
-		Response: &bo.ActionExecution{Status: 404},
+		Response: &bo.ProtocolResponse{
+			Protocol: eo.ProtocolSPEX,
+			Payload:  map[string]any{"code": 404, "resp": "{}"},
+		},
 	}
 
 	created, err := service.RecordSDKDecision(context.Background(), bo.Event{

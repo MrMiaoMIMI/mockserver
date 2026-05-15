@@ -36,9 +36,15 @@ func testRuleSet(id, ruleID, path string, priority int) bo.RuleSet {
 					},
 				},
 				Action: bo.Action{
-					Type:   eo.ActionTypeStaticResponse,
-					Status: 200,
-					Body:   map[string]any{"message": "ok"},
+					Type:     eo.ActionTypeRespond,
+					Renderer: eo.ActionRendererStatic,
+					Response: &bo.ProtocolResponse{
+						Protocol: eo.ProtocolHTTP,
+						Payload: map[string]any{
+							"status": 200,
+							"body":   map[string]any{"message": "ok"},
+						},
+					},
 				},
 			},
 		},

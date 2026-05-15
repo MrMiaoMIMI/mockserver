@@ -33,10 +33,9 @@ func TestCompileAndMatchTemplateRule(t *testing.T) {
 					},
 				},
 				Action: bo.Action{
-					Type:         eo.ActionTypeTemplateResponse,
-					Status:       200,
-					Headers:      map[string][]string{"content-type": {"application/json"}},
-					BodyTemplate: `{"message":"hello {{ query . "q1" }}","path":"{{ field . "request.path" }}"}`,
+					Type:             eo.ActionTypeRespond,
+					Renderer:         eo.ActionRendererTemplate,
+					ResponseTemplate: `{"status":200,"headers":{"content-type":["application/json"]},"body":{"message":"hello {{ query . "q1" }}","path":"{{ field . "request.path" }}"}}`,
 				},
 			},
 		},
@@ -68,22 +67,23 @@ func TestCompileAndMatchTemplateRule(t *testing.T) {
 	if result.Trace.RuleID != "debug-api" {
 		t.Fatalf("unexpected rule id: %s", result.Trace.RuleID)
 	}
-	if result.Response.Status != 200 {
-		t.Fatalf("unexpected status: %d", result.Response.Status)
+	if responseStatus(result.Response) != 200 {
+		t.Fatalf("unexpected status: %#v", result.Response.Payload["status"])
 	}
-	body, ok := result.Response.Body.(string)
-	if !ok || body != `{"message":"hello qv1","path":"/api/v1/debug"}` {
-		t.Fatalf("unexpected body: %#v", result.Response.Body)
+	body, ok := result.Response.Payload["body"].(map[string]any)
+	if !ok || body["message"] != "hello qv1" || body["path"] != "/api/v1/debug" {
+		t.Fatalf("unexpected body: %#v", result.Response.Payload["body"])
 	}
 }
 
 func TestCompileAndMatchSequenceResponseRule(t *testing.T) {
 	ruleSet := testSingleActionRuleSet("sequence-case", bo.Action{
-		Type:             eo.ActionTypeSequenceResponse,
+		Type:             eo.ActionTypeRespond,
+		Renderer:         eo.ActionRendererSequence,
 		SequenceStrategy: eo.SequenceStrategyLast,
 		Sequence: []bo.SequenceStep{
-			{Status: 202, Body: map[string]any{"state": "pending"}},
-			{Status: 200, Body: map[string]any{"state": "done"}},
+			{Response: httpResponse(202, map[string]any{"state": "pending"})},
+			{Response: httpResponse(200, map[string]any{"state": "done"})},
 		},
 	})
 	compiled, err := CompileRuleSet(ruleSet)
@@ -104,13 +104,13 @@ func TestCompileAndMatchSequenceResponseRule(t *testing.T) {
 		t.Fatalf("third Match() error = %v", err)
 	}
 
-	if first.Response.Status != 202 || first.Response.Body.(map[string]any)["state"] != "pending" {
+	if responseStatus(first.Response) != 202 || first.Response.Payload["body"].(map[string]any)["state"] != "pending" {
 		t.Fatalf("unexpected first response: %#v", first.Response)
 	}
-	if second.Response.Status != 200 || second.Response.Body.(map[string]any)["state"] != "done" {
+	if responseStatus(second.Response) != 200 || second.Response.Payload["body"].(map[string]any)["state"] != "done" {
 		t.Fatalf("unexpected second response: %#v", second.Response)
 	}
-	if third.Response.Status != 200 || third.Response.Body.(map[string]any)["state"] != "done" {
+	if responseStatus(third.Response) != 200 || third.Response.Payload["body"].(map[string]any)["state"] != "done" {
 		t.Fatalf("unexpected third response: %#v", third.Response)
 	}
 }
@@ -126,16 +126,16 @@ func TestCompileAndMatchWebhookResponseRule(t *testing.T) {
 			return &http.Response{
 				StatusCode: http.StatusCreated,
 				Header: http.Header{
-					"Content-Type":     {"application/json"},
-					"X-Webhook-Result": {"ok"},
+					"Content-Type": {"application/json"},
 				},
-				Body: io.NopCloser(strings.NewReader(`{"from_webhook":true}`)),
+				Body: io.NopCloser(strings.NewReader(`{"status":201,"headers":{"X-Webhook-Result":["ok"]},"body":{"from_webhook":true}}`)),
 			}, nil
 		})}
 	}
 
 	ruleSet := testSingleActionRuleSet("webhook-case", bo.Action{
-		Type: eo.ActionTypeWebhookResponse,
+		Type:     eo.ActionTypeRespond,
+		Renderer: eo.ActionRendererWebhook,
 		Webhook: &bo.WebhookConfig{
 			URL:       "http://webhook.example/mock",
 			Method:    http.MethodPost,
@@ -151,15 +151,17 @@ func TestCompileAndMatchWebhookResponseRule(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Match() error = %v", err)
 	}
-	if result.Response.Status != http.StatusCreated {
-		t.Fatalf("unexpected status: %d", result.Response.Status)
+	if responseStatus(result.Response) != http.StatusCreated {
+		t.Fatalf("unexpected status: %#v", result.Response.Payload["status"])
 	}
-	if values := result.Response.Headers["X-Webhook-Result"]; len(values) != 1 || values[0] != "ok" {
-		t.Fatalf("unexpected webhook header: %#v", result.Response.Headers)
+	headers := result.Response.Payload["headers"].(map[string]any)
+	values := headers["X-Webhook-Result"].([]any)
+	if len(values) != 1 || values[0] != "ok" {
+		t.Fatalf("unexpected webhook header: %#v", headers)
 	}
-	body, ok := result.Response.Body.(map[string]any)
+	body, ok := result.Response.Payload["body"].(map[string]any)
 	if !ok || body["from_webhook"] != true {
-		t.Fatalf("unexpected body: %#v", result.Response.Body)
+		t.Fatalf("unexpected body: %#v", result.Response.Payload["body"])
 	}
 }
 
@@ -179,6 +181,41 @@ func httpHostSelector(host string) bo.Condition {
 
 func httpPathPrefixSelector(prefix string) bo.Condition {
 	return bo.Condition{Field: "request.path", Op: eo.OperatorPrefix, Value: prefix}
+}
+
+func httpResponse(status int, body any) bo.ProtocolResponse {
+	return bo.ProtocolResponse{
+		Protocol: eo.ProtocolHTTP,
+		Payload: map[string]any{
+			"status": status,
+			"body":   body,
+		},
+	}
+}
+
+func httpStaticAction(status int, body any) bo.Action {
+	return bo.Action{
+		Type:     eo.ActionTypeRespond,
+		Renderer: eo.ActionRendererStatic,
+		Response: ptrProtocolResponse(httpResponse(status, body)),
+	}
+}
+
+func ptrProtocolResponse(response bo.ProtocolResponse) *bo.ProtocolResponse {
+	return &response
+}
+
+func responseStatus(response bo.ProtocolResponse) int {
+	switch value := response.Payload["status"].(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	default:
+		return 0
+	}
 }
 
 func testSingleActionRuleSet(id string, action bo.Action) bo.RuleSet {
@@ -240,9 +277,9 @@ func TestCompileAndMatchTemplateRuleWithBodyHelpers(t *testing.T) {
 					},
 				},
 				Action: bo.Action{
-					Type:         eo.ActionTypeTemplateResponse,
-					Status:       200,
-					BodyTemplate: `{"user":"{{ body . "user.id" }}","tag":"{{ first (queryAll . "tag") }}","payload":{{ toJSON (body . "user") }}}`,
+					Type:             eo.ActionTypeRespond,
+					Renderer:         eo.ActionRendererTemplate,
+					ResponseTemplate: `{"status":200,"body":{"user":"{{ body . "user.id" }}","tag":"{{ first (queryAll . "tag") }}","payload":{{ toJSON (body . "user") }}}}`,
 				},
 			},
 		},
@@ -274,12 +311,12 @@ func TestCompileAndMatchTemplateRuleWithBodyHelpers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Match() error = %v", err)
 	}
-	body, ok := result.Response.Body.(string)
+	body, ok := result.Response.Payload["body"].(map[string]any)
 	if !ok {
-		t.Fatalf("unexpected body type: %T", result.Response.Body)
+		t.Fatalf("unexpected body type: %T", result.Response.Payload["body"])
 	}
-	if body != `{"user":"u-1","tag":"t1","payload":{"id":"u-1","name":"tester"}}` {
-		t.Fatalf("unexpected body: %s", body)
+	if body["user"] != "u-1" || body["tag"] != "t1" {
+		t.Fatalf("unexpected body: %#v", body)
 	}
 }
 
@@ -304,10 +341,9 @@ func TestCompileAndMatchCELRule(t *testing.T) {
 					},
 				},
 				Action: bo.Action{
-					Type:           eo.ActionTypeCELResponse,
-					Status:         201,
-					Headers:        map[string][]string{"content-type": {"application/json"}},
-					BodyExpression: `{"user_id": request.body.user.id, "score": request.body.score, "path": request.path}`,
+					Type:               eo.ActionTypeRespond,
+					Renderer:           eo.ActionRendererCEL,
+					ResponseExpression: `{"status": 201, "headers": {"content-type": ["application/json"]}, "body": {"user_id": request.body.user.id, "score": request.body.score, "path": request.path}}`,
 				},
 			},
 		},
@@ -344,13 +380,13 @@ func TestCompileAndMatchCELRule(t *testing.T) {
 	if !result.Matched {
 		t.Fatalf("expected result to match")
 	}
-	if result.Response.Status != 201 {
-		t.Fatalf("unexpected status: %d", result.Response.Status)
+	if responseStatus(result.Response) != 201 {
+		t.Fatalf("unexpected status: %#v", result.Response.Payload["status"])
 	}
 
-	body, ok := result.Response.Body.(map[string]any)
+	body, ok := result.Response.Payload["body"].(map[string]any)
 	if !ok {
-		t.Fatalf("unexpected body type: %T", result.Response.Body)
+		t.Fatalf("unexpected body type: %T", result.Response.Payload["body"])
 	}
 	if body["user_id"] != "u-1" {
 		t.Fatalf("unexpected user_id: %#v", body["user_id"])
@@ -380,11 +416,7 @@ func TestMatchUsesCompiledRuleIndexesWithoutDroppingWildcardRules(t *testing.T) 
 						{Field: "request.path", Op: eo.OperatorEQ, Value: "/api/v1/wrong"},
 					},
 				},
-				Action: bo.Action{
-					Type:   eo.ActionTypeStaticResponse,
-					Status: 200,
-					Body:   map[string]any{"rule": "wrong"},
-				},
+				Action: httpStaticAction(200, map[string]any{"rule": "wrong"}),
 			},
 			{
 				ID:       "wildcard-path",
@@ -396,11 +428,7 @@ func TestMatchUsesCompiledRuleIndexesWithoutDroppingWildcardRules(t *testing.T) 
 					Op:    eo.OperatorEQ,
 					Value: "GET",
 				},
-				Action: bo.Action{
-					Type:   eo.ActionTypeStaticResponse,
-					Status: 200,
-					Body:   map[string]any{"rule": "wildcard"},
-				},
+				Action: httpStaticAction(200, map[string]any{"rule": "wildcard"}),
 			},
 		},
 	}
@@ -451,11 +479,7 @@ func TestHTTPPathPrefixSelectorMatchesPathSegments(t *testing.T) {
 					Op:    eo.OperatorEQ,
 					Value: "GET",
 				},
-				Action: bo.Action{
-					Type:   eo.ActionTypeStaticResponse,
-					Status: 200,
-					Body:   map[string]any{"ok": true},
-				},
+				Action: httpStaticAction(200, map[string]any{"ok": true}),
 			},
 		},
 	}
@@ -519,11 +543,7 @@ func TestMatchExplainsIndexedOutRulesWhenRuleSetMatches(t *testing.T) {
 						{Field: "request.path", Op: eo.OperatorEQ, Value: "/api/v2/debug"},
 					},
 				},
-				Action: bo.Action{
-					Type:   eo.ActionTypeStaticResponse,
-					Status: 200,
-					Body:   map[string]any{"ok": true},
-				},
+				Action: httpStaticAction(200, map[string]any{"ok": true}),
 			},
 		},
 	}
@@ -571,11 +591,7 @@ func TestValidateRuleSetRejectsInvalidCEL(t *testing.T) {
 				When: bo.Condition{
 					Expr: `request.path == `,
 				},
-				Action: bo.Action{
-					Type:   eo.ActionTypeStaticResponse,
-					Status: 200,
-					Body:   map[string]any{"ok": true},
-				},
+				Action: httpStaticAction(200, map[string]any{"ok": true}),
 			},
 		},
 	}
@@ -620,25 +636,25 @@ func TestValidateRuleSetRejectsUnsafeOrAmbiguousRules(t *testing.T) {
 		{
 			name: "invalid status",
 			mutate: func(ruleSet *bo.RuleSet) {
-				ruleSet.Rules[0].Action.Status = 99
+				ruleSet.Rules[0].Action.Response.Payload["status"] = 99
 			},
-			wantPath:   "rules[0].action.status",
-			wantReason: "between 100 and 599",
+			wantPath:   "rules[0].action.response.payload",
+			wantReason: ">= 100",
 		},
 		{
 			name: "invalid header name",
 			mutate: func(ruleSet *bo.RuleSet) {
-				ruleSet.Rules[0].Action.Headers = map[string][]string{"bad header": {"value"}}
+				ruleSet.Rules[0].Action.Response.Payload["headers"] = map[string]any{"bad header": []any{"value"}}
 			},
-			wantPath:   "rules[0].action.headers.bad header",
+			wantPath:   "rules[0].action.response.payload.headers.bad header",
 			wantReason: "invalid header name",
 		},
 		{
 			name: "unsafe header value",
 			mutate: func(ruleSet *bo.RuleSet) {
-				ruleSet.Rules[0].Action.Headers = map[string][]string{"x-good": {"bad\r\nvalue"}}
+				ruleSet.Rules[0].Action.Response.Payload["headers"] = map[string]any{"x-good": []any{"bad\r\nvalue"}}
 			},
-			wantPath:   "rules[0].action.headers.x-good[0]",
+			wantPath:   "rules[0].action.response.payload.headers.x-good[0]",
 			wantReason: "must not contain CR or LF",
 		},
 		{
@@ -800,11 +816,7 @@ func validRuleSetForValidation() bo.RuleSet {
 					Op:    eo.OperatorEQ,
 					Value: "/api/v1/validation",
 				},
-				Action: bo.Action{
-					Type:   eo.ActionTypeStaticResponse,
-					Status: 200,
-					Body:   map[string]any{"ok": true},
-				},
+				Action: httpStaticAction(200, map[string]any{"ok": true}),
 			},
 		},
 	}
@@ -879,11 +891,7 @@ func TestMatchWithOptionsTrimExplainDepth(t *testing.T) {
 						},
 					},
 				},
-				Action: bo.Action{
-					Type:   eo.ActionTypeStaticResponse,
-					Status: 200,
-					Body:   map[string]any{"ok": true},
-				},
+				Action: httpStaticAction(200, map[string]any{"ok": true}),
 			},
 		},
 	}
@@ -1037,11 +1045,7 @@ func testStaticRuleSetWithSelector(id string, selector bo.Selector) bo.RuleSet {
 						{Field: "request.path", Op: eo.OperatorEQ, Value: "/api/order/status"},
 					},
 				},
-				Action: bo.Action{
-					Type:   eo.ActionTypeStaticResponse,
-					Status: 200,
-					Body:   map[string]any{"ruleset": id},
-				},
+				Action: httpStaticAction(200, map[string]any{"ruleset": id}),
 			},
 		},
 	}

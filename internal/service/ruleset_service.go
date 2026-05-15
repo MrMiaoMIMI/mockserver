@@ -19,6 +19,7 @@ import (
 	"github.com/MrMiaoMIMI/mockserver/internal/engine"
 	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
 	"github.com/MrMiaoMIMI/mockserver/internal/model/eo"
+	"github.com/MrMiaoMIMI/mockserver/mockprotocol"
 )
 
 type rulesetService struct {
@@ -527,23 +528,51 @@ func normalizeNamespace(namespace bo.Namespace) (bo.Namespace, error) {
 	if namespace.Name == "" {
 		namespace.Name = namespace.ID
 	}
-	if isNamespaceFallbackActionEmpty(namespace.RulesetMissAction) {
-		namespace.RulesetMissAction = bo.DefaultNamespaceFallbackAction()
+	if namespace.Policies == nil {
+		namespace.Policies = map[string]bo.NamespacePolicy{}
 	}
-	if isNamespaceFallbackActionEmpty(namespace.RuleMissAction) {
-		namespace.RuleMissAction = bo.DefaultNamespaceFallbackAction()
+	normalizedPolicies := make(map[string]bo.NamespacePolicy, len(namespace.Policies))
+	for protocol, policy := range namespace.Policies {
+		protocol = strings.ToLower(strings.TrimSpace(protocol))
+		if protocol == "" {
+			return bo.Namespace{}, fmt.Errorf("policy protocol is required")
+		}
+		normalizedPolicies[protocol] = policy
 	}
-	if err := validateNamespaceFallbackAction(namespace.RulesetMissAction, "ruleset_miss_action"); err != nil {
-		return bo.Namespace{}, err
+	namespace.Policies = normalizedPolicies
+	for _, spec := range mockprotocol.RegisteredSpecs() {
+		protocol := strings.ToLower(strings.TrimSpace(spec.Name))
+		policy := namespace.Policies[protocol]
+		if isNamespaceActionEmpty(policy.RulesetMissAction) {
+			policy.RulesetMissAction = bo.DefaultNamespaceForwardAction()
+		}
+		if isNamespaceActionEmpty(policy.RuleMissAction) {
+			policy.RuleMissAction = bo.DefaultNamespaceForwardAction()
+		}
+		if err := validateNamespacePolicyAction(protocol, policy.RulesetMissAction, "policies."+protocol+".ruleset_miss_action"); err != nil {
+			return bo.Namespace{}, err
+		}
+		if err := validateNamespacePolicyAction(protocol, policy.RuleMissAction, "policies."+protocol+".rule_miss_action"); err != nil {
+			return bo.Namespace{}, err
+		}
+		namespace.Policies[protocol] = policy
 	}
-	if err := validateNamespaceFallbackAction(namespace.RuleMissAction, "rule_miss_action"); err != nil {
-		return bo.Namespace{}, err
+	for protocol, policy := range namespace.Policies {
+		if _, ok := mockprotocol.DefaultRegistry().Get(protocol); !ok {
+			return bo.Namespace{}, fmt.Errorf("policies.%s uses unsupported protocol", protocol)
+		}
+		if err := validateNamespacePolicyAction(protocol, policy.RulesetMissAction, "policies."+protocol+".ruleset_miss_action"); err != nil {
+			return bo.Namespace{}, err
+		}
+		if err := validateNamespacePolicyAction(protocol, policy.RuleMissAction, "policies."+protocol+".rule_miss_action"); err != nil {
+			return bo.Namespace{}, err
+		}
 	}
 	return namespace, nil
 }
 
-func isNamespaceFallbackActionEmpty(action bo.NamespaceFallbackAction) bool {
-	return action.Type == "" && action.Response == nil && action.Forward == nil
+func isNamespaceActionEmpty(action bo.Action) bool {
+	return action.Type == "" && action.Renderer == "" && action.Response == nil && action.Forward == nil
 }
 
 func normalizeNamespaceID(id string) string {
@@ -596,16 +625,20 @@ func normalizeAndValidateRuleSetIdentifiers(ruleSet bo.RuleSet) (bo.RuleSet, err
 	return ruleSet, nil
 }
 
-func validateNamespaceFallbackAction(action bo.NamespaceFallbackAction, path string) error {
+func validateNamespacePolicyAction(protocol string, action bo.Action, path string) error {
 	switch action.Type {
-	case eo.NamespaceFallbackTypeResponse:
-		if action.Response == nil {
-			return fmt.Errorf("%s.response is required", path)
+	case eo.ActionTypeRespond:
+		if renderer := strings.TrimSpace(action.Renderer); renderer != "" && renderer != eo.ActionRendererStatic {
+			return fmt.Errorf("%s.renderer only supports static for namespace policies", path)
 		}
-		if action.Response.Status < 100 || action.Response.Status > 599 {
-			return fmt.Errorf("%s.response.status must be between 100 and 599", path)
+		var payload map[string]any
+		if action.Response != nil {
+			payload = action.Response.Payload
 		}
-	case eo.NamespaceFallbackTypeForward:
+		if _, err := mockprotocol.NormalizeResponsePayload(protocol, payload); err != nil {
+			return fmt.Errorf("%s.response.payload: %w", path, err)
+		}
+	case eo.ActionTypeForward:
 		if action.Forward == nil {
 			return fmt.Errorf("%s.forward is required", path)
 		}
@@ -613,39 +646,89 @@ func validateNamespaceFallbackAction(action bo.NamespaceFallbackAction, path str
 			return fmt.Errorf("%s.forward.timeout_ms must be between 0 and 30000", path)
 		}
 	default:
-		return fmt.Errorf("%s.type must be response or forward", path)
+		return fmt.Errorf("%s.type must be respond or forward", path)
 	}
 	return nil
 }
 
-func executeHTTPRuntimeNamespaceFallback(ctx context.Context, action bo.NamespaceFallbackAction, event bo.Event) (bo.ActionExecution, error) {
-	switch action.Type {
-	case eo.NamespaceFallbackTypeResponse:
-		if action.Response == nil {
-			return bo.ActionExecution{}, fmt.Errorf("namespace fallback response is required")
+func namespacePolicyForProtocol(namespace bo.Namespace, protocol string) bo.NamespacePolicy {
+	protocol = strings.ToLower(strings.TrimSpace(protocol))
+	if namespace.Policies != nil {
+		if policy, ok := namespace.Policies[protocol]; ok {
+			return policy
 		}
-		return bo.ActionExecution{
-			Status:  action.Response.Status,
-			Headers: cloneHeaders(action.Response.Headers),
-			Body:    action.Response.Body,
-		}, nil
-	case eo.NamespaceFallbackTypeForward:
+	}
+	defaultPolicy := bo.NamespacePolicy{
+		RulesetMissAction: bo.DefaultNamespaceForwardAction(),
+		RuleMissAction:    bo.DefaultNamespaceForwardAction(),
+	}
+	return defaultPolicy
+}
+
+func namespaceStaticResponse(protocol string, action bo.Action) (bo.ProtocolResponse, error) {
+	if action.Type != eo.ActionTypeRespond {
+		return bo.ProtocolResponse{}, fmt.Errorf("namespace action type must be respond")
+	}
+	if renderer := strings.TrimSpace(action.Renderer); renderer != "" && renderer != eo.ActionRendererStatic {
+		return bo.ProtocolResponse{}, fmt.Errorf("namespace response renderer %q is not supported", action.Renderer)
+	}
+	response := action.Response
+	if response == nil {
+		response = &bo.ProtocolResponse{}
+	}
+	if strings.TrimSpace(response.Protocol) != "" && !strings.EqualFold(response.Protocol, protocol) {
+		return bo.ProtocolResponse{}, fmt.Errorf("namespace response protocol %q does not match event protocol %q", response.Protocol, protocol)
+	}
+	payload, err := mockprotocol.NormalizeResponsePayload(protocol, response.Payload)
+	if err != nil {
+		return bo.ProtocolResponse{}, err
+	}
+	return bo.ProtocolResponse{
+		Protocol: strings.ToLower(strings.TrimSpace(protocol)),
+		Payload:  payload,
+	}, nil
+}
+
+func clonePayload(payload map[string]any) map[string]any {
+	if payload == nil {
+		return nil
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		cloned := make(map[string]any, len(payload))
+		for key, value := range payload {
+			cloned[key] = value
+		}
+		return cloned
+	}
+	var cloned map[string]any
+	if err := json.Unmarshal(raw, &cloned); err != nil {
+		return nil
+	}
+	return cloned
+}
+
+func executeHTTPRuntimeNamespaceFallback(ctx context.Context, action bo.Action, event bo.Event) (bo.ProtocolResponse, error) {
+	switch action.Type {
+	case eo.ActionTypeRespond:
+		return namespaceStaticResponse(event.Protocol, action)
+	case eo.ActionTypeForward:
 		if action.Forward == nil {
-			return bo.ActionExecution{}, fmt.Errorf("namespace fallback forward is required")
+			return bo.ProtocolResponse{}, fmt.Errorf("namespace fallback forward is required")
 		}
 		return executeHTTPRuntimeForwardFallback(ctx, *action.Forward, event)
 	default:
-		return bo.ActionExecution{}, fmt.Errorf("unsupported namespace fallback action type %q", action.Type)
+		return bo.ProtocolResponse{}, fmt.Errorf("unsupported namespace fallback action type %q", action.Type)
 	}
 }
 
-func executeHTTPRuntimeForwardFallback(ctx context.Context, action bo.NamespaceForwardFallback, event bo.Event) (bo.ActionExecution, error) {
+func executeHTTPRuntimeForwardFallback(ctx context.Context, action bo.NamespaceForwardFallback, event bo.Event) (bo.ProtocolResponse, error) {
 	if event.Protocol != eo.ProtocolHTTP {
-		return bo.ActionExecution{}, fmt.Errorf("server-side forward fallback execution is only supported by HTTP runtime; use a forward decision for protocol-specific mockinject forwarding")
+		return bo.ProtocolResponse{}, fmt.Errorf("server-side forward fallback execution is only supported by HTTP runtime; use a forward decision for protocol-specific mockinject forwarding")
 	}
 	targetURL, forwardHost, err := buildHTTPRuntimeForwardURL(event)
 	if err != nil {
-		return bo.ActionExecution{}, err
+		return bo.ProtocolResponse{}, err
 	}
 	timeout := time.Duration(action.TimeoutMS) * time.Millisecond
 	if timeout <= 0 {
@@ -653,7 +736,7 @@ func executeHTTPRuntimeForwardFallback(ctx context.Context, action bo.NamespaceF
 	}
 	req, err := http.NewRequestWithContext(ctx, bo.RequestString(event.Request, "method"), targetURL, bytes.NewBufferString(bo.RequestString(event.Request, "raw_body")))
 	if err != nil {
-		return bo.ActionExecution{}, fmt.Errorf("build forward request: %w", err)
+		return bo.ProtocolResponse{}, fmt.Errorf("build forward request: %w", err)
 	}
 	req.Host = forwardHost
 	for key, values := range bo.RequestStringMap(event.Request, "headers") {
@@ -668,13 +751,13 @@ func executeHTTPRuntimeForwardFallback(ctx context.Context, action bo.NamespaceF
 	client := &http.Client{Timeout: timeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		return bo.ActionExecution{}, fmt.Errorf("forward fallback request failed: %w", err)
+		return bo.ProtocolResponse{}, fmt.Errorf("forward fallback request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return bo.ActionExecution{}, fmt.Errorf("read forward fallback response: %w", err)
+		return bo.ProtocolResponse{}, fmt.Errorf("read forward fallback response: %w", err)
 	}
 	var body any = string(bodyBytes)
 	if len(bodyBytes) > 0 {
@@ -683,10 +766,13 @@ func executeHTTPRuntimeForwardFallback(ctx context.Context, action bo.NamespaceF
 			body = parsed
 		}
 	}
-	return bo.ActionExecution{
-		Status:  resp.StatusCode,
-		Headers: cloneHeaders(resp.Header),
-		Body:    body,
+	return bo.ProtocolResponse{
+		Protocol: eo.ProtocolHTTP,
+		Payload: map[string]any{
+			"status":  resp.StatusCode,
+			"headers": cloneHeaders(resp.Header),
+			"body":    body,
+		},
 	}, nil
 }
 

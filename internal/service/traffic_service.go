@@ -189,8 +189,13 @@ func buildTrafficIndexes(event bo.Event, decision bo.RuntimeDecision) []bo.Traff
 			addField(fields, "event.request."+key, value)
 		}
 	}
-	if decision.Response != nil && decision.Response.Status > 0 {
-		addField(fields, "decision.response.status", strconv.Itoa(decision.Response.Status))
+	if decision.Response != nil {
+		if decision.Response.Protocol != "" {
+			addField(fields, "decision.response.protocol", decision.Response.Protocol)
+		}
+		for path, value := range responseIndexValues(*decision.Response) {
+			addField(fields, "decision.response.payload."+path, value)
+		}
 	}
 
 	indexes := make([]bo.TrafficEventIndex, 0, len(fields))
@@ -209,6 +214,25 @@ func buildTrafficIndexes(event bo.Event, decision bo.RuntimeDecision) []bo.Traff
 		})
 	}
 	return indexes
+}
+
+func responseIndexValues(response bo.ProtocolResponse) map[string]string {
+	values := map[string]string{}
+	switch strings.ToLower(strings.TrimSpace(response.Protocol)) {
+	case eo.ProtocolHTTP:
+		if value := stringFromAny(response.Payload["status"]); value != "" {
+			values["status"] = value
+		}
+	case eo.ProtocolSPEX:
+		if value := stringFromAny(response.Payload["code"]); value != "" {
+			values["code"] = value
+		}
+	case eo.ProtocolCache:
+		if value := stringFromAny(response.Payload["hit"]); value != "" {
+			values["hit"] = value
+		}
+	}
+	return values
 }
 
 func sortedRequestKeys(request bo.EventRequest) []string {

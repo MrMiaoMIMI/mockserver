@@ -1,13 +1,14 @@
 package bo
 
 type RuntimeDecision struct {
-	Kind     string           `json:"kind"`
-	Matched  bool             `json:"matched"`
-	Fallback bool             `json:"fallback,omitempty"`
-	Trace    MatchTrace       `json:"trace"`
-	Response *ActionExecution `json:"response,omitempty"`
-	Forward  *ForwardDecision `json:"forward,omitempty"`
-	Meta     DecisionMeta     `json:"meta,omitempty"`
+	Kind     string            `json:"kind"`
+	Matched  bool              `json:"matched"`
+	Fallback bool              `json:"fallback,omitempty"`
+	Protocol string            `json:"protocol,omitempty"`
+	Trace    MatchTrace        `json:"trace"`
+	Response *ProtocolResponse `json:"response,omitempty"`
+	Forward  *ForwardDecision  `json:"forward,omitempty"`
+	Meta     DecisionMeta      `json:"meta,omitempty"`
 
 	Diagnostics *DecisionDiagnostics `json:"-"`
 }

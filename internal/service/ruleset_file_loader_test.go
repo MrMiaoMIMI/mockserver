@@ -56,10 +56,15 @@ func TestLoadRuleSetFilesPublishesRuleSet(t *testing.T) {
         ]
       },
       "action": {
-        "type": "static_response",
-        "status": 200,
-        "body": {
-          "message": "ok"
+        "type": "respond",
+        "renderer": "static",
+        "response": {
+          "payload": {
+            "status": 200,
+            "body": {
+              "message": "ok"
+            }
+          }
         }
       }
     }
@@ -183,10 +188,15 @@ func mustWriteRuleSetFile(t *testing.T, path string, ruleID string, requestPath 
         ]
       },
       "action": {
-        "type": "static_response",
-        "status": 200,
-        "body": {
-          "version": ` + strconv.Itoa(version) + `
+        "type": "respond",
+        "renderer": "static",
+        "response": {
+          "payload": {
+            "status": 200,
+            "body": {
+              "version": ` + strconv.Itoa(version) + `
+            }
+          }
         }
       }
     }

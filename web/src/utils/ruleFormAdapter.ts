@@ -12,6 +12,7 @@ export interface RuleSequenceStepForm {
 }
 
 export interface RuleFormState {
+  protocol: string
   id: string
   name: string
   enabled: boolean
@@ -52,7 +53,7 @@ export interface BuildRuleResult {
   errors: RuleFormError[]
 }
 
-const statusActionTypes = new Set(['static_response', 'template_response', 'cel_response'])
+const responseRenderers = new Set(['static', 'template', 'cel'])
 
 export function defaultRuleForm(ruleSet?: RuleSet | null): RuleFormState {
   const rule: Rule = {
@@ -62,13 +63,11 @@ export function defaultRuleForm(ruleSet?: RuleSet | null): RuleFormState {
     priority: nextPriority(ruleSet),
     when: defaultConditionTree(ruleSet?.protocol),
     action: {
-      type: 'static_response',
-      status: 200,
-      headers: {
-        'content-type': ['application/json'],
-      },
-      body: {
-        message: 'hello mockserver',
+      type: 'respond',
+      renderer: 'static',
+      response: {
+        protocol: ruleSet?.protocol || 'http',
+        payload: defaultResponsePayload(ruleSet?.protocol || 'http'),
       },
     },
   }
@@ -78,6 +77,7 @@ export function defaultRuleForm(ruleSet?: RuleSet | null): RuleFormState {
 export function ruleToForm(rule: Rule): RuleFormState {
   const conditionMode = conditionModeFromRule(rule.when)
   const form: RuleFormState = {
+    protocol: rule.action.response?.protocol || '',
     id: rule.id,
     name: rule.name || '',
     enabled: rule.enabled,
@@ -86,12 +86,12 @@ export function ruleToForm(rule: Rule): RuleFormState {
     conditionTree: conditionMode === 'tree' ? clone(rule.when) : defaultConditionTree(),
     conditionExpr: rule.when.expr || '',
     conditionJson: formatJSON(rule.when),
-    actionType: rule.action.type,
-    status: rule.action.status ?? 200,
-    headersJson: formatJSON(rule.action.headers || {}),
-    bodyJson: formatJSON(rule.action.body ?? {}),
-    bodyTemplate: rule.action.body_template || '',
-    bodyExpression: rule.action.body_expression || '',
+    actionType: rule.action.renderer || 'static',
+    status: Number(rule.action.response?.payload?.status || 200),
+    headersJson: formatJSON(rule.action.response?.payload?.headers || {}),
+    bodyJson: formatJSON(rule.action.response?.payload || defaultResponsePayload(rule.action.response?.protocol || 'http')),
+    bodyTemplate: rule.action.response_template || '',
+    bodyExpression: rule.action.response_expression || '',
     sequenceStrategy: rule.action.sequence_strategy || 'last',
     sequenceSteps: stepsToForm(rule.action.sequence || defaultSequence()),
     webhookUrl: rule.action.webhook?.url || '',
@@ -137,7 +137,7 @@ export function newSequenceStepForm(index: number): RuleSequenceStepForm {
     key: `step-${Date.now()}-${index}`,
     status: 200,
     headersJson: '{}',
-    bodyJson: '{\n  "message": "ok"\n}',
+    bodyJson: formatJSON(defaultResponsePayload('http')),
   }
 }
 
@@ -208,52 +208,42 @@ function buildCondition(form: RuleFormState, errors: RuleFormError[]): Condition
 
 function buildAction(form: RuleFormState, errors: RuleFormError[]): RuleAction | undefined {
   const action: RuleAction = {
-    type: form.actionType,
+    type: 'respond',
+    renderer: form.actionType || 'static',
   }
 
-  if (!action.type) {
+  if (!action.renderer) {
     errors.push({ section: 'action', field: 'actionType', message: 'Action Type is required' })
     return undefined
   }
 
-  if (statusActionTypes.has(action.type)) {
-    if (!isHttpStatus(form.status)) {
-      errors.push({ section: 'action', field: 'status', message: 'Status must be between 100 and 599' })
+  if (action.renderer === 'static') {
+    action.response = {
+      payload: parseJSON<Record<string, unknown>>(form.bodyJson || '{}', {
+        section: 'action',
+        field: 'bodyJson',
+        label: 'Response Payload JSON',
+        errors,
+      }),
     }
-    action.status = form.status
-    action.headers = parseJSON<Record<string, string[]>>(form.headersJson || '{}', {
-      section: 'action',
-      field: 'headersJson',
-      label: 'Headers JSON',
-      errors,
-    })
   }
-
-  if (action.type === 'static_response') {
-    action.body = parseJSON<unknown>(form.bodyJson || 'null', {
-      section: 'action',
-      field: 'bodyJson',
-      label: 'Body JSON',
-      errors,
-    })
-  }
-  if (action.type === 'template_response') {
+  if (action.renderer === 'template') {
     if (!form.bodyTemplate.trim()) {
-      errors.push({ section: 'action', field: 'bodyTemplate', message: 'Body Template is required' })
+      errors.push({ section: 'action', field: 'bodyTemplate', message: 'Response Template is required' })
     }
-    action.body_template = form.bodyTemplate
+    action.response_template = form.bodyTemplate
   }
-  if (action.type === 'cel_response') {
+  if (action.renderer === 'cel') {
     if (!form.bodyExpression.trim()) {
-      errors.push({ section: 'action', field: 'bodyExpression', message: 'Body Expression is required' })
+      errors.push({ section: 'action', field: 'bodyExpression', message: 'Response Expression is required' })
     }
-    action.body_expression = form.bodyExpression
+    action.response_expression = form.bodyExpression
   }
-  if (action.type === 'sequence_response') {
+  if (action.renderer === 'sequence') {
     action.sequence_strategy = form.sequenceStrategy || 'last'
     action.sequence = buildSequence(form.sequenceSteps, errors)
   }
-  if (action.type === 'webhook_response') {
+  if (action.renderer === 'webhook') {
     if (!form.webhookUrl.trim()) {
       errors.push({ section: 'action', field: 'webhookUrl', message: 'Webhook URL is required' })
     }
@@ -286,27 +276,15 @@ function buildSequence(steps: RuleSequenceStepForm[], errors: RuleFormError[]): 
     return []
   }
   return steps.map((step, index) => {
-    if (!isHttpStatus(step.status)) {
-      errors.push({
-        section: 'action',
-        field: `sequenceSteps.${index}.status`,
-        message: `Step ${index + 1} status must be between 100 and 599`,
-      })
-    }
     return {
-      status: step.status,
-      headers: parseJSON<Record<string, string[]>>(step.headersJson || '{}', {
-        section: 'action',
-        field: `sequenceSteps.${index}.headersJson`,
-        label: `Step ${index + 1} Headers JSON`,
-        errors,
-      }),
-      body: parseJSON<unknown>(step.bodyJson || 'null', {
-        section: 'action',
-        field: `sequenceSteps.${index}.bodyJson`,
-        label: `Step ${index + 1} Body JSON`,
-        errors,
-      }),
+      response: {
+        payload: parseJSON<Record<string, unknown>>(step.bodyJson || '{}', {
+          section: 'action',
+          field: `sequenceSteps.${index}.bodyJson`,
+          label: `Step ${index + 1} Response Payload JSON`,
+          errors,
+        }),
+      },
     }
   })
 }
@@ -400,24 +378,28 @@ function conditionModeFromRule(condition: Condition): RuleConditionMode {
 function stepsToForm(steps: SequenceStep[]): RuleSequenceStepForm[] {
   return steps.map((step, index) => ({
     key: `step-${index + 1}`,
-    status: step.status,
-    headersJson: formatJSON(step.headers || {}),
-    bodyJson: formatJSON(step.body ?? null),
+    status: Number(step.response?.payload?.status || 200),
+    headersJson: formatJSON(step.response?.payload?.headers || {}),
+    bodyJson: formatJSON(step.response?.payload || defaultResponsePayload('http')),
   }))
 }
 
 function defaultSequence(): SequenceStep[] {
   return [
     {
-      status: 202,
-      body: {
-        state: 'pending',
+      response: {
+        payload: {
+          status: 202,
+          body: { state: 'pending' },
+        },
       },
     },
     {
-      status: 200,
-      body: {
-        state: 'done',
+      response: {
+        payload: {
+          status: 200,
+          body: { state: 'done' },
+        },
       },
     },
   ]
@@ -504,24 +486,19 @@ function formToRuleUnsafe(form: RuleFormState): Rule {
 
 function actionFromFormUnsafe(form: RuleFormState): RuleAction {
   const action: RuleAction = {
-    type: form.actionType,
+    type: 'respond',
+    renderer: form.actionType,
   }
-  if (statusActionTypes.has(action.type)) {
-    action.status = form.status
-    action.headers = JSON.parse(form.headersJson || '{}')
-  }
-  if (action.type === 'static_response') action.body = JSON.parse(form.bodyJson || 'null')
-  if (action.type === 'template_response') action.body_template = form.bodyTemplate
-  if (action.type === 'cel_response') action.body_expression = form.bodyExpression
-  if (action.type === 'sequence_response') {
+  if (action.renderer === 'static') action.response = { payload: JSON.parse(form.bodyJson || '{}') }
+  if (action.renderer === 'template') action.response_template = form.bodyTemplate
+  if (action.renderer === 'cel') action.response_expression = form.bodyExpression
+  if (action.renderer === 'sequence') {
     action.sequence_strategy = form.sequenceStrategy
     action.sequence = form.sequenceSteps.map((step) => ({
-      status: step.status,
-      headers: JSON.parse(step.headersJson || '{}'),
-      body: JSON.parse(step.bodyJson || 'null'),
+      response: { payload: JSON.parse(step.bodyJson || '{}') },
     }))
   }
-  if (action.type === 'webhook_response') {
+  if (action.renderer === 'webhook') {
     action.webhook = {
       url: form.webhookUrl,
       method: form.webhookMethod,
@@ -530,6 +507,20 @@ function actionFromFormUnsafe(form: RuleFormState): RuleAction {
     }
   }
   return action
+}
+
+function defaultResponsePayload(protocol = 'http'): Record<string, unknown> {
+  if (protocol === 'spex') {
+    return { code: 0, resp: '{}' }
+  }
+  if (protocol === 'cache') {
+    return { hit: true, value: null }
+  }
+  return {
+    status: 200,
+    headers: { 'content-type': ['application/json'] },
+    body: { message: 'hello mockserver' },
+  }
 }
 
 function parseJSON<T>(

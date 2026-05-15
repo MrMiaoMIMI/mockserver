@@ -59,7 +59,7 @@ func (s *runtimeService) DecidePublished(ctx context.Context, event bo.Event) (b
 		}
 		result.Trace.FallbackReason = reason
 		switch action.Type {
-		case eo.NamespaceFallbackTypeForward:
+		case eo.ActionTypeForward:
 			if action.Forward == nil {
 				return bo.RuntimeDecision{}, fmt.Errorf("published forward decision requires forward fallback payload")
 			}
@@ -67,6 +67,7 @@ func (s *runtimeService) DecidePublished(ctx context.Context, event bo.Event) (b
 				Kind:     eo.DecisionKindForward,
 				Matched:  false,
 				Fallback: true,
+				Protocol: event.Protocol,
 				Trace:    result.Trace,
 				Forward: &bo.ForwardDecision{
 					TimeoutMS: effectiveForwardTimeoutMS(*action.Forward),
@@ -76,20 +77,18 @@ func (s *runtimeService) DecidePublished(ctx context.Context, event bo.Event) (b
 				},
 				Diagnostics: decisionDiagnosticsFromSimulation(result),
 			}, nil
-		case eo.NamespaceFallbackTypeResponse:
-			if action.Response == nil {
-				return bo.RuntimeDecision{}, fmt.Errorf("published response decision requires response fallback payload")
+		case eo.ActionTypeRespond:
+			response, err := namespaceStaticResponse(event.Protocol, action)
+			if err != nil {
+				return bo.RuntimeDecision{}, err
 			}
 			return bo.RuntimeDecision{
 				Kind:     eo.DecisionKindResponse,
 				Matched:  false,
 				Fallback: true,
+				Protocol: event.Protocol,
 				Trace:    result.Trace,
-				Response: &bo.ActionExecution{
-					Status:  action.Response.Status,
-					Headers: cloneHeaders(action.Response.Headers),
-					Body:    action.Response.Body,
-				},
+				Response: &response,
 				Meta: bo.DecisionMeta{
 					TraceID: event.Meta.TraceID,
 				},
@@ -100,13 +99,13 @@ func (s *runtimeService) DecidePublished(ctx context.Context, event bo.Event) (b
 		}
 	}
 	return bo.RuntimeDecision{
-		Kind:    eo.DecisionKindResponse,
-		Matched: true,
-		Trace:   result.Trace,
-		Response: &bo.ActionExecution{
-			Status:  result.Response.Status,
-			Headers: cloneHeaders(result.Response.Headers),
-			Body:    result.Response.Body,
+		Kind:     eo.DecisionKindResponse,
+		Matched:  true,
+		Protocol: event.Protocol,
+		Trace:    result.Trace,
+		Response: &bo.ProtocolResponse{
+			Protocol: result.Response.Protocol,
+			Payload:  clonePayload(result.Response.Payload),
 		},
 		Meta: bo.DecisionMeta{
 			TraceID: event.Meta.TraceID,
@@ -141,30 +140,32 @@ func decisionDiagnosticsFromSimulation(result bo.SimulationResult) *bo.DecisionD
 	return diagnostics
 }
 
-func (s *runtimeService) resolveNamespaceFallback(ctx context.Context, event bo.Event, result bo.SimulationResult) (string, bo.NamespaceFallbackAction, error) {
+func (s *runtimeService) resolveNamespaceFallback(ctx context.Context, event bo.Event, result bo.SimulationResult) (string, bo.Action, error) {
 	reason := eo.FallbackReasonRulesetMiss
-	action := bo.DefaultNamespace(event.Namespace).RulesetMissAction
+	policy := namespacePolicyForProtocol(bo.DefaultNamespace(event.Namespace), event.Protocol)
+	action := policy.RulesetMissAction
 	if result.Explain.RuleSetID != "" {
 		reason = eo.FallbackReasonRuleMiss
-		action = bo.DefaultNamespace(event.Namespace).RuleMissAction
+		action = policy.RuleMissAction
 	}
 	namespaceID := normalizeNamespaceID(event.Namespace)
 	namespace, ok, err := s.namespaceRepository.GetNamespace(ctx, namespaceID)
 	if err != nil {
-		return "", bo.NamespaceFallbackAction{}, err
+		return "", bo.Action{}, err
 	}
 	if !ok && namespaceID == "default" {
 		namespace, err = s.namespaceService.EnsureDefaultNamespace(ctx)
 		if err != nil {
-			return "", bo.NamespaceFallbackAction{}, err
+			return "", bo.Action{}, err
 		}
 		ok = true
 	}
 	if ok {
+		policy = namespacePolicyForProtocol(namespace, event.Protocol)
 		if reason == eo.FallbackReasonRulesetMiss {
-			action = namespace.RulesetMissAction
+			action = policy.RulesetMissAction
 		} else {
-			action = namespace.RuleMissAction
+			action = policy.RuleMissAction
 		}
 	}
 	return reason, action, nil

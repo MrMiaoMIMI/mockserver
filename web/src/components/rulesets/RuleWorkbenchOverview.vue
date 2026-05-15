@@ -28,7 +28,7 @@
         </div>
         <div>
           <span>action</span>
-          <strong>{{ actionTypeLabel(rule.action.type) }}</strong>
+          <strong>{{ actionTypeLabel(rule.action.renderer || rule.action.type) }}</strong>
         </div>
         <div>
           <span>diagnostics</span>

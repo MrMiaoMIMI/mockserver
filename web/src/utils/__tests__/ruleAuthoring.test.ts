@@ -32,7 +32,11 @@ const ruleSet: RuleSet = {
       enabled: true,
       priority: 100,
       when: { field: 'request.path', op: 'eq', value: '/api/old' },
-      action: { type: 'static_response', status: 200, body: { old: true } },
+      action: {
+        type: 'respond',
+        renderer: 'static',
+        response: { payload: { status: 200, body: { old: true } } },
+      },
     },
   ],
 }
@@ -97,7 +101,7 @@ describe('rule authoring helper', () => {
 
   it('replaces the edited rule in the temporary draft override', () => {
     const form = ruleToForm(ruleSet.rules[0])
-    form.bodyJson = '{"updated":true}'
+    form.bodyJson = '{"status":200,"body":{"updated":true}}'
     const view = buildRuleAuthoringView(form, ruleSet, {
       existingRuleIds: ruleSet.rules.map((rule) => rule.id),
       lockedRuleId: 'rule-001',
@@ -105,6 +109,6 @@ describe('rule authoring helper', () => {
     const override = buildDraftOverride(ruleSet, view.rule!, 'rule-001')
 
     expect(override.rules).toHaveLength(1)
-    expect(override.rules[0].action.body).toEqual({ updated: true })
+    expect(override.rules[0].action.response?.payload?.body).toEqual({ updated: true })
   })
 })

@@ -3,35 +3,18 @@
     <header class="editor-header">
       <strong>{{ title }}</strong>
       <el-radio-group :model-value="modelValue.type" size="small" @update:model-value="setType">
-        <el-radio-button value="response">Response</el-radio-button>
+        <el-radio-button value="respond">Response</el-radio-button>
         <el-radio-button value="forward">Forward</el-radio-button>
       </el-radio-group>
     </header>
 
-    <div v-if="modelValue.type === 'response'" class="editor-fields">
-      <el-form-item label="Status">
-        <el-input-number
-          :model-value="modelValue.responseStatus"
-          :min="100"
-          :max="599"
-          controls-position="right"
-          @update:model-value="patch({ responseStatus: Number($event || 0) })"
-        />
-      </el-form-item>
-      <el-form-item label="Headers JSON">
+    <div v-if="modelValue.type === 'respond'" class="editor-fields">
+      <el-form-item :label="`${protocolLabel} Response Payload JSON`">
         <el-input
-          :model-value="modelValue.responseHeaders"
-          type="textarea"
-          :rows="3"
-          @update:model-value="patch({ responseHeaders: $event })"
-        />
-      </el-form-item>
-      <el-form-item label="Body JSON / Text">
-        <el-input
-          :model-value="modelValue.responseBody"
+          :model-value="modelValue.responsePayload"
           type="textarea"
           :rows="6"
-          @update:model-value="patch({ responseBody: $event })"
+          @update:model-value="patch({ responsePayload: $event })"
         />
       </el-form-item>
     </div>
@@ -55,19 +38,23 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { NamespaceFallbackForm, NamespaceFallbackType } from '@/types'
 
 const props = defineProps<{
   modelValue: NamespaceFallbackForm
   title: string
+  protocol?: string
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: NamespaceFallbackForm]
 }>()
 
+const protocolLabel = computed(() => (props.protocol || 'http').toUpperCase())
+
 function setType(value: string | number | boolean | undefined) {
-  patch({ type: String(value || 'response') as NamespaceFallbackType })
+  patch({ type: String(value || 'respond') as NamespaceFallbackType })
 }
 
 function patch(values: Partial<NamespaceFallbackForm>) {

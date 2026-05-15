@@ -83,8 +83,8 @@ export function buildRuleRow(
     String(rule.priority),
     condition,
     action,
-    rule.action.type,
-    actionTypeLabel(rule.action.type),
+    ruleActionKind(rule),
+    actionTypeLabel(ruleActionKind(rule)),
     ...statuses.map((status) => status.label),
     ...(diagnostic?.messages || []),
   ]
@@ -97,7 +97,7 @@ export function buildRuleRow(
     selected: selectedRuleId === rule.id,
     condition,
     action,
-    actionType: actionTypeLabel(rule.action.type),
+    actionType: actionTypeLabel(ruleActionKind(rule)),
     statuses,
     searchableText,
   }
@@ -119,7 +119,7 @@ export function buildRuleStatusCounts(rows: RuleRowView[]) {
 }
 
 export function availableActionTypes(ruleSet: RuleSet | null) {
-  return Array.from(new Set((ruleSet?.rules || []).map((rule) => rule.action.type).filter(Boolean))).sort()
+  return Array.from(new Set((ruleSet?.rules || []).map(ruleActionKind).filter(Boolean))).sort()
 }
 
 export function resolveStableSelectedRuleId(
@@ -162,8 +162,8 @@ function buildRuleStatusTags(
     tone: rule.enabled ? 'ok' : 'neutral',
   })
   statuses.push({
-    key: `action:${rule.action.type || 'unknown'}`,
-    label: actionTypeLabel(rule.action.type),
+    key: `action:${ruleActionKind(rule) || 'unknown'}`,
+    label: actionTypeLabel(ruleActionKind(rule)),
     tone: 'neutral',
   })
   if (diagnostic?.validation === 'invalid') {
@@ -193,9 +193,13 @@ function rowMatchesFilters(row: RuleRowView, filters: RuleFilterState) {
   if (query && !row.searchableText.includes(query)) return false
   if (filters.enabled === 'enabled' && !row.rule.enabled) return false
   if (filters.enabled === 'disabled' && row.rule.enabled) return false
-  if (filters.actionType && row.rule.action.type !== filters.actionType) return false
+  if (filters.actionType && ruleActionKind(row.rule) !== filters.actionType) return false
   if (filters.status !== 'all' && !row.statuses.some((status) => status.key === filters.status)) {
     return false
   }
   return true
+}
+
+function ruleActionKind(rule: Rule) {
+  return rule.action.renderer || rule.action.type || ''
 }

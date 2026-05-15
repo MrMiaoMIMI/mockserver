@@ -51,13 +51,7 @@ func TestAdminPublishAndRuntimeFlow(t *testing.T) {
 						{"field": "request.path", "op": "eq", "value": "/api/v1/debug"},
 					},
 				},
-				"action": map[string]any{
-					"type":   "static_response",
-					"status": 200,
-					"body": map[string]any{
-						"code": 0,
-					},
-				},
+				"action": httpStaticActionPayload(200, map[string]any{"code": 0}),
 			},
 		},
 	}
@@ -79,11 +73,7 @@ func TestAdminPublishAndRuntimeFlow(t *testing.T) {
 						{"field": "request.path", "op": "eq", "value": "/api/v1/debug"},
 					},
 				},
-				"action": map[string]any{
-					"type":   "static_response",
-					"status": 200,
-					"body":   map[string]any{"code": 1},
-				},
+				"action": httpStaticActionPayload(200, map[string]any{"code": 1}),
 			},
 		},
 	}
@@ -124,7 +114,7 @@ func TestAdminPublishAndRuntimeFlow(t *testing.T) {
 	assertBytesContain(t, simulateBody, `"action_info"`)
 	assertBytesContain(t, simulateBody, `"rule_set_explanations"`)
 	assertBytesContain(t, simulateBody, `"action execution skipped because explain_only=true"`)
-	assertBytesContain(t, simulateBody, `"response":{"status":0}`)
+	assertBytesContain(t, simulateBody, `"response":{}`)
 	assertBytesNotContain(t, simulateBody, `"expected"`)
 	assertBytesNotContain(t, simulateBody, `"actual"`)
 	assertBytesNotContain(t, simulateBody, `"rendered_result"`)
@@ -160,11 +150,7 @@ func TestAdminPublishAndRuntimeFlow(t *testing.T) {
 							{"field": "request.path", "op": "eq", "value": "/api/v1/debug"},
 						},
 					},
-					"action": map[string]any{
-						"type":   "static_response",
-						"status": 209,
-						"body":   map[string]any{"override": true},
-					},
+					"action": httpStaticActionPayload(209, map[string]any{"override": true}),
 				},
 			},
 		},
@@ -262,17 +248,12 @@ func TestSDKDecisionEndpointReturnsPublishedHitDecision(t *testing.T) {
 						{"field": "request.path", "op": "eq", "value": "/api/sdk/hit"},
 					},
 				},
-				"action": map[string]any{
-					"type":   "static_response",
-					"status": 202,
-					"headers": map[string]any{
-						"x-sdk-decision": []string{"hit"},
-					},
-					"body": map[string]any{
-						"source": "sdk",
-						"hit":    true,
-					},
-				},
+				"action": httpStaticActionPayloadWithHeaders(202, map[string]any{
+					"x-sdk-decision": []string{"hit"},
+				}, map[string]any{
+					"source": "sdk",
+					"hit":    true,
+				}),
 			},
 		},
 	}
@@ -400,11 +381,7 @@ func TestSDKDecisionEndpointReturnsForwardDecisionsAndDoesNotForward(t *testing.
 					"op":    "eq",
 					"value": "/api/hit",
 				},
-				"action": map[string]any{
-					"type":   "static_response",
-					"status": 200,
-					"body":   map[string]any{"mocked": true},
-				},
+				"action": httpStaticActionPayload(200, map[string]any{"mocked": true}),
 			},
 		},
 	}
@@ -452,20 +429,10 @@ func TestNamespaceFallbackResponseFlow(t *testing.T) {
 
 	namespaceBody := map[string]any{
 		"name": "fallback namespace",
-		"ruleset_miss_action": map[string]any{
-			"type": "response",
-			"response": map[string]any{
-				"status": 418,
-				"body":   map[string]any{"fallback": "ruleset"},
-			},
-		},
-		"rule_miss_action": map[string]any{
-			"type": "response",
-			"response": map[string]any{
-				"status": 409,
-				"body":   map[string]any{"fallback": "rule"},
-			},
-		},
+		"policies": httpNamespacePolicies(
+			httpStaticActionPayload(418, map[string]any{"fallback": "ruleset"}),
+			httpStaticActionPayload(409, map[string]any{"fallback": "rule"}),
+		),
 	}
 	namespaceResp := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/namespaces", namespaceBody, http.StatusOK)
 	var namespaceEnvelope struct {
@@ -505,11 +472,7 @@ func TestNamespaceFallbackResponseFlow(t *testing.T) {
 					"op":    "eq",
 					"value": "/api/hit",
 				},
-				"action": map[string]any{
-					"type":   "static_response",
-					"status": 200,
-					"body":   map[string]any{"hit": true},
-				},
+				"action": httpStaticActionPayload(200, map[string]any{"hit": true}),
 			},
 		},
 	}
@@ -538,26 +501,10 @@ func TestSDKDecisionEndpointReturnsResponseFallbackDecisions(t *testing.T) {
 
 	namespaceResp := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/namespaces", map[string]any{
 		"name": "sdk response fallback",
-		"ruleset_miss_action": map[string]any{
-			"type": "response",
-			"response": map[string]any{
-				"status": 418,
-				"headers": map[string]any{
-					"x-sdk-fallback": []string{"ruleset"},
-				},
-				"body": map[string]any{"fallback": "ruleset"},
-			},
-		},
-		"rule_miss_action": map[string]any{
-			"type": "response",
-			"response": map[string]any{
-				"status": 409,
-				"headers": map[string]any{
-					"x-sdk-fallback": []string{"rule"},
-				},
-				"body": map[string]any{"fallback": "rule"},
-			},
-		},
+		"policies": httpNamespacePolicies(
+			httpStaticActionPayloadWithHeaders(418, map[string]any{"x-sdk-fallback": []string{"ruleset"}}, map[string]any{"fallback": "ruleset"}),
+			httpStaticActionPayloadWithHeaders(409, map[string]any{"x-sdk-fallback": []string{"rule"}}, map[string]any{"fallback": "rule"}),
+		),
 	}, http.StatusOK)
 	var namespaceEnvelope struct {
 		Data struct {
@@ -610,11 +557,7 @@ func TestSDKDecisionEndpointReturnsResponseFallbackDecisions(t *testing.T) {
 					"op":    "eq",
 					"value": "/api/hit",
 				},
-				"action": map[string]any{
-					"type":   "static_response",
-					"status": 200,
-					"body":   map[string]any{"mocked": true},
-				},
+				"action": httpStaticActionPayload(200, map[string]any{"mocked": true}),
 			},
 		},
 	}
@@ -679,11 +622,7 @@ func TestSDKDecisionEndpointEndToEndDecisions(t *testing.T) {
 					"op":    "eq",
 					"value": "/sdk/hit",
 				},
-				"action": map[string]any{
-					"type":   "static_response",
-					"status": 200,
-					"body":   map[string]any{"decision": "hit"},
-				},
+				"action": httpStaticActionPayload(200, map[string]any{"decision": "hit"}),
 			},
 		},
 	}, http.StatusOK)
@@ -691,20 +630,10 @@ func TestSDKDecisionEndpointEndToEndDecisions(t *testing.T) {
 
 	namespaceResp := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/namespaces", map[string]any{
 		"name": "sdk e2e response fallback",
-		"ruleset_miss_action": map[string]any{
-			"type": "response",
-			"response": map[string]any{
-				"status": 451,
-				"body":   map[string]any{"decision": "response-fallback"},
-			},
-		},
-		"rule_miss_action": map[string]any{
-			"type": "response",
-			"response": map[string]any{
-				"status": 452,
-				"body":   map[string]any{"decision": "rule-response-fallback"},
-			},
-		},
+		"policies": httpNamespacePolicies(
+			httpStaticActionPayload(451, map[string]any{"decision": "response-fallback"}),
+			httpStaticActionPayload(452, map[string]any{"decision": "rule-response-fallback"}),
+		),
 	}, http.StatusOK)
 	var namespaceEnvelope struct {
 		Data struct {
@@ -819,11 +748,7 @@ func TestSDKDecisionEndpointCacheDecisionEndToEnd(t *testing.T) {
 						{"field": "request.key", "op": "eq", "value": "user:123"},
 					},
 				},
-				"action": map[string]any{
-					"type":   "static_response",
-					"status": 200,
-					"body":   map[string]any{"value": "mocked"},
-				},
+				"action": cacheStaticActionPayload(true, map[string]any{"value": "mocked"}),
 			},
 		},
 	}, http.StatusOK)
@@ -898,11 +823,7 @@ func TestSDKDecisionEndpointSPEXDecisionEndToEnd(t *testing.T) {
 						{"field": "request.req.order_id", "op": "eq", "value": "1001"},
 					},
 				},
-				"action": map[string]any{
-					"type":   "static_response",
-					"status": 200,
-					"body":   map[string]any{"order_status": "mocked"},
-				},
+				"action": spexStaticActionPayload(0, `{"order_status":"mocked"}`),
 			},
 		},
 	}, http.StatusOK)
@@ -925,7 +846,7 @@ func TestSDKDecisionEndpointSPEXDecisionEndToEnd(t *testing.T) {
 	assertBytesContain(t, hitBody, `"matched":true`)
 	assertBytesContain(t, hitBody, `"ruleset_id":"spex-sdk"`)
 	assertBytesContain(t, hitBody, `"rule_id":"spex-get-order"`)
-	assertBytesContain(t, hitBody, `"order_status":"mocked"`)
+	assertBytesContain(t, hitBody, `\"order_status\":\"mocked\"`)
 
 	missDecision := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/sdk/decision", map[string]any{
 		"event": map[string]any{
@@ -963,8 +884,9 @@ func TestNamespaceCreateDefaultsToForwardFallback(t *testing.T) {
 	}, http.StatusOK)
 	createBody := readBody(t, createResp)
 	assertBytesContain(t, createBody, `"name":"pass through"`)
+	assertBytesContain(t, createBody, `"policies"`)
+	assertBytesContain(t, createBody, `"http"`)
 	assertBytesContain(t, createBody, `"ruleset_miss_action":{"type":"forward","forward":{"timeout_ms":5000}}`)
-	assertBytesContain(t, createBody, `"rule_miss_action":{"type":"forward","forward":{"timeout_ms":5000}}`)
 
 	var envelope struct {
 		Data struct {
@@ -980,37 +902,27 @@ func TestNamespaceCreateDefaultsToForwardFallback(t *testing.T) {
 
 	getResp := doJSON(t, handler, http.MethodGet, "/mockserver/api/v1/admin/namespaces/"+envelope.Data.ID, nil, http.StatusOK)
 	getBody := readBody(t, getResp)
+	assertBytesContain(t, getBody, `"policies"`)
 	assertBytesContain(t, getBody, `"ruleset_miss_action":{"type":"forward","forward":{"timeout_ms":5000}}`)
-	assertBytesContain(t, getBody, `"rule_miss_action":{"type":"forward","forward":{"timeout_ms":5000}}`)
 
 	listResp := doJSON(t, handler, http.MethodGet, "/mockserver/api/v1/admin/namespaces", nil, http.StatusOK)
 	listBody := readBody(t, listResp)
 	assertBytesContain(t, listBody, `"id":"`+envelope.Data.ID+`"`)
-	assertBytesContain(t, listBody, `"ruleset_miss_action":{"type":"forward","forward":{"timeout_ms":5000}}`)
+	assertBytesContain(t, listBody, `"policies"`)
 	assertBytesContain(t, listBody, `"rule_miss_action":{"type":"forward","forward":{"timeout_ms":5000}}`)
 
 	updateResp := doJSON(t, handler, http.MethodPut, "/mockserver/api/v1/admin/namespaces/"+envelope.Data.ID, map[string]any{
 		"name":        "strict namespace",
 		"description": "explicit response fallback",
-		"ruleset_miss_action": map[string]any{
-			"type": "response",
-			"response": map[string]any{
-				"status": 418,
-				"body":   map[string]any{"fallback": "ruleset"},
-			},
-		},
-		"rule_miss_action": map[string]any{
-			"type": "response",
-			"response": map[string]any{
-				"status": 409,
-				"body":   map[string]any{"fallback": "rule"},
-			},
-		},
+		"policies": httpNamespacePolicies(
+			httpStaticActionPayload(418, map[string]any{"fallback": "ruleset"}),
+			httpStaticActionPayload(409, map[string]any{"fallback": "rule"}),
+		),
 	}, http.StatusOK)
 	updateBody := readBody(t, updateResp)
-	assertBytesContain(t, updateBody, `"ruleset_miss_action":{"type":"response"`)
+	assertBytesContain(t, updateBody, `"ruleset_miss_action":{"type":"respond"`)
 	assertBytesContain(t, updateBody, `"status":418`)
-	assertBytesContain(t, updateBody, `"rule_miss_action":{"type":"response"`)
+	assertBytesContain(t, updateBody, `"rule_miss_action":{"type":"respond"`)
 	assertBytesContain(t, updateBody, `"status":409`)
 }
 
@@ -1060,8 +972,8 @@ func TestDefaultNamespaceRulesetMissForwardsOriginalRequest(t *testing.T) {
 	namespaceResp := doJSON(t, handler, http.MethodGet, "/mockserver/api/v1/admin/namespaces/default", nil, http.StatusOK)
 	namespaceBody := readBody(t, namespaceResp)
 	assertBytesContain(t, namespaceBody, `"id":"default"`)
+	assertBytesContain(t, namespaceBody, `"policies"`)
 	assertBytesContain(t, namespaceBody, `"ruleset_miss_action":{"type":"forward","forward":{"timeout_ms":5000}}`)
-	assertBytesContain(t, namespaceBody, `"rule_miss_action":{"type":"forward","forward":{"timeout_ms":5000}}`)
 
 	runtimeResp := doJSONWithHeaders(
 		t,
@@ -1147,11 +1059,7 @@ func TestDefaultNamespaceRuleMissForwardsOriginalRequest(t *testing.T) {
 					"op":    "eq",
 					"value": "/api/hit",
 				},
-				"action": map[string]any{
-					"type":   "static_response",
-					"status": 200,
-					"body":   map[string]any{"mocked": true},
-				},
+				"action": httpStaticActionPayload(200, map[string]any{"mocked": true}),
 			},
 		},
 	}
@@ -1218,15 +1126,8 @@ func TestNamespaceForwardFallbackUsesOriginalRequestTarget(t *testing.T) {
 	handler := router.New(adminController, runtimeController, router.AdminAuthConfig{}, nil)
 
 	namespaceResp := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/namespaces", map[string]any{
-		"name": "forward namespace",
-		"ruleset_miss_action": map[string]any{
-			"type":    "forward",
-			"forward": map[string]any{"timeout_ms": 3000},
-		},
-		"rule_miss_action": map[string]any{
-			"type":    "forward",
-			"forward": map[string]any{"timeout_ms": 3000},
-		},
+		"name":     "forward namespace",
+		"policies": httpNamespacePolicies(forwardActionPayload(3000), forwardActionPayload(3000)),
 	}, http.StatusOK)
 	var namespaceEnvelope struct {
 		Data struct {
@@ -1256,11 +1157,7 @@ func TestNamespaceForwardFallbackUsesOriginalRequestTarget(t *testing.T) {
 					"op":    "eq",
 					"value": "/api/hit",
 				},
-				"action": map[string]any{
-					"type":   "static_response",
-					"status": 200,
-					"body":   map[string]any{"hit": true},
-				},
+				"action": httpStaticActionPayload(200, map[string]any{"hit": true}),
 			},
 		},
 	}
@@ -1327,11 +1224,7 @@ func TestAdminAuthMiddleware(t *testing.T) {
 						{"field": "request.path", "op": "eq", "value": "/api/v1/auth"},
 					},
 				},
-				"action": map[string]any{
-					"type":   "static_response",
-					"status": 200,
-					"body":   map[string]any{"auth": true},
-				},
+				"action": httpStaticActionPayload(200, map[string]any{"auth": true}),
 			},
 		},
 	}
@@ -1395,11 +1288,7 @@ func TestAdminDraftRuleManagementFlow(t *testing.T) {
 						{"field": "request.path", "op": "eq", "value": "/api/v1/base"},
 					},
 				},
-				"action": map[string]any{
-					"type":   "static_response",
-					"status": 200,
-					"body":   map[string]any{"rule": "base"},
-				},
+				"action": httpStaticActionPayload(200, map[string]any{"rule": "base"}),
 			},
 		},
 	}
@@ -1416,11 +1305,7 @@ func TestAdminDraftRuleManagementFlow(t *testing.T) {
 				{"field": "request.path", "op": "eq", "value": "/api/v1/dynamic"},
 			},
 		},
-		"action": map[string]any{
-			"type":   "static_response",
-			"status": 200,
-			"body":   map[string]any{"rule": "dynamic"},
-		},
+		"action": httpStaticActionPayload(200, map[string]any{"rule": "dynamic"}),
 	}
 	addResp := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/rulesets/rule-management/rules", map[string]any{
 		"rule": newRule,
@@ -1440,11 +1325,7 @@ func TestAdminDraftRuleManagementFlow(t *testing.T) {
 
 	updatedRule := cloneMap(newRule)
 	updatedRule["priority"] = 300
-	updatedRule["action"] = map[string]any{
-		"type":   "static_response",
-		"status": 201,
-		"body":   map[string]any{"rule": "updated"},
-	}
+	updatedRule["action"] = httpStaticActionPayload(201, map[string]any{"rule": "updated"})
 	updateResp := doJSON(t, handler, http.MethodPut, "/mockserver/api/v1/admin/rulesets/rule-management/rules/dynamic-rule", map[string]any{
 		"rule": updatedRule,
 	}, http.StatusOK)
@@ -1497,11 +1378,7 @@ func TestAdminRollbackPublishedSnapshot(t *testing.T) {
 						{"field": "request.path", "op": "eq", "value": "/api/v1/state"},
 					},
 				},
-				"action": map[string]any{
-					"type":   "static_response",
-					"status": 200,
-					"body":   map[string]any{"version": 1},
-				},
+				"action": httpStaticActionPayload(200, map[string]any{"version": 1}),
 			},
 		},
 	}
@@ -1523,11 +1400,7 @@ func TestAdminRollbackPublishedSnapshot(t *testing.T) {
 					{"field": "request.path", "op": "eq", "value": "/api/v1/state"},
 				},
 			},
-			"action": map[string]any{
-				"type":   "static_response",
-				"status": 200,
-				"body":   map[string]any{"version": 2},
-			},
+			"action": httpStaticActionPayload(200, map[string]any{"version": 2}),
 		},
 	}
 	doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/rulesets", v2Body, http.StatusOK)
@@ -1582,7 +1455,7 @@ func TestAdminRollbackPublishedSnapshot(t *testing.T) {
 	assertBytesContain(t, previewBody, `"action_changed":true`)
 	assertBytesContain(t, previewBody, `"ruleset_field_diffs"`)
 	assertBytesContain(t, previewBody, `"field_diffs"`)
-	assertBytesContain(t, previewBody, `"path":"action.body.version"`)
+	assertBytesContain(t, previewBody, `"path":"action.response.payload.body.version"`)
 	assertBytesContain(t, previewBody, `"path":"ruleset.selector.all[0].value"`)
 	assertBytesNotContain(t, previewBody, `"selector_checks"`)
 	assertBytesNotContain(t, previewBody, `"candidate_rules"`)
@@ -1714,6 +1587,71 @@ func readBody(t *testing.T, resp *http.Response) []byte {
 		t.Fatalf("io.ReadAll() error = %v", err)
 	}
 	return body
+}
+
+func httpStaticActionPayload(status int, body any) map[string]any {
+	return httpStaticActionPayloadWithHeaders(status, nil, body)
+}
+
+func httpStaticActionPayloadWithHeaders(status int, headers map[string]any, body any) map[string]any {
+	payload := map[string]any{
+		"status": status,
+	}
+	if headers != nil {
+		payload["headers"] = headers
+	}
+	if body != nil {
+		payload["body"] = body
+	}
+	return map[string]any{
+		"type":     "respond",
+		"renderer": "static",
+		"response": map[string]any{
+			"payload": payload,
+		},
+	}
+}
+
+func spexStaticActionPayload(code int, resp string) map[string]any {
+	return map[string]any{
+		"type":     "respond",
+		"renderer": "static",
+		"response": map[string]any{
+			"payload": map[string]any{
+				"code": code,
+				"resp": resp,
+			},
+		},
+	}
+}
+
+func cacheStaticActionPayload(hit bool, value any) map[string]any {
+	return map[string]any{
+		"type":     "respond",
+		"renderer": "static",
+		"response": map[string]any{
+			"payload": map[string]any{
+				"hit":   hit,
+				"value": value,
+			},
+		},
+	}
+}
+
+func forwardActionPayload(timeoutMS int) map[string]any {
+	return map[string]any{
+		"type":    "forward",
+		"forward": map[string]any{"timeout_ms": timeoutMS},
+	}
+}
+
+func httpNamespacePolicies(rulesetMissAction map[string]any, ruleMissAction map[string]any) map[string]any {
+	return map[string]any{
+		"http": map[string]any{
+			"ruleset_miss_action": rulesetMissAction,
+			"rule_miss_action":    ruleMissAction,
+		},
+	}
 }
 
 func cloneMap(src map[string]any) map[string]any {

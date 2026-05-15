@@ -7,7 +7,7 @@
 - `RuleSet -> Rule -> Action` 规则结构
 - `draft / published` 双态
 - `selector` 粗筛 + 条件树精匹配
-- `static_response` / `template_response` / `cel_response`
+- `respond` action + `static` / `template` / `cel` / `sequence` / `webhook` renderers
 - HTTP 管理接口
 - admin token 鉴权和 read / write / publish 权限分层
 - publish / rollback snapshot 审计 metadata
@@ -159,9 +159,9 @@ admin:
 条件树，当前支持 `all / any / not / predicate / expr`。
 
 - `Action`
-当前支持 `static_response`、`template_response`、`cel_response`、`sequence_response` 和 `webhook_response`。
+当前统一使用 `type: "respond"` 表示返回 mock response，并通过 `renderer` 选择 `static`、`template`、`cel`、`sequence` 或 `webhook`。response payload 由协议自己的 `ProtocolSpec.response` 定义，例如 HTTP 使用 `status/headers/body`，SPEX 使用 `code/resp`。
 
-协议字段由代码注册的 `ProtocolSpec` 提供。用户配置 ruleset/rule/namespace，不在数据库中动态配置协议字段。第一版公开 `fields` 和 `selectors`，不公开 matcher 的内部索引提示。
+协议字段由代码注册的 `ProtocolSpec` 提供。用户配置 ruleset/rule/namespace，不在数据库中动态配置协议字段。当前公开 `fields`、`selectors` 和 `response`，不公开 matcher 的内部索引提示。
 
 前端会基于 `ProtocolSpec` 辅助配置 selector 和 rule condition：协议字段和 operator 通过下拉选择，动态字段会提供 key/path 输入，`exists`/`is_null` 等 operator 不需要 value，`in`/`not_in` 使用列表输入，数字/布尔/JSON/regex 会切换到对应的输入组件。
 
@@ -242,8 +242,8 @@ SPEX 字段：
 `validate`、`publish`、启动加载和持久化恢复都会走同一套规则校验。当前会拒绝：
 
 - 空 ruleset 或重复 rule id
-- 非 `100-599` 的 HTTP status
-- 非法 response header 名称，或包含 CR/LF 的 header value
+- HTTP response payload 中非 `100-599` 的 `status`
+- HTTP response payload 中非法 response header 名称，或包含 CR/LF 的 header value
 - 重复 selector 条目、非 `/` 开头的 path selector
 - 非法 regex，或超过 512 字符的 regex pattern
 - 非法 CEL 表达式、非法字段路径、未知操作符、协议字段不支持的操作符
@@ -262,9 +262,9 @@ SPEX 字段：
 
 ```json
 {
-  "type": "cel_response",
-  "status": 200,
-  "body_expression": "{\"message\": request.path, \"score\": request.body.score}"
+  "type": "respond",
+  "renderer": "cel",
+  "response_expression": "{\"status\": 200, \"body\": {\"message\": request.path, \"score\": request.body.score}}"
 }
 ```
 
@@ -278,7 +278,7 @@ SPEX 字段：
 
 ## 当前 Template Helper
 
-`template_response` 现在支持一组更稳定的 helper，不需要再手写很长的 `index (index ...)`：
+`renderer: "template"` 现在支持一组更稳定的 helper，不需要再手写很长的 `index (index ...)`：
 
 - `field . "request.path"`
 - `query . "q1"`
@@ -293,9 +293,9 @@ SPEX 字段：
 
 ```json
 {
-  "type": "template_response",
-  "status": 200,
-  "body_template": "{\"message\":\"hello {{ query . \\\"q1\\\" }}\",\"path\":\"{{ field . \\\"request.path\\\" }}\",\"user\":{{ toJSON (body . \\\"user\\\") }}}"
+  "type": "respond",
+  "renderer": "template",
+  "response_template": "{\"status\":200,\"body\":{\"message\":\"hello {{ query . \"q1\" }}\",\"path\":\"{{ field . \"request.path\" }}\",\"user\":{{ toJSON (body . \"user\") }}}}"
 }
 ```
 
@@ -469,9 +469,14 @@ curl -X POST http://127.0.0.1:8080/mockserver/api/v1/admin/rulesets/http-default
         ]
       },
       "action": {
-        "type": "static_response",
-        "status": 200,
-        "body": {"message": "new rule"}
+        "type": "respond",
+        "renderer": "static",
+        "response": {
+          "payload": {
+            "status": 200,
+            "body": {"message": "new rule"}
+          }
+        }
       }
     }
   }'
@@ -563,7 +568,7 @@ curl -X POST http://127.0.0.1:8080/mockserver/api/v1/admin/published/rulesets/ht
 - `ruleset_field_diffs`：ruleset 级字段路径，例如 `ruleset.selector.all[0].value`、`ruleset.namespace`、`ruleset.protocol`
 - 哪些 rule 被新增、删除、修改
 - 某条 rule 的 `condition` 或 `action` 是否变化
-- `field_diffs`：具体变化字段路径，例如 `action.body.version`、`action.status`、`when.all[0].field`
+- `field_diffs`：具体变化字段路径，例如 `action.response.payload.body.version`、`action.response.payload.status`、`when.all[0].field`
 
 这可以直接帮助判断“回滚后真正变的是哪条规则、是不是 action 变了”。
 
@@ -605,7 +610,7 @@ curl -X POST http://127.0.0.1:8080/mockserver/api/v1/admin/rulesets/http-default
 如果传 `explain_only=true`：
 
 - 命中链仍然会完整计算
-- 但不会真正执行 `template_response` 或 `cel_response`
+- 但不会真正执行 `renderer: "template"` 或 `renderer: "cel"` 动作
 - `action_info.message` 会明确标记为跳过执行
 
 如果再配合：
@@ -704,10 +709,15 @@ curl 'http://127.0.0.1:8080/mockserver/api/v1/admin/traffic/events/35'
         ]
       },
       "action": {
-        "type": "static_response",
-        "status": 200,
-        "body": {
-          "message": "ok"
+        "type": "respond",
+        "renderer": "static",
+        "response": {
+          "payload": {
+            "status": 200,
+            "body": {
+              "message": "ok"
+            }
+          }
         }
       }
     }
@@ -724,7 +734,7 @@ curl 'http://127.0.0.1:8080/mockserver/api/v1/admin/traffic/events/35'
 - DB 访问层已切到 `goshared/db/dbspi.Manager` + `dbhelper.NewSoftDeleteTableStore`；提供 `MOCKSERVER_MYSQL_TEST_DSN` 时会执行真实 MySQL 集成测试。
 - admin token 已支持 read / write / publish 权限分层，但还没有用户体系、登录、JWT、RBAC 和租户隔离。
 - snapshot 已记录 publish / rollback 审计 metadata，但还没有独立审计表、不可变审计日志和审批流。
-- `template_response` 已支持常用 helper，但还没有做模板沙箱、模板限流和更强的调试信息。
+- `renderer: "template"` 已支持常用 helper，但还没有做模板沙箱、模板限流和更强的调试信息。
 - `request.body` 的路径访问目前只覆盖基础 JSON 对象场景。
 - runtime 目前只实现了 HTTP adapter。
 - runtime metrics 当前是内存型，服务重启后会清零，仅作为 HTTP runtime 调试指标。

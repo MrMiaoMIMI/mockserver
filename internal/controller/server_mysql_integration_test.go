@@ -52,14 +52,10 @@ func TestAdminRuntimeFlowWithMySQLRepository(t *testing.T) {
 	handler := newMySQLBackedHandler(db.GetRuleSetRepository(), db.GetNamespaceRepository())
 	namespaceResp := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/namespaces", map[string]any{
 		"name": id,
-		"ruleset_miss_action": map[string]any{
-			"type":     "response",
-			"response": map[string]any{"status": 404, "body": map[string]any{"message": "no mock ruleset matched"}},
-		},
-		"rule_miss_action": map[string]any{
-			"type":     "response",
-			"response": map[string]any{"status": 404, "body": map[string]any{"message": "no mock rule matched"}},
-		},
+		"policies": httpNamespacePolicies(
+			httpStaticActionPayload(404, map[string]any{"message": "no mock ruleset matched"}),
+			httpStaticActionPayload(404, map[string]any{"message": "no mock rule matched"}),
+		),
 	}, http.StatusOK)
 	var namespaceEnvelope struct {
 		Data struct {
@@ -93,11 +89,7 @@ func TestAdminRuntimeFlowWithMySQLRepository(t *testing.T) {
 						{"field": "request.path", "op": "eq", "value": "/api/v1/mysql-e2e"},
 					},
 				},
-				"action": map[string]any{
-					"type":   "static_response",
-					"status": 202,
-					"body":   map[string]any{"store": "mysql"},
-				},
+				"action": httpStaticActionPayload(202, map[string]any{"store": "mysql"}),
 			},
 		},
 	}

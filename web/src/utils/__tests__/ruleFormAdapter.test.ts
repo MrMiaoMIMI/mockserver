@@ -28,7 +28,11 @@ const ruleSet: RuleSet = {
       enabled: true,
       priority: 10,
       when: { field: 'request.path', op: 'eq', value: '/api/existing' },
-      action: { type: 'static_response', status: 200, body: { ok: true } },
+      action: {
+        type: 'respond',
+        renderer: 'static',
+        response: { payload: { status: 200, body: { ok: true } } },
+      },
     },
   ],
 }
@@ -45,10 +49,15 @@ const staticRule: Rule = {
     ],
   },
   action: {
-    type: 'static_response',
-    status: 201,
-    headers: { 'content-type': ['application/json'] },
-    body: { ok: true },
+    type: 'respond',
+    renderer: 'static',
+    response: {
+      payload: {
+        status: 201,
+        headers: { 'content-type': ['application/json'] },
+        body: { ok: true },
+      },
+    },
   },
 }
 
@@ -69,11 +78,11 @@ describe('rule form adapter', () => {
     form.name = 'Sequence rule'
     form.id = 'sequence-rule'
     form.priority = 30
-    form.actionType = 'sequence_response'
+    form.actionType = 'sequence'
     form.sequenceStrategy = 'loop'
     form.sequenceSteps = [
-      { ...newSequenceStepForm(1), status: 202, bodyJson: '{"step":1}' },
-      { ...newSequenceStepForm(2), status: 203, bodyJson: '{"step":2}' },
+      { ...newSequenceStepForm(1), bodyJson: '{"status":202,"body":{"step":1}}' },
+      { ...newSequenceStepForm(2), bodyJson: '{"status":203,"body":{"step":2}}' },
     ]
 
     const result = formToRule(form, {
@@ -82,9 +91,13 @@ describe('rule form adapter', () => {
 
     expect(result.errors).toEqual([])
     expect(result.rule?.action).toMatchObject({
-      type: 'sequence_response',
+      type: 'respond',
+      renderer: 'sequence',
       sequence_strategy: 'loop',
-      sequence: [{ status: 202 }, { status: 203 }],
+      sequence: [
+        { response: { payload: { status: 202 } } },
+        { response: { payload: { status: 203 } } },
+      ],
     })
   })
 

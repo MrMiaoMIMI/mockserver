@@ -169,7 +169,12 @@ export function buildSimulationDiagnostics(result: SimulationResult | null): Sim
     statusLabel: result.matched ? 'matched' : 'missed',
     fallback: Boolean(result.fallback || fallbackReason),
     fallbackReason: fallbackReason || '-',
-    responseStatus: result.response?.status !== undefined ? String(result.response.status) : '-',
+    responseStatus:
+      result.response?.payload?.status !== undefined
+        ? String(result.response.payload.status)
+        : result.response?.payload?.code !== undefined
+          ? String(result.response.payload.code)
+          : '-',
     matchedRuleSet: result.trace?.ruleset_id || '-',
     matchedRule: result.trace?.rule_id || '-',
     candidateRules: result.candidates?.length

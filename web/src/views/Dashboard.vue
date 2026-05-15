@@ -531,7 +531,8 @@ function rankedEntries(values: Record<string, number>): Entry[] {
 
 function indexedFieldOptions(protocol: string) {
   const base = [
-    { label: 'decision.response.status', value: 'decision.response.status' },
+    { label: 'decision.response.payload.status', value: 'decision.response.payload.status' },
+    { label: 'decision.response.payload.code', value: 'decision.response.payload.code' },
   ]
   const http = [
     { label: 'event.request.method', value: 'event.request.method' },

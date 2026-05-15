@@ -180,7 +180,7 @@
           </header>
           <div class="drawer-rule-list">
             <code v-for="rule in selectedRow.ruleSet.rules" :key="rule.id">
-              {{ ruleDisplayName(rule) }} / {{ ruleTechnicalLabel(rule) }} / {{ rule.action.type }}
+              {{ ruleDisplayName(rule) }} / {{ ruleTechnicalLabel(rule) }} / {{ rule.action.renderer || rule.action.type }}
             </code>
             <small v-if="!selectedRow.ruleSet.rules.length">No rules yet.</small>
           </div>

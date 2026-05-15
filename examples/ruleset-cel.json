@@ -31,12 +31,9 @@
         ]
       },
       "action": {
-        "type": "cel_response",
-        "status": 200,
-        "headers": {
-          "content-type": ["application/json"]
-        },
-        "body_expression": "{\"user_id\": request.body.user.id, \"score\": request.body.score, \"path\": request.path}"
+        "type": "respond",
+        "renderer": "cel",
+        "response_expression": "{\"status\": 200, \"headers\": {\"content-type\": [\"application/json\"]}, \"body\": {\"user_id\": request.body.user.id, \"score\": request.body.score, \"path\": request.path}}"
       }
     }
   ]

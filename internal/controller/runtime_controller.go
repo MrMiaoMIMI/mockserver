@@ -80,7 +80,17 @@ func (c *RuntimeController) HandleHTTP(ctx *gin.Context) {
 		serverresp.InternalServerError(ctx, err)
 		return
 	}
-	if !result.Matched && result.Response.Status == 0 {
+	httpResponse, err := httpadapter.HTTPResponseFromProtocolResponse(result.Response)
+	if err != nil {
+		c.observeRuntime(r, &event, observability.RuntimeObservation{
+			Error:   true,
+			Status:  http.StatusInternalServerError,
+			Message: err.Error(),
+		}, startedAt)
+		serverresp.InternalServerError(ctx, err)
+		return
+	}
+	if !result.Matched && httpResponse.Status == 0 {
 		c.observeRuntime(r, &event, observability.RuntimeObservation{
 			Status:  http.StatusNotFound,
 			Message: "no mock rule matched",
@@ -98,7 +108,7 @@ func (c *RuntimeController) HandleHTTP(ctx *gin.Context) {
 	if result.Fallback {
 		ctx.Header("X-Mockserver-Fallback", result.Trace.FallbackReason)
 	}
-	for key, values := range result.Response.Headers {
+	for key, values := range httpResponse.Headers {
 		for _, value := range values {
 			ctx.Writer.Header().Add(key, value)
 		}
@@ -106,17 +116,17 @@ func (c *RuntimeController) HandleHTTP(ctx *gin.Context) {
 	c.observeRuntime(r, &event, observability.RuntimeObservation{
 		Matched:        result.Matched,
 		Fallback:       result.Fallback,
-		Status:         result.Response.Status,
+		Status:         httpResponse.Status,
 		RulesetID:      result.Trace.RulesetID,
 		RuleID:         result.Trace.RuleID,
 		FallbackReason: result.Trace.FallbackReason,
 	}, startedAt)
 
-	switch body := result.Response.Body.(type) {
+	switch body := httpResponse.Body.(type) {
 	case string:
-		ctx.Data(result.Response.Status, "", []byte(body))
+		ctx.Data(httpResponse.Status, "", []byte(body))
 	default:
-		ctx.JSON(result.Response.Status, body)
+		ctx.JSON(httpResponse.Status, body)
 	}
 }
 

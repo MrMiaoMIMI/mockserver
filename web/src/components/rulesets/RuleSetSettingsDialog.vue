@@ -234,13 +234,17 @@ const namespaceOptions = computed(() => {
     items.unshift({
       id: current,
       name: current,
-      ruleset_miss_action: {
-        type: 'forward',
-        forward: { timeout_ms: 5000 },
-      },
-      rule_miss_action: {
-        type: 'forward',
-        forward: { timeout_ms: 5000 },
+      policies: {
+        [form.protocol || 'http']: {
+          ruleset_miss_action: {
+            type: 'forward',
+            forward: { timeout_ms: 5000 },
+          },
+          rule_miss_action: {
+            type: 'forward',
+            forward: { timeout_ms: 5000 },
+          },
+        },
       },
     })
   }

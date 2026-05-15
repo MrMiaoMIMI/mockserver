@@ -86,7 +86,7 @@
       "name": "01 Draft Ruleset",
       "item": [
         {
-          "name": "Upsert draft ruleset - template_response",
+          "name": "Upsert draft ruleset - template renderer",
           "request": {
             "method": "POST",
             "header": [
@@ -105,7 +105,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"http default\",\n  \"enabled\": true,\n  \"protocol\": \"http\",\n  \"namespace\": \"default\",\n  \"selector\": {\n    \"all\": [\n      {\n        \"field\": \"request.host\",\n        \"op\": \"eq\",\n        \"value\": \"demo.com\"\n      },\n      {\n        \"field\": \"request.path\",\n        \"op\": \"prefix\",\n        \"value\": \"/api/\"\n      }\n    ]\n  },\n  \"rules\": [\n    {\n      \"id\": \"{{rule_id}}\",\n      \"enabled\": true,\n      \"priority\": 100,\n      \"when\": {\n        \"all\": [\n          {\n            \"field\": \"request.method\",\n            \"op\": \"eq\",\n            \"value\": \"GET\"\n          },\n          {\n            \"field\": \"request.path\",\n            \"op\": \"eq\",\n            \"value\": \"/api/v1/debug\"\n          },\n          {\n            \"field\": \"request.query.q1[*]\",\n            \"op\": \"contains\",\n            \"value\": \"qv1\"\n          }\n        ]\n      },\n      \"action\": {\n        \"type\": \"template_response\",\n        \"status\": 200,\n        \"headers\": {\n          \"content-type\": [\n            \"application/json\"\n          ]\n        },\n        \"body_template\": \"{\\\"message\\\":\\\"hello {{ query . \\\\\\\"q1\\\\\\\" }}\\\",\\\"path\\\":\\\"{{ field . \\\\\\\"request.path\\\\\\\" }}\\\"}\"\n      }\n    }\n  ]\n}"
+              "raw": "{\n  \"name\": \"http default\",\n  \"enabled\": true,\n  \"protocol\": \"http\",\n  \"namespace\": \"default\",\n  \"selector\": {\n    \"all\": [\n      {\n        \"field\": \"request.host\",\n        \"op\": \"eq\",\n        \"value\": \"demo.com\"\n      },\n      {\n        \"field\": \"request.path\",\n        \"op\": \"prefix\",\n        \"value\": \"/api/\"\n      }\n    ]\n  },\n  \"rules\": [\n    {\n      \"id\": \"{{rule_id}}\",\n      \"enabled\": true,\n      \"priority\": 100,\n      \"when\": {\n        \"all\": [\n          {\n            \"field\": \"request.method\",\n            \"op\": \"eq\",\n            \"value\": \"GET\"\n          },\n          {\n            \"field\": \"request.path\",\n            \"op\": \"eq\",\n            \"value\": \"/api/v1/debug\"\n          },\n          {\n            \"field\": \"request.query.q1[*]\",\n            \"op\": \"contains\",\n            \"value\": \"qv1\"\n          }\n        ]\n      },\n      \"action\": {\n        \"type\": \"respond\",\n        \"renderer\": \"template\",\n        \"response_template\": \"{\\\"status\\\":200,\\\"headers\\\":{\\\"content-type\\\":[\\\"application/json\\\"]},\\\"body\\\":{\\\"message\\\":\\\"hello {{ query . \\\"q1\\\" }}\\\",\\\"path\\\":\\\"{{ field . \\\"request.path\\\" }}\\\"}}\"\n      }\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{base_url}}/mockserver/api/v1/admin/rulesets",
@@ -684,7 +684,7 @@
       "name": "05 Rule CRUD",
       "item": [
         {
-          "name": "Add draft rule - static_response",
+          "name": "Add draft rule - static renderer",
           "request": {
             "method": "POST",
             "header": [
@@ -703,7 +703,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"rule\": {\n    \"id\": \"static-api\",\n    \"name\": \"static api\",\n    \"enabled\": true,\n    \"priority\": 90,\n    \"when\": {\n      \"all\": [\n        {\n          \"field\": \"request.method\",\n          \"op\": \"eq\",\n          \"value\": \"GET\"\n        },\n        {\n          \"field\": \"request.path\",\n          \"op\": \"eq\",\n          \"value\": \"/api/v1/static\"\n        }\n      ]\n    },\n    \"action\": {\n      \"type\": \"static_response\",\n      \"status\": 200,\n      \"headers\": {\n        \"content-type\": [\"application/json\"]\n      },\n      \"body\": {\n        \"message\": \"static ok\"\n      }\n    }\n  }\n}"
+              "raw": "{\n  \"rule\": {\n    \"id\": \"static-api\",\n    \"name\": \"static api\",\n    \"enabled\": true,\n    \"priority\": 90,\n    \"when\": {\n      \"all\": [\n        {\n          \"field\": \"request.method\",\n          \"op\": \"eq\",\n          \"value\": \"GET\"\n        },\n        {\n          \"field\": \"request.path\",\n          \"op\": \"eq\",\n          \"value\": \"/api/v1/static\"\n        }\n      ]\n    },\n    \"action\": {\n      \"type\": \"respond\",\n      \"renderer\": \"static\",\n      \"response\": {\n        \"payload\": {\n          \"status\": 200,\n          \"headers\": {\n            \"content-type\": [\n              \"application/json\"\n            ]\n          },\n          \"body\": {\n            \"message\": \"static ok\"\n          }\n        }\n      }\n    }\n  }\n}"
             },
             "url": {
               "raw": "{{base_url}}/mockserver/api/v1/admin/rulesets/{{ruleset_id}}/rules",
@@ -723,7 +723,7 @@
           }
         },
         {
-          "name": "Update draft rule - static_response",
+          "name": "Update draft rule - static renderer",
           "request": {
             "method": "PUT",
             "header": [
@@ -742,7 +742,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"rule\": {\n    \"id\": \"static-api\",\n    \"name\": \"static api updated\",\n    \"enabled\": true,\n    \"priority\": 95,\n    \"when\": {\n      \"all\": [\n        {\n          \"field\": \"request.method\",\n          \"op\": \"eq\",\n          \"value\": \"GET\"\n        },\n        {\n          \"field\": \"request.path\",\n          \"op\": \"eq\",\n          \"value\": \"/api/v1/static\"\n        }\n      ]\n    },\n    \"action\": {\n      \"type\": \"static_response\",\n      \"status\": 200,\n      \"headers\": {\n        \"content-type\": [\"application/json\"]\n      },\n      \"body\": {\n        \"message\": \"static updated\"\n      }\n    }\n  }\n}"
+              "raw": "{\n  \"rule\": {\n    \"id\": \"static-api\",\n    \"name\": \"static api updated\",\n    \"enabled\": true,\n    \"priority\": 95,\n    \"when\": {\n      \"all\": [\n        {\n          \"field\": \"request.method\",\n          \"op\": \"eq\",\n          \"value\": \"GET\"\n        },\n        {\n          \"field\": \"request.path\",\n          \"op\": \"eq\",\n          \"value\": \"/api/v1/static\"\n        }\n      ]\n    },\n    \"action\": {\n      \"type\": \"respond\",\n      \"renderer\": \"static\",\n      \"response\": {\n        \"payload\": {\n          \"status\": 200,\n          \"headers\": {\n            \"content-type\": [\n              \"application/json\"\n            ]\n          },\n          \"body\": {\n            \"message\": \"static updated\"\n          }\n        }\n      }\n    }\n  }\n}"
             },
             "url": {
               "raw": "{{base_url}}/mockserver/api/v1/admin/rulesets/{{ruleset_id}}/rules/static-api",
@@ -907,7 +907,7 @@
       "name": "06 Advanced Action Examples",
       "item": [
         {
-          "name": "Upsert sequence_response ruleset",
+          "name": "Upsert sequence renderer ruleset",
           "request": {
             "method": "POST",
             "header": [
@@ -926,7 +926,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"sequence-demo\",\n  \"name\": \"sequence demo\",\n  \"enabled\": true,\n  \"protocol\": \"http\",\n  \"namespace\": \"default\",\n  \"selector\": {\n    \"all\": [\n      {\n        \"field\": \"request.host\",\n        \"op\": \"eq\",\n        \"value\": \"demo.com\"\n      },\n      {\n        \"field\": \"request.path\",\n        \"op\": \"prefix\",\n        \"value\": \"/api/sequence\"\n      }\n    ]\n  },\n  \"rules\": [\n    {\n      \"id\": \"sequence-status\",\n      \"enabled\": true,\n      \"priority\": 100,\n      \"when\": {\n        \"field\": \"request.path\",\n        \"op\": \"eq\",\n        \"value\": \"/api/sequence/status\"\n      },\n      \"action\": {\n        \"type\": \"sequence_response\",\n        \"sequence_strategy\": \"last\",\n        \"sequence\": [\n          {\n            \"status\": 200,\n            \"headers\": {\n              \"content-type\": [\n                \"application/json\"\n              ]\n            },\n            \"body\": {\n              \"state\": \"pending\",\n              \"step\": 1\n            }\n          },\n          {\n            \"status\": 200,\n            \"headers\": {\n              \"content-type\": [\n                \"application/json\"\n              ]\n            },\n            \"body\": {\n              \"state\": \"running\",\n              \"step\": 2\n            }\n          },\n          {\n            \"status\": 200,\n            \"headers\": {\n              \"content-type\": [\n                \"application/json\"\n              ]\n            },\n            \"body\": {\n              \"state\": \"done\",\n              \"step\": 3\n            }\n          }\n        ]\n      }\n    }\n  ]\n}"
+              "raw": "{\n  \"id\": \"sequence-demo\",\n  \"name\": \"sequence demo\",\n  \"enabled\": true,\n  \"protocol\": \"http\",\n  \"namespace\": \"default\",\n  \"selector\": {\n    \"all\": [\n      {\n        \"field\": \"request.host\",\n        \"op\": \"eq\",\n        \"value\": \"demo.com\"\n      },\n      {\n        \"field\": \"request.path\",\n        \"op\": \"prefix\",\n        \"value\": \"/api/sequence\"\n      }\n    ]\n  },\n  \"rules\": [\n    {\n      \"id\": \"sequence-status\",\n      \"enabled\": true,\n      \"priority\": 100,\n      \"when\": {\n        \"field\": \"request.path\",\n        \"op\": \"eq\",\n        \"value\": \"/api/sequence/status\"\n      },\n      \"action\": {\n        \"type\": \"respond\",\n        \"renderer\": \"sequence\",\n        \"sequence_strategy\": \"last\",\n        \"sequence\": [\n          {\n            \"response\": {\n              \"payload\": {\n                \"status\": 200,\n                \"headers\": {\n                  \"content-type\": [\n                    \"application/json\"\n                  ]\n                },\n                \"body\": {\n                  \"state\": \"pending\",\n                  \"step\": 1\n                }\n              }\n            }\n          },\n          {\n            \"response\": {\n              \"payload\": {\n                \"status\": 200,\n                \"headers\": {\n                  \"content-type\": [\n                    \"application/json\"\n                  ]\n                },\n                \"body\": {\n                  \"state\": \"running\",\n                  \"step\": 2\n                }\n              }\n            }\n          },\n          {\n            \"response\": {\n              \"payload\": {\n                \"status\": 200,\n                \"headers\": {\n                  \"content-type\": [\n                    \"application/json\"\n                  ]\n                },\n                \"body\": {\n                  \"state\": \"done\",\n                  \"step\": 3\n                }\n              }\n            }\n          }\n        ]\n      }\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{base_url}}/mockserver/api/v1/admin/rulesets",
@@ -944,7 +944,7 @@
           }
         },
         {
-          "name": "Publish sequence_response ruleset",
+          "name": "Publish sequence renderer ruleset",
           "request": {
             "method": "POST",
             "header": [
@@ -983,7 +983,7 @@
           }
         },
         {
-          "name": "Runtime sequence_response - call repeatedly",
+          "name": "Runtime sequence renderer - call repeatedly",
           "request": {
             "method": "GET",
             "header": [
@@ -1014,7 +1014,7 @@
           }
         },
         {
-          "name": "Upsert webhook_response ruleset",
+          "name": "Upsert webhook renderer ruleset",
           "request": {
             "method": "POST",
             "header": [
@@ -1033,7 +1033,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"webhook-demo\",\n  \"name\": \"webhook demo\",\n  \"enabled\": true,\n  \"protocol\": \"http\",\n  \"namespace\": \"default\",\n  \"selector\": {\n    \"all\": [\n      {\n        \"field\": \"request.host\",\n        \"op\": \"eq\",\n        \"value\": \"demo.com\"\n      },\n      {\n        \"field\": \"request.path\",\n        \"op\": \"prefix\",\n        \"value\": \"/api/webhook\"\n      }\n    ]\n  },\n  \"rules\": [\n    {\n      \"id\": \"webhook-action\",\n      \"enabled\": true,\n      \"priority\": 100,\n      \"when\": {\n        \"field\": \"request.path\",\n        \"op\": \"eq\",\n        \"value\": \"/api/webhook/echo\"\n      },\n      \"action\": {\n        \"type\": \"webhook_response\",\n        \"webhook\": {\n          \"url\": \"{{webhook_url}}\",\n          \"method\": \"POST\",\n          \"timeout_ms\": 3000,\n          \"headers\": {\n            \"content-type\": [\n              \"application/json\"\n            ],\n            \"x-from\": [\n              \"mockserver-postman\"\n            ]\n          }\n        }\n      }\n    }\n  ]\n}"
+              "raw": "{\n  \"id\": \"webhook-demo\",\n  \"name\": \"webhook demo\",\n  \"enabled\": true,\n  \"protocol\": \"http\",\n  \"namespace\": \"default\",\n  \"selector\": {\n    \"all\": [\n      {\n        \"field\": \"request.host\",\n        \"op\": \"eq\",\n        \"value\": \"demo.com\"\n      },\n      {\n        \"field\": \"request.path\",\n        \"op\": \"prefix\",\n        \"value\": \"/api/webhook\"\n      }\n    ]\n  },\n  \"rules\": [\n    {\n      \"id\": \"webhook-action\",\n      \"enabled\": true,\n      \"priority\": 100,\n      \"when\": {\n        \"field\": \"request.path\",\n        \"op\": \"eq\",\n        \"value\": \"/api/webhook/echo\"\n      },\n      \"action\": {\n        \"type\": \"respond\",\n        \"renderer\": \"webhook\",\n        \"webhook\": {\n          \"url\": \"{{webhook_url}}\",\n          \"method\": \"POST\",\n          \"timeout_ms\": 3000,\n          \"headers\": {\n            \"content-type\": [\n              \"application/json\"\n            ],\n            \"x-from\": [\n              \"mockserver-postman\"\n            ]\n          }\n        }\n      }\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{base_url}}/mockserver/api/v1/admin/rulesets",
@@ -1051,7 +1051,7 @@
           }
         },
         {
-          "name": "Validate webhook_response ruleset",
+          "name": "Validate webhook renderer ruleset",
           "request": {
             "method": "POST",
             "header": [
@@ -1078,7 +1078,7 @@
           }
         },
         {
-          "name": "Publish webhook_response ruleset",
+          "name": "Publish webhook renderer ruleset",
           "request": {
             "method": "POST",
             "header": [
@@ -1117,7 +1117,7 @@
           }
         },
         {
-          "name": "Runtime webhook_response",
+          "name": "Runtime webhook renderer",
           "request": {
             "method": "POST",
             "header": [

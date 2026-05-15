@@ -1,25 +1,27 @@
 package eo
 
 const (
-	ProtocolHTTP = "http"
+	ProtocolHTTP  = "http"
+	ProtocolSPEX  = "spex"
+	ProtocolCache = "cache"
 )
 
 const (
-	ActionTypeStaticResponse   = "static_response"
-	ActionTypeTemplateResponse = "template_response"
-	ActionTypeCELResponse      = "cel_response"
-	ActionTypeSequenceResponse = "sequence_response"
-	ActionTypeWebhookResponse  = "webhook_response"
+	ActionTypeRespond = "respond"
+	ActionTypeForward = "forward"
+)
+
+const (
+	ActionRendererStatic   = "static"
+	ActionRendererTemplate = "template"
+	ActionRendererCEL      = "cel"
+	ActionRendererSequence = "sequence"
+	ActionRendererWebhook  = "webhook"
 )
 
 const (
 	SequenceStrategyLoop = "loop"
 	SequenceStrategyLast = "last"
-)
-
-const (
-	NamespaceFallbackTypeResponse = "response"
-	NamespaceFallbackTypeForward  = "forward"
 )
 
 const (

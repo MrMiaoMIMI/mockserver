@@ -157,8 +157,8 @@ Postman collection 已包含：
 - publish、runtime 调用、published simulate。
 - published snapshots、rollback preview、rollback。
 - 单条 rule 的增删改、启用禁用、优先级调整。
-- `sequence_response` 示例。
-- `webhook_response` 示例。
+- `respond` + `sequence` renderer 示例。
+- `respond` + `webhook` renderer 示例。
 - runtime metrics 查询。
 
 建议第一次按文件夹顺序执行：
@@ -217,7 +217,7 @@ curl 'http://127.0.0.1:8080/mockserver/api/v1/admin/traffic/events/35'
 ```
 
 SDK decision traffic 会落库；ruleset/rule 管理页面里的 simulate 结果直接展示在页面，不写入 traffic 表。
-Traffic index 默认只保存低基数、常用于定位的字段，例如 HTTP `method/host/path`、cache `operation/key`、SPEX `cmd` 和 `decision.response.status`；HTTP `query/header/body`、cache `value`、SPEX `param/req` 等高基数或大字段保留在原始 event JSON 中，不默认展开到索引表。
+Traffic index 默认只保存低基数、常用于定位的字段，例如 HTTP `method/host/path`、cache `operation/key`、SPEX `cmd`、`decision.response.payload.status` 和 `decision.response.payload.code`；HTTP `query/header/body`、cache `value`、SPEX `param/req` 等高基数或大字段保留在原始 event JSON 中，不默认展开到索引表。
 
 ## 5. 核心概念
 
@@ -342,10 +342,15 @@ runtime 路径格式：
     ]
   },
   "action": {
-    "type": "static_response",
-    "status": 200,
-    "body": {
-      "message": "ok"
+    "type": "respond",
+    "renderer": "static",
+    "response": {
+      "payload": {
+        "status": 200,
+        "body": {
+          "message": "ok"
+        }
+      }
     }
   }
 }
@@ -531,35 +536,37 @@ value 填写规则：
 
 ## 7. Action 怎么写
 
-### 7.1 static_response
+### 7.1 Static Respond
 
 返回固定响应：
 
 ```json
 {
-  "type": "static_response",
-  "status": 200,
-  "headers": {
-    "content-type": ["application/json"]
-  },
-  "body": {
-    "message": "ok"
+  "type": "respond",
+  "renderer": "static",
+  "response": {
+    "payload": {
+      "status": 200,
+      "headers": {
+        "content-type": ["application/json"]
+      },
+      "body": {
+        "message": "ok"
+      }
+    }
   }
 }
 ```
 
-### 7.2 template_response
+### 7.2 Template Respond
 
 根据请求动态渲染响应：
 
 ```json
 {
-  "type": "template_response",
-  "status": 200,
-  "headers": {
-    "content-type": ["application/json"]
-  },
-  "body_template": "{\"message\":\"hello {{ query . \\\"q1\\\" }}\",\"path\":\"{{ field . \\\"request.path\\\" }}\"}"
+  "type": "respond",
+  "renderer": "template",
+  "response_template": "{\"status\":200,\"headers\":{\"content-type\":[\"application/json\"]},\"body\":{\"message\":\"hello {{ query . \"q1\" }}\",\"path\":\"{{ field . \"request.path\" }}\"}}"
 }
 ```
 
@@ -576,46 +583,56 @@ first ...
 toJSON ...
 ```
 
-### 7.3 cel_response
+### 7.3 CEL Respond
 
-用 CEL 表达式生成响应体：
+用 CEL 表达式生成完整协议 response payload：
 
 ```json
 {
-  "type": "cel_response",
-  "status": 200,
-  "headers": {
-    "content-type": ["application/json"]
-  },
-  "body_expression": "{\"path\": request.path, \"score\": request.body.score}"
+  "type": "respond",
+  "renderer": "cel",
+  "response_expression": "{\"status\": 200, \"headers\": {\"content-type\": [\"application/json\"]}, \"body\": {\"path\": request.path, \"score\": request.body.score}}"
 }
 ```
 
-### 7.4 sequence_response
+### 7.4 Sequence Respond
 
 按调用次数返回不同结果，适合模拟轮询状态：
 
 ```json
 {
-  "type": "sequence_response",
+  "type": "respond",
+  "renderer": "sequence",
   "sequence_strategy": "last",
   "sequence": [
     {
-      "status": 200,
-      "body": {
-        "state": "pending"
+      "response": {
+        "payload": {
+          "status": 200,
+          "body": {
+            "state": "pending"
+          }
+        }
       }
     },
     {
-      "status": 200,
-      "body": {
-        "state": "running"
+      "response": {
+        "payload": {
+          "status": 200,
+          "body": {
+            "state": "running"
+          }
+        }
       }
     },
     {
-      "status": 200,
-      "body": {
-        "state": "done"
+      "response": {
+        "payload": {
+          "status": 200,
+          "body": {
+            "state": "done"
+          }
+        }
       }
     }
   ]
@@ -629,13 +646,14 @@ toJSON ...
 
 注意：当前 sequence 计数是进程内状态，服务重启后会重置。
 
-### 7.5 webhook_response
+### 7.5 Webhook Respond
 
 把响应生成交给外部服务：
 
 ```json
 {
-  "type": "webhook_response",
+  "type": "respond",
+  "renderer": "webhook",
   "webhook": {
     "url": "https://postman-echo.com/post",
     "method": "POST",
@@ -648,7 +666,7 @@ toJSON ...
 }
 ```
 
-MockServer 会把当前 event 发送给 webhook，再把 webhook 的响应作为 runtime 响应返回。
+MockServer 会把当前 event 发送给 webhook，再把 webhook 返回的协议 response payload 作为 runtime 响应返回。
 
 注意：生产环境使用 webhook 前，建议先补域名 allowlist、内网地址拦截和响应大小限制。
 
@@ -903,7 +921,7 @@ VITE_MOCKSERVER_PROXY_TARGET=http://127.0.0.1:18080 npm run dev
 - write token 不能 rollback。
 - publish token 可以 publish/rollback，也可以读。
 
-### 12.4 template_response 没有按预期渲染
+### 12.4 template renderer 没有按预期渲染
 
 建议：
 
@@ -912,7 +930,7 @@ VITE_MOCKSERVER_PROXY_TARGET=http://127.0.0.1:18080 npm run dev
 - 检查 helper 路径是否正确。
 - JSON body 模板要保证渲染后仍是合法 JSON。
 
-### 12.5 webhook_response 调不通
+### 12.5 webhook renderer 调不通
 
 检查：
 

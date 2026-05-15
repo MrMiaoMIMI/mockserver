@@ -24,7 +24,7 @@ const drafts: RuleSet[] = [
         enabled: true,
         priority: 100,
         when: { field: 'request.path', op: 'eq', value: '/old' },
-        action: { type: 'static_response', status: 200 },
+        action: { type: 'respond', renderer: 'static', response: { payload: { status: 200 } } },
       },
     ],
   },
@@ -164,8 +164,13 @@ describe('debug-to-fix helpers', () => {
       enabled: true,
       priority: 110,
       action: {
-        type: 'static_response',
-        status: 200,
+        type: 'respond',
+        renderer: 'static',
+        response: {
+          payload: {
+            status: 200,
+          },
+        },
       },
     })
     expect(JSON.stringify(rule.when)).toContain('request.method')

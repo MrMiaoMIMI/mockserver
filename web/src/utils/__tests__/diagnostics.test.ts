@@ -16,6 +16,12 @@ import {
   workbenchTitle,
 } from '@/utils/workbenchTasks'
 
+const staticAction = (status: number, body?: unknown) => ({
+  type: 'respond',
+  renderer: 'static',
+  response: { payload: body === undefined ? { status } : { status, body } },
+})
+
 const ruleSet: RuleSet = {
   id: 'rs-1',
   name: 'checkout rules',
@@ -36,7 +42,7 @@ const ruleSet: RuleSet = {
       enabled: true,
       priority: 10,
       when: { field: 'request.method', op: 'eq', value: 'POST' },
-      action: { type: 'static_response', status: 200, body: { ok: true } },
+      action: staticAction(200, { ok: true }),
     },
     {
       id: 'fallback-rule',
@@ -44,7 +50,7 @@ const ruleSet: RuleSet = {
       enabled: true,
       priority: 20,
       when: { field: 'request.path', op: 'prefix', value: '/api/fallback' },
-      action: { type: 'static_response', status: 404, body: { ok: false } },
+      action: staticAction(404, { ok: false }),
     },
   ],
 }
@@ -124,7 +130,7 @@ describe('simulation diagnostics', () => {
           enabled: true,
           priority: 10,
           when: { field: 'request.key', op: 'eq', value: 'user:42' },
-          action: { type: 'static_response', status: 200 },
+          action: staticAction(200),
         },
       ],
     }
@@ -157,7 +163,7 @@ describe('simulation diagnostics', () => {
           enabled: true,
           priority: 10,
           when: { field: 'request.operation', op: 'eq', value: 'set' },
-          action: { type: 'static_response', status: 200 },
+          action: staticAction(200),
         },
       ],
     }
@@ -194,7 +200,7 @@ describe('simulation diagnostics', () => {
               { field: 'request.param', op: 'eq', value: 'region=sg' },
             ],
           },
-          action: { type: 'static_response', status: 200 },
+          action: staticAction(200),
         },
       ],
     }
@@ -238,7 +244,9 @@ describe('simulation diagnostics', () => {
         },
         candidates: ['primary-rule', 'fallback-rule'],
         response: {
-          status: 200,
+          payload: {
+            status: 200,
+          },
         },
       },
     }

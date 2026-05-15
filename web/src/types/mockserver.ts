@@ -16,20 +16,23 @@ export interface Condition {
 
 export interface RuleAction {
   type: string
-  status?: number
-  headers?: Record<string, string[]>
-  body?: unknown
-  body_template?: string
-  body_expression?: string
+  renderer?: string
+  response?: ProtocolResponse
+  response_template?: string
+  response_expression?: string
   sequence?: SequenceStep[]
   sequence_strategy?: string
   webhook?: WebhookConfig
+  forward?: NamespaceForwardFallback
+}
+
+export interface ProtocolResponse {
+  protocol?: string
+  payload?: Record<string, unknown>
 }
 
 export interface SequenceStep {
-  status: number
-  headers?: Record<string, string[]>
-  body?: unknown
+  response: ProtocolResponse
 }
 
 export interface WebhookConfig {
@@ -59,37 +62,33 @@ export interface RuleSet {
   version?: number
 }
 
-export type NamespaceFallbackType = 'response' | 'forward'
-
-export interface NamespaceResponseFallback {
-  status: number
-  headers?: Record<string, string[]>
-  body?: unknown
-}
+export type NamespaceFallbackType = 'respond' | 'forward'
 
 export interface NamespaceForwardFallback {
   timeout_ms?: number
 }
 
-export interface NamespaceFallbackAction {
+export interface NamespaceAction extends RuleAction {
   type: NamespaceFallbackType
-  response?: NamespaceResponseFallback
-  forward?: NamespaceForwardFallback
+}
+
+export type NamespaceFallbackAction = NamespaceAction
+
+export interface NamespacePolicy {
+  ruleset_miss_action: NamespaceAction
+  rule_miss_action: NamespaceAction
 }
 
 export interface NamespaceConfig {
   id: string
   name?: string
   description?: string
-  ruleset_miss_action: NamespaceFallbackAction
-  rule_miss_action: NamespaceFallbackAction
+  policies: Record<string, NamespacePolicy>
 }
 
 export interface NamespaceFallbackForm {
   type: NamespaceFallbackType
-  responseStatus: number
-  responseHeaders: string
-  responseBody: string
+  responsePayload: string
   forwardTimeoutMs: number
 }
 
@@ -150,18 +149,13 @@ export interface MatchTrace {
   fallback_reason?: string
 }
 
-export interface ActionExecution {
-  status: number
-  headers?: Record<string, string[]>
-  body?: unknown
-}
-
 export interface RuntimeDecision {
   kind: string
   matched: boolean
   fallback?: boolean
+  protocol?: string
   trace: MatchTrace
-  response?: ActionExecution
+  response?: ProtocolResponse
   forward?: {
     timeout_ms?: number
   }
@@ -175,7 +169,7 @@ export interface SimulationResult {
   fallback?: boolean
   trace: MatchTrace
   candidates?: string[]
-  response?: ActionExecution
+  response?: ProtocolResponse
   explain?: Record<string, unknown>
 }
 
@@ -226,6 +220,14 @@ export interface ProtocolSpec {
   name: string
   fields: ProtocolFieldSpec[]
   selectors?: ProtocolSelectorSpec[]
+  response?: {
+    fields?: Array<ProtocolFieldSpec & { required?: boolean; default?: unknown; format?: string }>
+    defaults?: Record<string, unknown>
+  }
+  actions?: Array<{
+    type: string
+    renderers?: string[]
+  }>
 }
 
 export type ListProtocolsResponse = ListResponse<ProtocolSpec>

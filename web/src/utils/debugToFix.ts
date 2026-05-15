@@ -199,16 +199,21 @@ export function buildRuleSeedFromDebugPayload(
     priority: nextPriority(existingRules),
     when: buildRuntimeCondition(payload.event),
     action: {
-      type: 'static_response',
-      status: 200,
-      headers: {
-        'content-type': ['application/json'],
-      },
-      body: {
-        source: 'runtime-debug',
-        request_id: payload.request.recordId,
-        trace_id: payload.request.traceId || undefined,
-        message: 'mock response generated from runtime request',
+      type: 'respond',
+      renderer: 'static',
+      response: {
+        payload: {
+          status: 200,
+          headers: {
+            'content-type': ['application/json'],
+          },
+          body: {
+            source: 'runtime-debug',
+            request_id: payload.request.recordId,
+            trace_id: payload.request.traceId || undefined,
+            message: 'mock response generated from runtime request',
+          },
+        },
       },
     },
   }
