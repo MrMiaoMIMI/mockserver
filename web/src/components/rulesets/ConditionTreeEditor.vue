@@ -137,6 +137,9 @@
       <div v-if="predicateErrors.length" class="predicate-errors">
         <span v-for="error in predicateErrors" :key="error">{{ error }}</span>
       </div>
+      <div v-if="predicateWarnings.length" class="predicate-warnings">
+        <span v-for="warning in predicateWarnings" :key="warning">{{ warning }}</span>
+      </div>
     </div>
 
     <el-input
@@ -153,6 +156,7 @@
         :model-value="modelValue.not || defaultCondition('predicate')"
         :depth="depth + 1"
         :protocol-spec="protocolSpec"
+        :sample-fields="sampleFields"
         @update:model-value="emitUpdate({ not: $event })"
       />
     </div>
@@ -163,6 +167,7 @@
           :model-value="child"
           :depth="depth + 1"
           :protocol-spec="protocolSpec"
+          :sample-fields="sampleFields"
           @update:model-value="updateChild(index, $event)"
         />
         <el-button
@@ -183,16 +188,21 @@ import { computed } from 'vue'
 import { InfoFilled } from '@element-plus/icons-vue'
 import SmartValueInput from '@/components/rulesets/SmartValueInput.vue'
 import type { Condition, ProtocolSpec } from '@/types'
+import type { SampleRequestField } from '@/utils/sampleRequestFields'
+import { sampleTypeWarning } from '@/utils/sampleRequestFields'
 import {
   buildDynamicFieldPath,
   dynamicFieldParts,
   fieldForPath,
+  isRuleConditionFieldPath,
   operatorsForField,
+  ruleConditionFields,
   type DynamicIndexMode,
 } from '@/utils/protocolFields'
 import {
   buildValueInputSpec,
   defaultValueForSpec,
+  isInvalidJSONLiteralValue,
   normalizeValueForSpec,
   valueInputNeedsValue,
   type ValueInputSpec,
@@ -215,6 +225,7 @@ const props = withDefaults(
     modelValue: Condition
     depth?: number
     protocolSpec?: ProtocolSpec
+    sampleFields?: SampleRequestField[]
   }>(),
   {
     depth: 0,
@@ -225,12 +236,23 @@ const emit = defineEmits<{
   'update:modelValue': [value: Condition]
 }>()
 
-const conditionPresets = CONDITION_PRESETS
+const conditionPresets = CONDITION_PRESETS.filter((preset) => isRuleConditionFieldPath(preset.defaultField))
 const kind = computed(() => conditionKind(props.modelValue))
 const activePreset = computed(() => resolveConditionPreset(props.modelValue))
 const activePresetKey = computed(() => conditionPresetKey(props.modelValue))
-const protocolFieldOptions = computed(() => props.protocolSpec?.fields || [])
-const selectedFieldPath = computed(() => props.modelValue.field || defaultProtocolField.value || activePreset.value.defaultField)
+const protocolFieldOptions = computed(() => mergeProtocolFieldOptions(
+  ruleConditionFields(props.protocolSpec?.fields || []),
+  props.sampleFields || []
+))
+const combinedProtocolSpec = computed<ProtocolSpec | undefined>(() => props.protocolSpec
+  ? { ...props.protocolSpec, fields: protocolFieldOptions.value }
+  : props.sampleFields?.length
+    ? { name: 'sample', fields: protocolFieldOptions.value }
+    : undefined)
+const selectedFieldPath = computed(() => {
+  const field = props.modelValue.field || ''
+  return isRuleConditionFieldPath(field) ? field : defaultProtocolField.value || activePreset.value.defaultField
+})
 const selectedProtocolField = computed(() => protocolFieldForPath(selectedFieldPath.value))
 const defaultProtocolField = computed(() => {
   return protocolFieldOptions.value.find((field) => field.path.startsWith('request.'))?.path || protocolFieldOptions.value[0]?.path || ''
@@ -250,10 +272,20 @@ const valueInputSpec = computed(() =>
   })
 )
 const dynamicParts = computed(() => dynamicFieldParts(selectedFieldPath.value, selectedProtocolField.value))
-const predicatePreview = computed(() => formatJSON(cleanPredicate(props.modelValue)))
+const predicatePreview = computed(() => formatJSON(cleanPredicate(props.modelValue, { omitInvalidJSONLiteral: true })))
 const predicateErrors = computed(() =>
   kind.value === 'predicate' ? validatePredicateCondition(props.modelValue) : []
 )
+const predicateWarnings = computed(() => {
+  if (kind.value !== 'predicate') return []
+  const warning = sampleTypeWarning(
+    props.modelValue.field || '',
+    props.modelValue.op || '',
+    props.modelValue.value,
+    props.sampleFields || []
+  )
+  return warning ? [warning] : []
+})
 const groupChildren = computed(() => {
   if (kind.value === 'all') {
     return props.modelValue.all || []
@@ -269,7 +301,7 @@ function changeKind(nextKind: ConditionKind) {
 }
 
 function updatePredicate(partial: Partial<Condition>) {
-  const field = partial.field || props.modelValue.field || activePreset.value.defaultField
+  const field = partial.field || selectedFieldPath.value
   const op = partial.op || props.modelValue.op || activePreset.value.defaultOp
   const nextSpec = buildValueInputSpec({
     fieldPath: field,
@@ -277,8 +309,8 @@ function updatePredicate(partial: Partial<Condition>) {
     operator: op,
   })
   const next: Condition = {
-    field: props.modelValue.field || activePreset.value.defaultField,
-    op: props.modelValue.op || activePreset.value.defaultOp,
+    field,
+    op,
     ...partial,
   }
   if ('value' in partial) {
@@ -291,6 +323,7 @@ function updatePredicate(partial: Partial<Condition>) {
 
 function updateProtocolField(fieldPath: string) {
   const field = fieldPath.trim()
+  if (!isRuleConditionFieldPath(field)) return
   const fieldSpec = protocolFieldForPath(field)
   const operators = operatorsForField(fieldSpec)
   const effectiveOperators = operators.length ? operators : activePreset.value.operators
@@ -391,7 +424,7 @@ function conditionKind(condition: Condition): ConditionKind {
 }
 
 function protocolFieldForPath(fieldPath: string) {
-  return fieldForPath(props.protocolSpec, fieldPath)
+  return fieldForPath(combinedProtocolSpec.value, fieldPath)
 }
 
 function defaultCondition(nextKind: ConditionKind): Condition {
@@ -411,24 +444,30 @@ function defaultCondition(nextKind: ConditionKind): Condition {
 
 function valueForSpec(spec: ValueInputSpec, currentValue: unknown, previousSpec?: ValueInputSpec): unknown {
   if (!valueInputNeedsValue(spec)) return undefined
+  if (isInvalidJSONLiteralValue(currentValue)) return currentValue
   if (previousSpec && previousSpec.editor !== spec.editor) return defaultValueForSpec(spec)
   return currentValue === undefined
     ? defaultValueForSpec(spec)
     : normalizeValueForSpec(currentValue, spec)
 }
 
-function cleanPredicate(condition: Condition): Condition {
+function cleanPredicate(
+  condition: Condition,
+  options: { omitInvalidJSONLiteral?: boolean } = {}
+): Condition {
+  const rawField = condition.field || ''
+  const field = isRuleConditionFieldPath(rawField) ? rawField : selectedFieldPath.value
   const next: Condition = {
-    field: condition.field,
+    field,
     op: condition.op,
   }
   const spec = buildValueInputSpec({
-    fieldPath: condition.field || '',
-    field: protocolFieldForPath(condition.field || ''),
+    fieldPath: field || '',
+    field: protocolFieldForPath(field || ''),
     operator: condition.op || '',
   })
   const value = normalizeValueForSpec(condition.value, spec)
-  if (value !== undefined) {
+  if (value !== undefined && (!options.omitInvalidJSONLiteral || !isInvalidJSONLiteralValue(value))) {
     next.value = value
   }
   return next
@@ -436,6 +475,18 @@ function cleanPredicate(condition: Condition): Condition {
 
 function formatJSON(value: unknown) {
   return JSON.stringify(value, null, 2)
+}
+
+function mergeProtocolFieldOptions(
+  protocolFields: NonNullable<ProtocolSpec['fields']>,
+  sampleFields: SampleRequestField[]
+) {
+  const result = new Map<string, NonNullable<ProtocolSpec['fields']>[number]>()
+  sampleFields.forEach((field) => result.set(field.path, field))
+  protocolFields.forEach((field) => {
+    if (!result.has(field.path)) result.set(field.path, field)
+  })
+  return [...result.values()]
 }
 </script>
 
@@ -549,6 +600,20 @@ function formatJSON(value: unknown) {
     border-radius: var(--ms-radius-pill);
     color: var(--ms-red-600);
     background: var(--ms-red-50);
+    font-size: var(--ms-text-sm);
+  }
+}
+
+.predicate-warnings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ms-space-1);
+
+  span {
+    padding: 3px 8px;
+    border-radius: var(--ms-radius-pill);
+    color: var(--ms-amber-600);
+    background: var(--ms-amber-50);
     font-size: var(--ms-text-sm);
   }
 }

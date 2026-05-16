@@ -168,6 +168,7 @@ import {
 import {
   buildValueInputSpec,
   defaultValueForSpec,
+  isInvalidJSONLiteralValue,
   isSmartValueEmpty,
   normalizeValueForSpec,
   valueInputNeedsValue,
@@ -370,6 +371,10 @@ function validateSettings() {
     if (!selectorOperatorOptions(row).includes(row.op)) {
       issues.push(`${row.field} does not support selector operator ${row.op}`)
     }
+    if (isInvalidJSONLiteralValue(row.value)) {
+      issues.push(`${selectorFieldLabel(row.field)} ${row.value.message}`)
+      continue
+    }
     if (isSmartValueEmpty(row.value, selectorValueSpec(row))) {
       issues.push(`${selectorFieldLabel(row.field)} value is required`)
     }
@@ -444,6 +449,7 @@ function buildSelectorValueSpec(field: string, op: string) {
     fieldPath: field,
     field: fieldForPath(currentProtocolSpec.value, field),
     operator: op,
+    dynamicJSONLiteral: false,
   })
 }
 
@@ -483,6 +489,7 @@ function namespaceLabel(namespace: NamespaceConfig) {
 
 function valueForSpec(spec: ValueInputSpec, currentValue: unknown, previousSpec?: ValueInputSpec): unknown {
   if (!valueInputNeedsValue(spec)) return undefined
+  if (isInvalidJSONLiteralValue(currentValue)) return currentValue
   if (previousSpec && previousSpec.editor !== spec.editor) return defaultValueForSpec(spec)
   return currentValue === undefined
     ? defaultValueForSpec(spec)

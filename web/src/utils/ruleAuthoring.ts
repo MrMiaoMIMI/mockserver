@@ -2,6 +2,7 @@ import type { Condition, MockEvent, Rule, RuleSet } from '@/types'
 import { buildDefaultSimulationEvent } from '@/utils/simulationDiagnostics'
 import { actionSummary, conditionSummary } from '@/utils/ruleSummaries'
 import { formToRule, type BuildRuleOptions, type RuleFormError, type RuleFormState } from '@/utils/ruleFormAdapter'
+import { isInvalidJSONLiteralValue } from '@/utils/valueInputSpec'
 
 export type ConditionPresetId = 'method' | 'path' | 'query' | 'header' | 'body' | 'host' | 'trace' | 'custom'
 export type ReadinessTone = 'ok' | 'warn' | 'danger' | 'muted'
@@ -302,6 +303,9 @@ export function validatePredicateCondition(condition: Condition): string[] {
   const preset = resolveConditionPreset(condition)
   if (preset.fieldPrefix && !conditionPresetKey(condition).trim()) {
     errors.push(`${preset.keyLabel || 'Key'} is required`)
+  }
+  if (isInvalidJSONLiteralValue(condition.value)) {
+    errors.push(condition.value.message)
   }
   if (!['exists', 'not_exists', 'is_null', 'is_not_null'].includes(operator) && condition.value === undefined) {
     errors.push('Value is required')

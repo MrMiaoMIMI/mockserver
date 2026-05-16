@@ -10,6 +10,7 @@ export interface ValueInputSpec {
   editor: ValueEditorKind
   valueRequired: boolean
   scalarKind: ValueScalarKind
+  jsonLiteral: boolean
   placeholder: string
   helperText: string
   examples: unknown[]
@@ -19,6 +20,13 @@ export interface BuildValueInputSpecOptions {
   fieldPath: string
   field?: ProtocolFieldSpec
   operator: string
+  dynamicJSONLiteral?: boolean
+}
+
+export interface InvalidJSONLiteralValue {
+  __mockserver_invalid_json_literal__: true
+  raw: string
+  message: string
 }
 
 const noValueOperators = new Set(['exists', 'not_exists', 'is_null', 'is_not_null'])
@@ -40,9 +48,26 @@ export function buildValueInputSpec(options: BuildValueInputSpecOptions): ValueI
       editor: 'none',
       valueRequired: false,
       scalarKind: 'string',
+      jsonLiteral: false,
       placeholder: '',
       helperText: noValueHelper(operator),
       examples: [],
+    }
+  }
+
+  const jsonLiteral = usesJSONLiteralEditor(fieldPath, options.field, options.dynamicJSONLiteral ?? true)
+  if (jsonLiteral) {
+    return {
+      fieldPath,
+      fieldType,
+      operator,
+      editor: 'json',
+      valueRequired: true,
+      scalarKind: 'json',
+      jsonLiteral: true,
+      placeholder: jsonLiteralPlaceholder(operator),
+      helperText: jsonLiteralHelper(operator),
+      examples: profile.examples.length ? profile.examples : ['demo', 123, true, ['a', 'b'], { id: 'u1' }],
     }
   }
 
@@ -55,6 +80,7 @@ export function buildValueInputSpec(options: BuildValueInputSpecOptions): ValueI
       editor: 'list',
       valueRequired: true,
       scalarKind,
+      jsonLiteral: false,
       placeholder: profile.listPlaceholder || profile.placeholder,
       helperText: `${operatorLabel(operator)} requires one or more values. Each chip becomes one array item.`,
       examples: profile.listExamples.length ? profile.listExamples : [profile.examples.slice(0, 2).filter(Boolean)],
@@ -69,6 +95,7 @@ export function buildValueInputSpec(options: BuildValueInputSpecOptions): ValueI
       editor: 'regex',
       valueRequired: true,
       scalarKind: 'string',
+      jsonLiteral: false,
       placeholder: profile.regexPlaceholder || '^/api/v[0-9]+/',
       helperText: 'Enter a regular expression. It is checked before the rule is saved.',
       examples: profile.regexExamples.length ? profile.regexExamples : ['^/api/.*'],
@@ -83,6 +110,7 @@ export function buildValueInputSpec(options: BuildValueInputSpecOptions): ValueI
       editor: 'number',
       valueRequired: true,
       scalarKind: 'number',
+      jsonLiteral: false,
       placeholder: profile.numberPlaceholder || '100',
       helperText: `${operatorLabel(operator)} compares numeric values. The value will be saved as a number.`,
       examples: profile.numberExamples.length ? profile.numberExamples : [100, 1000],
@@ -97,6 +125,7 @@ export function buildValueInputSpec(options: BuildValueInputSpecOptions): ValueI
     editor: editorForScalar(fieldType, scalarKind, dynamicChild),
     valueRequired: true,
     scalarKind,
+    jsonLiteral: false,
     placeholder: profile.placeholder || placeholderForScalar(scalarKind),
     helperText: helperForScalar(fieldPath, operator, scalarKind, dynamicChild),
     examples: profile.examples.length ? profile.examples : examplesForScalar(scalarKind),
@@ -118,6 +147,7 @@ export function isSmartValueEmpty(value: unknown, spec: ValueInputSpec): boolean
 
 export function normalizeValueForSpec(value: unknown, spec: ValueInputSpec): unknown {
   if (!valueInputNeedsValue(spec)) return undefined
+  if (isInvalidJSONLiteralValue(value)) return value
   if (spec.editor === 'list') {
     if (Array.isArray(value)) return value
     if (value === undefined || value === null) return []
@@ -163,6 +193,22 @@ export function coerceListItem(value: string, spec: ValueInputSpec): unknown {
     }
   }
   return trimmed
+}
+
+export function invalidJSONLiteralValue(raw: string, message: string): InvalidJSONLiteralValue {
+  return {
+    __mockserver_invalid_json_literal__: true,
+    raw,
+    message,
+  }
+}
+
+export function isInvalidJSONLiteralValue(value: unknown): value is InvalidJSONLiteralValue {
+  return Boolean(
+    value
+      && typeof value === 'object'
+      && (value as Partial<InvalidJSONLiteralValue>).__mockserver_invalid_json_literal__ === true
+  )
 }
 
 export function operatorLabel(operator: string): string {
@@ -242,6 +288,46 @@ function examplesForScalar(scalarKind: ValueScalarKind): unknown[] {
   return ['active', 'test']
 }
 
+function usesJSONLiteralEditor(
+  fieldPath: string,
+  field: ProtocolFieldSpec | undefined,
+  dynamicJSONLiteral: boolean
+): boolean {
+  if (dynamicJSONLiteral && isDynamicJSONLiteralPath(fieldPath)) return true
+  if (!field) return false
+  if (dynamicJSONLiteral && isDynamicJSONLiteralRoot(field.path)) return true
+  return field.path === fieldPath && field.type === 'json'
+}
+
+function isDynamicJSONLiteralPath(path: string): boolean {
+  return ['request.body', 'request.req', 'request.value', 'meta.extra'].some((root) => (
+    path === root || path.startsWith(`${root}.`) || path.startsWith(`${root}[`)
+  ))
+}
+
+function isDynamicJSONLiteralRoot(path: string): boolean {
+  return path === 'request.body'
+    || path === 'request.req'
+    || path === 'request.value'
+    || path === 'meta.extra'
+}
+
+function jsonLiteralPlaceholder(operator: string) {
+  if (listOperators.has(operator)) return '["a", "b"]'
+  if (numericOperators.has(operator)) return '123'
+  return '"demo", 123, true, null, ["a", "b"], {"id":"u1"}'
+}
+
+function jsonLiteralHelper(operator: string) {
+  if (listOperators.has(operator)) {
+    return `${operatorLabel(operator)} expects one JSON array. Strings inside the array must use double quotes.`
+  }
+  if (numericOperators.has(operator)) {
+    return `${operatorLabel(operator)} expects a JSON number. Numeric-looking strings such as "123" will not match numbers.`
+  }
+  return 'Enter one JSON value. Strings must use double quotes, for example "demo". Numbers, booleans, null, arrays, and objects keep their JSON type.'
+}
+
 function fieldProfile(fieldPath: string) {
   const normalized = fieldPath.toLowerCase()
   if (normalized === 'request.method') {
@@ -303,14 +389,21 @@ function fieldProfile(fieldPath: string) {
   }
   if (normalized.startsWith('request.body')) {
     return profile({
-      placeholder: 'doing',
+      placeholder: '"doing"',
       examples: ['doing', 'done', 1, true],
       listExamples: [['doing', 'done']],
     })
   }
+  if (normalized.startsWith('request.req')) {
+    return profile({
+      placeholder: '"demo"',
+      examples: ['demo', 123, true, ['a', 'b'], { id: 'u1' }],
+      listExamples: [['demo', 'active']],
+    })
+  }
   if (normalized.startsWith('request.value')) {
     return profile({
-      placeholder: 'active',
+      placeholder: '"active"',
       examples: ['active', 'inactive', 1, true],
       listExamples: [['active', 'inactive']],
     })

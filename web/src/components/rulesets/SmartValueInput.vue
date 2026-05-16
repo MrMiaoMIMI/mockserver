@@ -76,7 +76,8 @@
         :model-value="jsonText"
         :size="size"
         type="textarea"
-        :rows="4"
+        :rows="jsonTextareaRows"
+        :autosize="jsonTextareaAutosize"
         :placeholder="spec.placeholder"
         @update:model-value="emitJSONValue"
       />
@@ -113,11 +114,11 @@
         <div class="example-row">
           <button
             v-for="example in spec.examples"
-            :key="formatInline(example)"
+            :key="formatExample(example)"
             type="button"
             @click="applyExample(example)"
           >
-            {{ formatInline(example) }}
+            {{ formatExample(example) }}
           </button>
         </div>
       </el-popover>
@@ -129,7 +130,13 @@
 import { computed, ref, watch } from 'vue'
 import { InfoFilled } from '@element-plus/icons-vue'
 import type { ValueInputSpec } from '@/utils/valueInputSpec'
-import { coerceListItem, defaultValueForSpec, normalizeValueForSpec } from '@/utils/valueInputSpec'
+import {
+  coerceListItem,
+  defaultValueForSpec,
+  invalidJSONLiteralValue,
+  isInvalidJSONLiteralValue,
+  normalizeValueForSpec,
+} from '@/utils/valueInputSpec'
 
 const props = withDefaults(
   defineProps<{
@@ -175,13 +182,28 @@ const listValues = computed(() => {
 })
 const hasExamples = computed(() => props.spec.editor !== 'none' && props.spec.examples.length > 0)
 const hasGuidance = computed(() => Boolean(props.spec.helperText) || hasExamples.value)
+const jsonTextareaRows = computed(() => props.spec.jsonLiteral ? compactJSONLiteralRows.value : 4)
+const jsonTextareaAutosize = computed(() => (
+  props.spec.jsonLiteral ? { minRows: compactJSONLiteralRows.value, maxRows: 6 } : false
+))
+const compactJSONLiteralRows = computed(() => {
+  if (!props.spec.jsonLiteral) return 4
+  if (props.spec.operator === 'in' || props.spec.operator === 'not_in') return 2
+  if (['request.body', 'request.req', 'request.value'].includes(props.spec.fieldPath)) return 2
+  return 1
+})
 
 watch(
   () => [props.modelValue, props.spec.editor] as const,
   () => {
     if (props.spec.editor === 'json') {
-      jsonText.value = formatJSON(props.modelValue ?? defaultValueForSpec(props.spec))
-      jsonError.value = ''
+      if (isInvalidJSONLiteralValue(props.modelValue)) {
+        jsonText.value = props.modelValue.raw
+        jsonError.value = props.modelValue.message
+      } else {
+        jsonText.value = formatJSON(props.modelValue ?? defaultValueForSpec(props.spec))
+        jsonError.value = ''
+      }
     }
     if (props.spec.editor === 'none' && props.modelValue !== undefined) {
       emit('update:modelValue', undefined)
@@ -215,7 +237,8 @@ function emitJSONValue(value: string) {
     jsonError.value = ''
     emit('update:modelValue', parsed)
   } catch (error) {
-    jsonError.value = error instanceof Error ? error.message : String(error)
+    jsonError.value = jsonLiteralErrorMessage(value, error)
+    emit('update:modelValue', invalidJSONLiteralValue(value, jsonError.value))
   }
 }
 
@@ -263,8 +286,23 @@ function formatInline(value: unknown) {
   return JSON.stringify(value)
 }
 
+function formatExample(value: unknown) {
+  if (props.spec.editor === 'json') return JSON.stringify(value)
+  return formatInline(value)
+}
+
 function formatJSON(value: unknown) {
   return JSON.stringify(value, null, 2)
+}
+
+function jsonLiteralErrorMessage(value: string, error: unknown) {
+  const trimmed = value.trim()
+  if (!trimmed) return 'Enter a JSON value.'
+  if (/^[A-Za-z_][A-Za-z0-9_ -]*$/.test(trimmed)) {
+    return `Invalid JSON value. String values must use double quotes, for example "${trimmed}".`
+  }
+  const detail = error instanceof Error ? error.message : String(error)
+  return `Invalid JSON value: ${detail}`
 }
 </script>
 

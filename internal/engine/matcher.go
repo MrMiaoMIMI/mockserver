@@ -6,10 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"reflect"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -666,13 +664,25 @@ func evalPredicateWithExplain(condition bo.Condition, event bo.Event) (bo.Condit
 		}
 		matched = anyValue(values, func(v any) bool { return rx.MatchString(toString(v)) })
 	case eo.OperatorGT:
-		matched = anyValue(values, func(v any) bool { return compareNumeric(v, condition.Value) > 0 })
+		matched = anyValue(values, func(v any) bool {
+			comparison, ok := compareNumeric(v, condition.Value)
+			return ok && comparison > 0
+		})
 	case eo.OperatorGTE:
-		matched = anyValue(values, func(v any) bool { return compareNumeric(v, condition.Value) >= 0 })
+		matched = anyValue(values, func(v any) bool {
+			comparison, ok := compareNumeric(v, condition.Value)
+			return ok && comparison >= 0
+		})
 	case eo.OperatorLT:
-		matched = anyValue(values, func(v any) bool { return compareNumeric(v, condition.Value) < 0 })
+		matched = anyValue(values, func(v any) bool {
+			comparison, ok := compareNumeric(v, condition.Value)
+			return ok && comparison < 0
+		})
 	case eo.OperatorLTE:
-		matched = anyValue(values, func(v any) bool { return compareNumeric(v, condition.Value) <= 0 })
+		matched = anyValue(values, func(v any) bool {
+			comparison, ok := compareNumeric(v, condition.Value)
+			return ok && comparison <= 0
+		})
 	default:
 		return bo.ConditionExplanation{}, fmt.Errorf("unsupported operator: %s", condition.Op)
 	}
@@ -932,27 +942,25 @@ func compareIn(values []any, expected any) bool {
 }
 
 func compareValue(left any, right any) int {
-	if reflect.DeepEqual(left, right) {
+	if jsonValueEqual(left, right) {
 		return 0
 	}
-	leftString := toString(left)
-	rightString := toString(right)
-	return strings.Compare(leftString, rightString)
+	return 1
 }
 
-func compareNumeric(left any, right any) int {
+func compareNumeric(left any, right any) (int, bool) {
 	leftValue, leftOK := toFloat(left)
 	rightValue, rightOK := toFloat(right)
 	if !leftOK || !rightOK {
-		return strings.Compare(toString(left), toString(right))
+		return 0, false
 	}
 	switch {
 	case leftValue > rightValue:
-		return 1
+		return 1, true
 	case leftValue < rightValue:
-		return -1
+		return -1, true
 	default:
-		return 0
+		return 0, true
 	}
 }
 
@@ -971,12 +979,100 @@ func toFloat(value any) (float64, bool) {
 	case json.Number:
 		result, err := typed.Float64()
 		return result, err == nil
-	case string:
-		result, err := strconv.ParseFloat(typed, 64)
-		return result, err == nil
 	default:
 		return 0, false
 	}
+}
+
+func jsonValueEqual(left any, right any) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	if leftNumber, ok := toFloat(left); ok {
+		rightNumber, rightOK := toFloat(right)
+		return rightOK && leftNumber == rightNumber
+	}
+	if _, ok := toFloat(right); ok {
+		return false
+	}
+
+	switch leftTyped := left.(type) {
+	case string:
+		rightTyped, ok := right.(string)
+		return ok && leftTyped == rightTyped
+	case bool:
+		rightTyped, ok := right.(bool)
+		return ok && leftTyped == rightTyped
+	case []any:
+		rightTyped, ok := toJSONSlice(right)
+		return ok && jsonSliceEqual(leftTyped, rightTyped)
+	case []string:
+		rightTyped, ok := toJSONSlice(right)
+		return ok && jsonSliceEqual(stringSliceToAny(leftTyped), rightTyped)
+	case map[string]any:
+		rightTyped, ok := toJSONMap(right)
+		return ok && jsonMapEqual(leftTyped, rightTyped)
+	case map[string]string:
+		rightTyped, ok := toJSONMap(right)
+		return ok && jsonMapEqual(stringMapToAny(leftTyped), rightTyped)
+	default:
+		return false
+	}
+}
+
+func toJSONSlice(value any) ([]any, bool) {
+	switch typed := value.(type) {
+	case []any:
+		return typed, true
+	case []string:
+		return stringSliceToAny(typed), true
+	default:
+		return nil, false
+	}
+}
+
+func jsonSliceEqual(left []any, right []any) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if !jsonValueEqual(left[i], right[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func toJSONMap(value any) (map[string]any, bool) {
+	switch typed := value.(type) {
+	case map[string]any:
+		return typed, true
+	case map[string]string:
+		return stringMapToAny(typed), true
+	default:
+		return nil, false
+	}
+}
+
+func jsonMapEqual(left map[string]any, right map[string]any) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for key, leftValue := range left {
+		rightValue, ok := right[key]
+		if !ok || !jsonValueEqual(leftValue, rightValue) {
+			return false
+		}
+	}
+	return true
+}
+
+func stringMapToAny(values map[string]string) map[string]any {
+	result := make(map[string]any, len(values))
+	for key, value := range values {
+		result[key] = value
+	}
+	return result
 }
 
 func toString(value any) string {

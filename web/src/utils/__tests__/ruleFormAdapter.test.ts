@@ -8,6 +8,7 @@ import {
   newSequenceStepForm,
   ruleToForm,
 } from '@/utils/ruleFormAdapter'
+import { invalidJSONLiteralValue } from '@/utils/valueInputSpec'
 
 const ruleSet: RuleSet = {
   id: 'rs-1',
@@ -225,5 +226,25 @@ describe('rule form adapter', () => {
 
   it('does not treat the locked edit rule ID as a duplicate when generating IDs', () => {
     expect(generateRuleIdFromName('Existing Rule', ruleSet, 'existing-rule')).toBe('existing-rule')
+  })
+
+  it('rejects invalid JSON literal condition values before building a rule payload', () => {
+    const form = defaultRuleForm(ruleSet, httpSpec)
+    form.name = 'Invalid literal'
+    form.id = 'invalid-literal'
+    form.conditionTree = {
+      field: 'request.body.count',
+      op: 'eq',
+      value: invalidJSONLiteralValue('abc', 'Invalid JSON value. String values must use double quotes.'),
+    }
+
+    const result = formToRule(form, { protocolSpec: httpSpec })
+
+    expect(result.rule).toBeUndefined()
+    expect(result.errors).toContainEqual({
+      section: 'condition',
+      field: 'conditionTree',
+      message: 'Invalid JSON value. String values must use double quotes.',
+    })
   })
 })

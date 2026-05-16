@@ -50,6 +50,19 @@ export function operatorsForField(field: ProtocolFieldSpec | undefined): string[
   return field.operators?.length ? field.operators : defaultOperatorsForType(field.type)
 }
 
+export function ruleConditionFields(fields: ProtocolFieldSpec[]): ProtocolFieldSpec[] {
+  return fields.filter((field) => isRuleConditionFieldPath(field.path))
+}
+
+export function isRuleConditionFieldPath(path: string): boolean {
+  const normalized = path.trim()
+  if (!normalized) return false
+  return normalized !== 'protocol'
+    && normalized !== 'namespace'
+    && normalized !== 'meta'
+    && !normalized.startsWith('meta.')
+}
+
 export function dynamicFieldParts(
   fieldPath: string,
   field: ProtocolFieldSpec | undefined

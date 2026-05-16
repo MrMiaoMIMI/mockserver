@@ -1,4 +1,5 @@
 import type { Condition, ProtocolSpec, Rule, RuleAction, RuleSet, SequenceStep } from '@/types'
+import { isInvalidJSONLiteralValue } from '@/utils/valueInputSpec'
 import {
   buildResponsePayload,
   defaultResponsePayload,
@@ -382,6 +383,10 @@ function validateConditionTree(condition: Condition): string[] {
   }
   if (!condition.field?.trim()) return ['Predicate field is required']
   if (!condition.op?.trim()) return ['Predicate op is required']
+  if (isInvalidJSONLiteralValue(condition.value)) return [condition.value.message]
+  if (!['exists', 'not_exists', 'is_null', 'is_not_null'].includes(condition.op) && condition.value === undefined) {
+    return ['Predicate value is required']
+  }
   return []
 }
 

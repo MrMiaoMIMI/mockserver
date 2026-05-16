@@ -4,7 +4,9 @@ import {
   buildDynamicFieldPath,
   dynamicFieldParts,
   fieldForPath,
+  isRuleConditionFieldPath,
   operatorsForField,
+  ruleConditionFields,
 } from '@/utils/protocolFields'
 
 const cacheSpec: ProtocolSpec = {
@@ -59,5 +61,19 @@ describe('protocol field helpers', () => {
       indexed: false,
     })
     expect(buildDynamicFieldPath('request.value', 'user.id')).toBe('request.value.user.id')
+  })
+
+  it('filters ruleset-level and internal metadata fields from rule conditions', () => {
+    const fields = ruleConditionFields([
+      { path: 'protocol', type: 'string' },
+      { path: 'namespace', type: 'string' },
+      { path: 'meta.trace_id', type: 'string' },
+      { path: 'request.cmd', type: 'string' },
+      { path: 'request.req', type: 'json', dynamic_path: true },
+    ])
+
+    expect(fields.map((field) => field.path)).toEqual(['request.cmd', 'request.req'])
+    expect(isRuleConditionFieldPath('meta.extra.debug')).toBe(false)
+    expect(isRuleConditionFieldPath('request.body.id')).toBe(true)
   })
 })

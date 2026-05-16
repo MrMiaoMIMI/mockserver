@@ -797,6 +797,116 @@ func TestMatchNullOperators(t *testing.T) {
 	}
 }
 
+func TestMatchStrictJSONConditionValues(t *testing.T) {
+	tests := []struct {
+		name      string
+		condition bo.Condition
+		body      map[string]any
+		wantMatch bool
+	}{
+		{
+			name:      "number does not equal string",
+			condition: bo.Condition{Field: "request.body.id", Op: eo.OperatorEQ, Value: "123"},
+			body:      map[string]any{"id": 123},
+		},
+		{
+			name:      "string does not equal number",
+			condition: bo.Condition{Field: "request.body.id", Op: eo.OperatorEQ, Value: 123},
+			body:      map[string]any{"id": "123"},
+		},
+		{
+			name:      "json numbers compare across go numeric types",
+			condition: bo.Condition{Field: "request.body.id", Op: eo.OperatorEQ, Value: 123},
+			body:      map[string]any{"id": float64(123)},
+			wantMatch: true,
+		},
+		{
+			name:      "boolean does not equal string",
+			condition: bo.Condition{Field: "request.body.enabled", Op: eo.OperatorEQ, Value: "true"},
+			body:      map[string]any{"enabled": true},
+		},
+		{
+			name:      "array equality is structural",
+			condition: bo.Condition{Field: "request.body.tags", Op: eo.OperatorEQ, Value: []any{"a", 2}},
+			body:      map[string]any{"tags": []any{"a", float64(2)}},
+			wantMatch: true,
+		},
+		{
+			name: "object equality is structural",
+			condition: bo.Condition{
+				Field: "request.body.user",
+				Op:    eo.OperatorEQ,
+				Value: map[string]any{
+					"id":      "u-1",
+					"enabled": true,
+					"scores":  []any{1, 2},
+				},
+			},
+			body: map[string]any{
+				"user": map[string]any{
+					"id":      "u-1",
+					"enabled": true,
+					"scores":  []any{float64(1), float64(2)},
+				},
+			},
+			wantMatch: true,
+		},
+		{
+			name:      "in keeps json types strict",
+			condition: bo.Condition{Field: "request.body.id", Op: eo.OperatorIn, Value: []any{123, "456"}},
+			body:      map[string]any{"id": "123"},
+		},
+		{
+			name:      "in matches same json number",
+			condition: bo.Condition{Field: "request.body.id", Op: eo.OperatorIn, Value: []any{123}},
+			body:      map[string]any{"id": float64(123)},
+			wantMatch: true,
+		},
+		{
+			name:      "not in keeps json types strict",
+			condition: bo.Condition{Field: "request.body.id", Op: eo.OperatorNotIn, Value: []any{123}},
+			body:      map[string]any{"id": "123"},
+			wantMatch: true,
+		},
+		{
+			name:      "numeric comparison does not parse string actual",
+			condition: bo.Condition{Field: "request.body.count", Op: eo.OperatorGTE, Value: 2},
+			body:      map[string]any{"count": "10"},
+		},
+		{
+			name:      "numeric comparison does not parse string expected",
+			condition: bo.Condition{Field: "request.body.count", Op: eo.OperatorGTE, Value: "2"},
+			body:      map[string]any{"count": float64(10)},
+		},
+		{
+			name:      "numeric comparison matches numeric actual",
+			condition: bo.Condition{Field: "request.body.count", Op: eo.OperatorGTE, Value: 2},
+			body:      map[string]any{"count": float64(10)},
+			wantMatch: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ruleSet := validRuleSetForValidation()
+			ruleSet.Rules[0].When = tt.condition
+			compiled, err := CompileRuleSet(ruleSet)
+			if err != nil {
+				t.Fatalf("CompileRuleSet() error = %v", err)
+			}
+			event := testHTTPEvent("/api/v1/validation")
+			event.Request["body"] = tt.body
+			result, err := Match([]CompiledRuleSet{compiled}, event)
+			if err != nil {
+				t.Fatalf("Match() error = %v", err)
+			}
+			if result.Matched != tt.wantMatch {
+				t.Fatalf("matched = %v, want %v", result.Matched, tt.wantMatch)
+			}
+		})
+	}
+}
+
 func validRuleSetForValidation() bo.RuleSet {
 	return bo.RuleSet{
 		ID:        "validation-case",

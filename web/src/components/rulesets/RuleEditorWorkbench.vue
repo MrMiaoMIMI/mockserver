@@ -140,6 +140,59 @@
             <span>condition</span>
             <strong>Match request context</strong>
           </div>
+          <div class="sample-assist" :class="{ expanded: sampleAssistExpanded }">
+            <header>
+              <button class="sample-assist-summary" type="button" @click="sampleAssistExpanded = !sampleAssistExpanded">
+                <span>sample request</span>
+                <strong>{{ sampleRootPath }}</strong>
+                <small>{{ sampleAssistStatus }}</small>
+              </button>
+              <div class="sample-assist-actions">
+                <el-popover
+                  placement="top-end"
+                  trigger="hover"
+                  :width="340"
+                  popper-class="sample-assist-popover"
+                >
+                  <template #reference>
+                    <button class="inline-tool icon-only" type="button" aria-label="Sample request help">
+                      <el-icon><InfoFilled /></el-icon>
+                    </button>
+                  </template>
+                  <div class="sample-assist-help">
+                    <strong>Optional authoring sample</strong>
+                    <p>Paste one request JSON value to infer selectable field paths and advisory type warnings.</p>
+                    <p>For this ruleset it maps to <code>{{ sampleRootPath }}</code>. It is not saved with the rule.</p>
+                  </div>
+                </el-popover>
+                <el-tag size="small" effect="plain">optional</el-tag>
+                <el-button size="small" text @click="sampleAssistExpanded = !sampleAssistExpanded">
+                  <el-icon>
+                    <ArrowUp v-if="sampleAssistExpanded" />
+                    <ArrowDown v-else />
+                  </el-icon>
+                  {{ sampleAssistExpanded ? 'Collapse' : 'Expand' }}
+                </el-button>
+              </div>
+            </header>
+            <div v-if="sampleAssistExpanded" class="sample-assist-body">
+              <JsonEditor
+                v-model="sampleRequestJson"
+                :min-height="150"
+                :placeholder="sampleRequestPlaceholder"
+                title="Sample JSON"
+              />
+              <div class="sample-assist-status">
+                <span v-if="sampleRequestError" class="field-error">{{ sampleRequestError }}</span>
+                <span v-else>{{ sampleAssistStatus }}</span>
+              </div>
+              <div v-if="sampleFieldPreview.length" class="sample-field-preview">
+                <code v-for="field in sampleFieldPreview" :key="field.path" :title="field.preview">
+                  {{ field.path }}
+                </code>
+              </div>
+            </div>
+          </div>
           <el-radio-group v-model="form.conditionMode" class="mode-switch" size="small">
             <el-radio-button value="tree">Tree</el-radio-button>
             <el-radio-button value="expr">CEL</el-radio-button>
@@ -150,6 +203,7 @@
             v-if="form.conditionMode === 'tree'"
             v-model="form.conditionTree"
             :protocol-spec="protocolSpec"
+            :sample-fields="sampleRequestFields"
           />
 
           <el-form v-else-if="form.conditionMode === 'expr'" label-position="top" class="editor-form">
@@ -389,6 +443,11 @@ import ResultInspector from '@/components/rulesets/ResultInspector.vue'
 import { useMockserverStore } from '@/store'
 import type { MockEvent, Rule, RuleSet } from '@/types'
 import {
+  buildSampleRequestFields,
+  parseOptionalSampleJSON,
+  sampleRootForProtocol,
+} from '@/utils/sampleRequestFields'
+import {
   ACTION_AUTHORING_PROFILES,
   buildRuleAuthoringView,
   type SectionReadiness,
@@ -429,6 +488,8 @@ const previewEventJson = ref('')
 const previewEventDirty = ref(false)
 const previewResultJson = ref('')
 const previewError = ref('')
+const sampleRequestJson = ref('')
+const sampleAssistExpanded = ref(false)
 
 const actionProfiles = ACTION_AUTHORING_PROFILES
 const sections: Array<{ name: EditorSection; label: string }> = [
@@ -475,6 +536,24 @@ const compactSummaryLabel = computed(() => {
 })
 const templatePayloadPlaceholder = computed(() => payloadExampleForAction('template'))
 const celPayloadPlaceholder = computed(() => payloadExampleForAction('cel'))
+const sampleRootPath = computed(() => sampleRootForProtocol(
+  protocolSpec.value?.name || props.ruleSet?.protocol || form.protocol || 'http'
+))
+const parsedSampleRequest = computed(() => parseOptionalSampleJSON(sampleRequestJson.value))
+const sampleRequestError = computed(() => parsedSampleRequest.value.error || '')
+const sampleRequestFields = computed(() => {
+  if (parsedSampleRequest.value.value === undefined || sampleRequestError.value) return []
+  return buildSampleRequestFields(sampleRootPath.value, parsedSampleRequest.value.value)
+})
+const sampleFieldPreview = computed(() => sampleRequestFields.value.slice(0, 8))
+const sampleAssistStatus = computed(() => {
+  if (sampleRequestError.value) return sampleRequestError.value
+  if (sampleRequestFields.value.length) return `${sampleRequestFields.value.length} fields inferred`
+  return 'No sample fields'
+})
+const sampleRequestPlaceholder = computed(() => sampleRequestExampleForProtocol(
+  protocolSpec.value?.name || props.ruleSet?.protocol || form.protocol || 'http'
+))
 const editorTitle = computed(() => {
   if (props.mode === 'create') return form.name.trim() || 'New rule'
   return form.name.trim() || form.id || 'Rule'
@@ -541,6 +620,8 @@ function resetForm() {
   previewEventDirty.value = false
   previewResultJson.value = ''
   previewError.value = ''
+  sampleRequestJson.value = ''
+  sampleAssistExpanded.value = false
   activeSection.value = 'identity'
 }
 
@@ -742,6 +823,37 @@ function celPayloadExample(protocol: string) {
     "path": request.path,
     "score": request.body.score
   }
+}`
+}
+
+function sampleRequestExampleForProtocol(protocol: string) {
+  const normalized = protocol.toLowerCase()
+  if (normalized === 'spex') {
+    return `{
+  "id": "demo",
+  "count": 123,
+  "enabled": true,
+  "items": [
+    {"sku": "A-1", "qty": 2}
+  ]
+}`
+  }
+  if (normalized === 'cache') {
+    return `{
+  "user": {
+    "id": "u1",
+    "tier": "gold"
+  },
+  "enabled": true
+}`
+  }
+  return `{
+  "order_id": "o-1",
+  "amount": 123,
+  "enabled": true,
+  "items": [
+    {"sku": "A-1", "qty": 2}
+  ]
 }`
 }
 
@@ -1008,6 +1120,161 @@ function toErrorMessage(error: unknown) {
   color: var(--ms-text-tertiary);
   font-size: var(--ms-text-sm);
   line-height: 1.5;
+}
+
+.sample-assist {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 8px var(--ms-space-3);
+  border: 1px solid var(--ms-border-light);
+  border-radius: var(--ms-radius-lg);
+  background: var(--ms-panel-bg-soft);
+
+  &.expanded {
+    gap: var(--ms-space-2);
+    padding-bottom: var(--ms-space-3);
+  }
+
+  header {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ms-space-2);
+
+    .sample-assist-summary {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      border: none;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    span:not(.el-tag__content) {
+      color: var(--ms-text-tertiary);
+      font-size: var(--ms-text-sm);
+      font-weight: var(--ms-font-bold);
+      text-transform: uppercase;
+    }
+
+    strong {
+      overflow: hidden;
+      color: var(--ms-text-primary);
+      font-family: var(--ms-font-mono);
+      font-size: var(--ms-text-sm);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    small {
+      overflow: hidden;
+      color: var(--ms-text-tertiary);
+      font-size: 12px;
+      font-weight: var(--ms-font-normal);
+      line-height: 1.35;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+}
+
+.sample-assist-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--ms-space-1);
+}
+
+.inline-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 28px;
+  height: 28px;
+  padding: 3px 8px;
+  border: 1px solid var(--ms-border-light);
+  border-radius: var(--ms-radius-pill);
+  color: var(--ms-text-tertiary);
+  background: transparent;
+  font-size: 11px;
+  line-height: 1.45;
+  cursor: pointer;
+
+  &.icon-only {
+    padding: 3px;
+  }
+
+  &:hover,
+  &:focus-visible {
+    color: var(--ms-teal-700);
+    border-color: var(--ms-teal-200);
+    background: var(--ms-teal-50);
+  }
+}
+
+.sample-assist-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ms-space-2);
+}
+
+.sample-assist-status {
+  min-height: 20px;
+  color: var(--ms-text-tertiary);
+  font-size: var(--ms-text-sm);
+  line-height: 1.45;
+
+  .field-error {
+    margin: 0;
+  }
+}
+
+.sample-assist-help {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ms-space-1);
+
+  strong {
+    color: var(--ms-text-primary);
+    font-size: var(--ms-text-sm);
+  }
+
+  p {
+    margin: 0;
+    color: var(--ms-text-secondary);
+    font-size: var(--ms-text-sm);
+    line-height: 1.45;
+  }
+
+  code {
+    font-family: var(--ms-font-mono);
+  }
+}
+
+.sample-field-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ms-space-1);
+
+  code {
+    max-width: 100%;
+    overflow: hidden;
+    padding: 3px 7px;
+    border: 1px solid var(--ms-border-light);
+    border-radius: var(--ms-radius-sm);
+    color: var(--ms-teal-700);
+    background: var(--ms-teal-50);
+    font-size: 11px;
+    line-height: 1.45;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 
 .validation-summary {

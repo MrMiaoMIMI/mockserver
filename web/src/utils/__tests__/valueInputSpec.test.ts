@@ -10,7 +10,7 @@ import {
 
 const stringField: ProtocolFieldSpec = { path: 'request.method', type: 'string' }
 const numberField: ProtocolFieldSpec = { path: 'request.ttl_ms', type: 'number' }
-const boolField: ProtocolFieldSpec = { path: 'request.value.enabled', type: 'bool' }
+const boolField: ProtocolFieldSpec = { path: 'request.enabled', type: 'bool' }
 const bodyRoot: ProtocolFieldSpec = { path: 'request.body', type: 'json', dynamic_path: true }
 
 describe('value input spec', () => {
@@ -19,6 +19,7 @@ describe('value input spec', () => {
     const isNull = buildValueInputSpec({ fieldPath: 'request.body.result', field: bodyRoot, operator: 'is_null' })
 
     expect(exists.editor).toBe('none')
+    expect(exists.jsonLiteral).toBe(false)
     expect(exists.valueRequired).toBe(false)
     expect(isNull.helperText).toContain('missing')
     expect(defaultValueForSpec(exists)).toBeUndefined()
@@ -33,7 +34,7 @@ describe('value input spec', () => {
       editor: 'number',
       scalarKind: 'number',
     })
-    expect(buildValueInputSpec({ fieldPath: 'request.value.enabled', field: boolField, operator: 'eq' })).toMatchObject({
+    expect(buildValueInputSpec({ fieldPath: 'request.enabled', field: boolField, operator: 'eq' })).toMatchObject({
       editor: 'boolean',
       scalarKind: 'boolean',
     })
@@ -50,13 +51,30 @@ describe('value input spec', () => {
     expect(normalizeValueForSpec('GET', methodList)).toEqual(['GET'])
   })
 
-  it('treats dynamic JSON children as simple values while root JSON uses JSON input', () => {
+  it('uses JSON literal input for dynamic JSON roots and children', () => {
     const root = buildValueInputSpec({ fieldPath: 'request.body', field: bodyRoot, operator: 'eq' })
     const child = buildValueInputSpec({ fieldPath: 'request.body.status', field: bodyRoot, operator: 'eq' })
+    const childIn = buildValueInputSpec({ fieldPath: 'request.body.status', field: bodyRoot, operator: 'in' })
 
     expect(root.editor).toBe('json')
+    expect(root.jsonLiteral).toBe(true)
+    expect(child.editor).toBe('json')
+    expect(child.jsonLiteral).toBe(true)
+    expect(child.placeholder).toContain('"demo"')
+    expect(childIn.editor).toBe('json')
+    expect(childIn.placeholder).toBe('["a", "b"]')
+  })
+
+  it('can keep dynamic JSON child fields on legacy text input for non-rule condition surfaces', () => {
+    const child = buildValueInputSpec({
+      fieldPath: 'request.body.status',
+      field: bodyRoot,
+      operator: 'eq',
+      dynamicJSONLiteral: false,
+    })
+
     expect(child.editor).toBe('text')
-    expect(child.placeholder).toBe('doing')
+    expect(child.jsonLiteral).toBe(false)
   })
 
   it('uses regex editor with field-specific examples', () => {
