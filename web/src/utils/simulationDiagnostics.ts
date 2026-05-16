@@ -213,6 +213,11 @@ export function buildSimulationRuleDiagnostics(
   const candidateRuleIds = new Set(
     (result.candidates?.length ? result.candidates : candidateRulesFromExplain(result.explain as ExplainRecord)).map(String)
   )
+  const ruleExplanations = new Map(
+    ruleExplanationsFromExplain(result.explain as ExplainRecord)
+      .filter((rule) => rule.rule_id !== undefined && rule.rule_id !== null)
+      .map((rule) => [String(rule.rule_id), rule])
+  )
 
   return rules.reduce<Record<string, RuleDiagnosticState>>((diagnostics, rule) => {
     if (matchedRuleId === rule.id) {
@@ -229,6 +234,14 @@ export function buildSimulationRuleDiagnostics(
       }
       return diagnostics
     }
+    const ruleExplanation = ruleExplanations.get(rule.id)
+    if (ruleExplanation?.matched === false) {
+      diagnostics[rule.id] = {
+        simulation: 'missed',
+        messages: [failedRuleExplanationMessage(ruleExplanation)],
+      }
+      return diagnostics
+    }
     if (candidateRuleIds.has(rule.id)) {
       diagnostics[rule.id] = {
         simulation: 'candidate',
@@ -242,6 +255,13 @@ export function buildSimulationRuleDiagnostics(
     }
     return diagnostics
   }, {})
+}
+
+function failedRuleExplanationMessage(ruleExplanation: ExplainRecord) {
+  const condition = ruleExplanation.condition
+  const reason = typeof condition?.message === 'string' ? condition.message : ''
+  const base = 'latest simulation evaluated this rule, but its condition did not match'
+  return reason ? `${base}: ${reason}` : base
 }
 
 function applySafeConditionHints(

@@ -110,7 +110,11 @@
           </div>
         </section>
 
-        <div :class="['rules-workspace', { 'is-editor-mode': activeWorkbenchMode === 'editor' }]">
+        <div
+          ref="rulesWorkspaceRef"
+          :class="['rules-workspace', { 'is-editor-mode': activeWorkbenchMode === 'editor', 'is-resizing': workspaceResizeActive }]"
+          :style="rulesWorkspaceStyle"
+        >
           <main class="rules-main">
             <RuleManager
               :rule-set="currentDraft"
@@ -123,12 +127,29 @@
             />
           </main>
 
+          <button
+            class="workspace-resizer"
+            type="button"
+            role="separator"
+            aria-label="Resize Rule Manager and Rule Workspace"
+            aria-orientation="vertical"
+            :aria-valuemin="workspaceSplitMin"
+            :aria-valuemax="workspaceSplitMax"
+            :aria-valuenow="Math.round(effectiveWorkspaceSplitPercent)"
+            title="Drag to resize Rule Manager and Rule Workspace"
+            @pointerdown="startWorkspaceResize"
+            @keydown="handleWorkspaceResizeKey"
+            @dblclick="resetWorkspaceSplit"
+          >
+            <span aria-hidden="true" />
+          </button>
+
           <aside class="tool-dock">
             <header class="workbench-header">
               <div>
                 <span>Rule Workspace</span>
-                <strong>{{ workbenchTitle }}</strong>
-                <small>{{ activeTaskContextLabel }}</small>
+                <strong>{{ workbenchHeaderTitle }}</strong>
+                <small>{{ workbenchHeaderDetail }}</small>
               </div>
               <TaskRail
                 :model-value="activeWorkbenchIntent"
@@ -357,7 +378,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -406,7 +427,6 @@ import {
   buildSimulationRuleDiagnostics,
 } from '@/utils/simulationDiagnostics'
 import { selectorValueSummaries } from '@/utils/entryLists'
-import { ruleDisplayName } from '@/utils/ruleSummaries'
 import {
   defaultWorkbenchModeForIntent,
   isWorkbenchMode,
@@ -449,6 +469,13 @@ const rollbackReason = ref('')
 const pageLoading = ref(false)
 const pageError = ref('')
 const operationError = ref('')
+const rulesWorkspaceRef = ref<HTMLElement | null>(null)
+const workspaceSplitMin = 26
+const workspaceSplitMax = 68
+const savedWorkspaceSplit = readSavedWorkspaceSplit()
+const workspaceSplitPercent = ref(savedWorkspaceSplit ?? 42)
+const workspaceSplitDirty = ref(savedWorkspaceSplit !== undefined)
+const workspaceResizeActive = ref(false)
 const operationLoading = reactive({
   refresh: false,
   validate: false,
@@ -538,13 +565,22 @@ const workbenchTitle = computed(() => {
   return buildWorkbenchTitle(activeWorkbenchMode.value, activeRule.value, editorMode.value)
 })
 const activeWorkbenchIntent = computed(() => workbenchIntentForMode(activeWorkbenchMode.value))
-const activeTaskContextLabel = computed(() => {
-  if (debugPayload.value) return `debug request #${debugPayload.value.request.recordId}`
-  if (activeWorkbenchMode.value === 'editor' && editorMode.value === 'create') return 'creating a new rule'
-  if (activeRule.value) return `selected ${ruleDisplayName(activeRule.value)}`
-  if (currentDraft.value?.rules.length) return 'select a rule to focus the task'
-  return 'no rules in this ruleset yet'
+const activeWorkbenchTask = computed(() => {
+  return workbenchModes.find((task) => task.name === activeWorkbenchIntent.value)
 })
+const workbenchHeaderTitle = computed(() => {
+  return activeWorkbenchTask.value?.label || workbenchTitle.value
+})
+const workbenchHeaderDetail = computed(() => {
+  return activeWorkbenchTask.value?.description || ''
+})
+const defaultWorkspaceSplitPercent = computed(() => (activeWorkbenchMode.value === 'editor' ? 34 : 42))
+const effectiveWorkspaceSplitPercent = computed(() => {
+  return workspaceSplitDirty.value ? workspaceSplitPercent.value : defaultWorkspaceSplitPercent.value
+})
+const rulesWorkspaceStyle = computed<Record<string, string>>(() => ({
+  '--rules-main-width': `${effectiveWorkspaceSplitPercent.value}%`,
+}))
 const simulationEventStateLabel = computed(() => {
   return simulateJsonDirty.value ? 'custom event payload' : 'derived from current ruleset and selected rule'
 })
@@ -918,6 +954,98 @@ function updateWorkbenchIntent(intent: string) {
   }
 }
 
+function startWorkspaceResize(event: PointerEvent) {
+  if (!rulesWorkspaceRef.value || window.innerWidth <= 1320) return
+  event.preventDefault()
+  workspaceResizeActive.value = true
+  workspaceSplitDirty.value = true
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  updateWorkspaceSplitFromClientX(event.clientX)
+
+  const move = (moveEvent: PointerEvent) => updateWorkspaceSplitFromClientX(moveEvent.clientX)
+  const stop = () => {
+    window.removeEventListener('pointermove', move)
+    window.removeEventListener('pointerup', stop)
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+    workspaceResizeActive.value = false
+    saveWorkspaceSplit(workspaceSplitPercent.value)
+  }
+  window.addEventListener('pointermove', move)
+  window.addEventListener('pointerup', stop)
+}
+
+function updateWorkspaceSplitFromClientX(clientX: number) {
+  const rect = rulesWorkspaceRef.value?.getBoundingClientRect()
+  if (!rect?.width) return
+  setWorkspaceSplit(((clientX - rect.left) / rect.width) * 100)
+}
+
+function handleWorkspaceResizeKey(event: KeyboardEvent) {
+  const keySteps: Record<string, number> = {
+    ArrowLeft: -3,
+    ArrowRight: 3,
+  }
+  if (event.key === 'Home') {
+    event.preventDefault()
+    workspaceSplitDirty.value = true
+    setWorkspaceSplit(workspaceSplitMin)
+    saveWorkspaceSplit(workspaceSplitPercent.value)
+    return
+  }
+  if (event.key === 'End') {
+    event.preventDefault()
+    workspaceSplitDirty.value = true
+    setWorkspaceSplit(workspaceSplitMax)
+    saveWorkspaceSplit(workspaceSplitPercent.value)
+    return
+  }
+  const step = keySteps[event.key]
+  if (!step) return
+  event.preventDefault()
+  workspaceSplitDirty.value = true
+  setWorkspaceSplit(effectiveWorkspaceSplitPercent.value + step)
+  saveWorkspaceSplit(workspaceSplitPercent.value)
+}
+
+function resetWorkspaceSplit() {
+  workspaceSplitDirty.value = false
+  removeSavedWorkspaceSplit()
+}
+
+function setWorkspaceSplit(value: number) {
+  workspaceSplitPercent.value = Math.min(workspaceSplitMax, Math.max(workspaceSplitMin, Math.round(value)))
+}
+
+function readSavedWorkspaceSplit() {
+  try {
+    const raw = window.localStorage.getItem('mockserver.rules.workspace.split')
+    if (!raw) return undefined
+    const value = Number(raw)
+    if (!Number.isFinite(value)) return undefined
+    return Math.min(workspaceSplitMax, Math.max(workspaceSplitMin, Math.round(value)))
+  } catch {
+    return undefined
+  }
+}
+
+function saveWorkspaceSplit(value: number) {
+  try {
+    window.localStorage.setItem('mockserver.rules.workspace.split', String(value))
+  } catch {
+    // Ignore storage failures; resizing still works for the current page.
+  }
+}
+
+function removeSavedWorkspaceSplit() {
+  try {
+    window.localStorage.removeItem('mockserver.rules.workspace.split')
+  } catch {
+    // Ignore storage failures; default layout still applies.
+  }
+}
+
 function invalidateReadiness() {
   store.validation = null
   validationError.value = ''
@@ -969,6 +1097,10 @@ watch(
 )
 watch([currentDraft, activeRule], () => refreshSimulationEventFromContext(false), { immediate: true })
 onMounted(loadRuleSet)
+onBeforeUnmount(() => {
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+})
 </script>
 
 <style lang="scss" scoped>
@@ -1188,12 +1320,8 @@ onMounted(loadRuleSet)
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(420px, 0.42fr) minmax(640px, 0.58fr);
-  gap: var(--ms-space-3);
-}
-
-.rules-workspace.is-editor-mode {
-  grid-template-columns: minmax(360px, 0.34fr) minmax(760px, 0.66fr);
+  grid-template-columns: minmax(320px, var(--rules-main-width)) 10px minmax(520px, 1fr);
+  gap: var(--ms-space-2);
 }
 
 .rules-main,
@@ -1206,6 +1334,45 @@ onMounted(loadRuleSet)
   display: flex;
   flex-direction: column;
   gap: var(--ms-space-4);
+}
+
+.workspace-resizer {
+  min-width: 0;
+  width: 10px;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  padding: 0;
+  border: none;
+  border-radius: var(--ms-radius-pill);
+  background: transparent;
+  cursor: col-resize;
+
+  span {
+    width: 4px;
+    height: 56px;
+    border-radius: var(--ms-radius-pill);
+    background: var(--ms-border-light);
+    transition:
+      width var(--ms-transition-fast),
+      background var(--ms-transition-fast),
+      box-shadow var(--ms-transition-fast);
+  }
+
+  &:hover span,
+  &:focus-visible span,
+  .rules-workspace.is-resizing & span {
+    width: 6px;
+    background: var(--ms-teal-500);
+    box-shadow: var(--ms-shadow-xs);
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(13, 148, 136, 0.35);
+    outline-offset: 2px;
+  }
 }
 
 .tool-dock {
@@ -1221,7 +1388,7 @@ onMounted(loadRuleSet)
 .workbench-header {
   flex-shrink: 0;
   display: grid;
-  grid-template-columns: minmax(150px, 0.28fr) minmax(0, 0.72fr);
+  grid-template-columns: minmax(170px, 0.3fr) minmax(240px, 0.7fr);
   align-items: center;
   gap: var(--ms-space-3);
   padding: var(--ms-space-2) var(--ms-space-3);
@@ -1259,6 +1426,17 @@ onMounted(loadRuleSet)
     line-height: 1.35;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  :deep(.task-rail) {
+    width: 100%;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+  }
+
+  :deep(.task-rail button) {
+    flex: 1 1 0;
+    min-width: 64px;
   }
 }
 
@@ -1538,6 +1716,10 @@ onMounted(loadRuleSet)
   .rules-workspace {
     height: auto;
     grid-template-columns: 1fr;
+  }
+
+  .workspace-resizer {
+    display: none;
   }
 
   .rules-main {

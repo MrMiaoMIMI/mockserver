@@ -258,6 +258,69 @@ describe('simulation diagnostics', () => {
     })
   })
 
+  it('marks candidate rules with failed condition explanations as missed', () => {
+    const response: SimulateRuleSetResponse = {
+      result: {
+        matched: false,
+        trace: {
+          ruleset_id: 'rs-1',
+        },
+        candidates: ['primary-rule', 'fallback-rule'],
+        explain: {
+          rule_set_explanations: [
+            {
+              ruleset_id: 'rs-1',
+              matched: false,
+              message: 'ruleset selector matched, but no rule matched',
+              candidate_rules: ['primary-rule', 'fallback-rule'],
+              rule_explanations: [
+                {
+                  rule_id: 'primary-rule',
+                  priority: 10,
+                  matched: false,
+                  condition: {
+                    kind: 'predicate',
+                    field: 'request.method',
+                    operator: 'eq',
+                    expected: 'POST',
+                    actual: 'GET',
+                    matched: false,
+                    message: 'field request.method did not match operator eq',
+                  },
+                },
+                {
+                  rule_id: 'fallback-rule',
+                  priority: 20,
+                  matched: false,
+                  condition: {
+                    kind: 'predicate',
+                    field: 'request.path',
+                    operator: 'prefix',
+                    expected: '/api/fallback',
+                    actual: '/api/checkout',
+                    matched: false,
+                    message: 'field request.path did not match operator prefix',
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    }
+
+    expect(buildSimulationRuleDiagnostics(response.result, ruleSet.rules)).toMatchObject({
+      'primary-rule': {
+        simulation: 'missed',
+        messages: [expect.stringContaining('request.method')],
+      },
+      'fallback-rule': {
+        simulation: 'missed',
+        messages: [expect.stringContaining('request.path')],
+      },
+    })
+  })
+
   it('marks rules as not reached when simulation misses at the ruleset selector', () => {
     const response: SimulateRuleSetResponse = {
       result: {
