@@ -47,6 +47,9 @@ func ValidateRuleSet(ruleSet bo.RuleSet) bo.ValidationResult {
 	if strings.TrimSpace(ruleSet.ID) == "" {
 		issues = append(issues, bo.ValidationIssue{Path: "id", Message: "id is required"})
 	}
+	if strings.TrimSpace(ruleSet.Name) == "" {
+		issues = append(issues, bo.ValidationIssue{Path: "name", Message: "name is required"})
+	}
 	if strings.TrimSpace(ruleSet.Protocol) == "" {
 		issues = append(issues, bo.ValidationIssue{Path: "protocol", Message: "protocol is required"})
 	} else if _, ok := mockprotocol.DefaultRegistry().Get(ruleSet.Protocol); !ok {
@@ -64,6 +67,8 @@ func ValidateRuleSet(ruleSet bo.RuleSet) bo.ValidationResult {
 		issues = append(issues, bo.ValidationIssue{Path: "rules", Message: "rules must contain at least one rule"})
 	}
 	ruleIDs := make(map[string]int, len(ruleSet.Rules))
+	ruleNames := make(map[string]int, len(ruleSet.Rules))
+	rulePriorities := make(map[int]int, len(ruleSet.Rules))
 	for i, rule := range ruleSet.Rules {
 		rulePath := fmt.Sprintf("rules[%d]", i)
 		ruleID := strings.TrimSpace(rule.ID)
@@ -73,6 +78,19 @@ func ValidateRuleSet(ruleSet bo.RuleSet) bo.ValidationResult {
 			} else {
 				ruleIDs[ruleID] = i
 			}
+		}
+		ruleName := normalizedRuleName(rule.Name)
+		if ruleName != "" {
+			if firstIndex, exists := ruleNames[ruleName]; exists {
+				issues = append(issues, bo.ValidationIssue{Path: rulePath + ".name", Message: fmt.Sprintf("duplicate rule name %q already used at rules[%d]", strings.TrimSpace(rule.Name), firstIndex)})
+			} else {
+				ruleNames[ruleName] = i
+			}
+		}
+		if firstIndex, exists := rulePriorities[rule.Priority]; exists {
+			issues = append(issues, bo.ValidationIssue{Path: rulePath + ".priority", Message: fmt.Sprintf("duplicate rule priority %d already used at rules[%d]", rule.Priority, firstIndex)})
+		} else {
+			rulePriorities[rule.Priority] = i
 		}
 		validateRule(ruleSet.Protocol, rule, rulePath, &issues)
 	}
@@ -85,6 +103,10 @@ func ValidateRuleSet(ruleSet bo.RuleSet) bo.ValidationResult {
 		Issues:   issues,
 		Warnings: warnings,
 	}
+}
+
+func normalizedRuleName(value string) string {
+	return strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(value)), " "))
 }
 
 func CompileRuleSet(ruleSet bo.RuleSet) (CompiledRuleSet, error) {
@@ -300,6 +322,9 @@ func validateRule(protocol string, rule bo.Rule, path string, issues *[]bo.Valid
 	}
 	if strings.TrimSpace(rule.Name) == "" {
 		*issues = append(*issues, bo.ValidationIssue{Path: path + ".name", Message: "rule name is required"})
+	}
+	if rule.Priority < 0 {
+		*issues = append(*issues, bo.ValidationIssue{Path: path + ".priority", Message: "rule priority must be a non-negative number"})
 	}
 	validateRuleAction(protocol, rule, path+".action", issues)
 	validateCondition(protocol, rule.When, path+".when", issues)

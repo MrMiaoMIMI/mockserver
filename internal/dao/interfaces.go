@@ -25,6 +25,7 @@ type RuleSetRepository interface {
 	Rollback(ctx context.Context, id, snapshotID string, audit *bo.AuditInfo) (bo.PublishedRuleSetSnapshot, error)
 	ListPublished(ctx context.Context) ([]bo.PublishedRuleSetSnapshot, error)
 	ListPublishedSnapshots(ctx context.Context, id string) ([]bo.PublishedRuleSetSnapshot, error)
+	PublishedRevision() uint64
 }
 
 type NamespaceRepository interface {
@@ -51,7 +52,7 @@ type ruleSetTableDAO interface {
 }
 
 type namespaceTableDAO interface {
-	UpsertNamespace(ctx context.Context, namespace modeldo.NamespaceConfig) error
+	UpsertNamespace(ctx context.Context, namespace modeldo.NamespaceConfig, expectedVersion int) error
 	GetNamespace(ctx context.Context, id string) (modeldo.NamespaceConfig, bool, error)
 	ListNamespaces(ctx context.Context) ([]modeldo.NamespaceConfig, error)
 }

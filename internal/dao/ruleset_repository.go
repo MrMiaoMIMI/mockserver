@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/MrMiaoMIMI/goshared/db/dbspi"
@@ -16,7 +17,8 @@ import (
 )
 
 type ruleSetRepository struct {
-	tableDAO ruleSetTableDAO
+	tableDAO          ruleSetTableDAO
+	publishedRevision uint64
 }
 
 func newRuleSetRepository(tableDAO ruleSetTableDAO) RuleSetRepository {
@@ -42,9 +44,12 @@ func (r *ruleSetRepository) UpsertDraft(ctx context.Context, ruleSet bo.RuleSet)
 		return bo.RuleSet{}, fmt.Errorf("marshal draft ruleset %s: %w", ruleSet.ID, err)
 	}
 	if err := r.tableDAO.UpsertDraft(ctx, modeldo.RuleSetDraft{
-		RuleSetCode: ruleSet.ID,
-		Version:     ruleSet.Version,
-		RuleSetJSON: string(raw),
+		RuleSetCode:   ruleSet.ID,
+		RuleSetName:   ruleSet.Name,
+		ProtocolName:  ruleSet.Protocol,
+		NamespaceCode: ruleSet.Namespace,
+		Version:       ruleSet.Version,
+		RuleSetJSON:   string(raw),
 	}, expectedVersion); err != nil {
 		return bo.RuleSet{}, err
 	}
@@ -165,7 +170,12 @@ func (r *ruleSetRepository) publishSnapshot(ctx context.Context, ruleSet bo.Rule
 		return bo.PublishedRuleSetSnapshot{}, err
 	}
 	snapshot.DBID = record.Id
+	atomic.AddUint64(&r.publishedRevision, 1)
 	return snapshot, nil
+}
+
+func (r *ruleSetRepository) PublishedRevision() uint64 {
+	return atomic.LoadUint64(&r.publishedRevision)
 }
 
 func decodeRuleSetRecord(record modeldo.RuleSetDraft) (bo.RuleSet, error) {
@@ -176,6 +186,15 @@ func decodeRuleSetRecord(record modeldo.RuleSetDraft) (bo.RuleSet, error) {
 	ruleSet.DBID = record.Id
 	if ruleSet.ID == "" {
 		ruleSet.ID = record.RuleSetCode
+	}
+	if ruleSet.Name == "" {
+		ruleSet.Name = record.RuleSetName
+	}
+	if ruleSet.Protocol == "" {
+		ruleSet.Protocol = record.ProtocolName
+	}
+	if ruleSet.Namespace == "" {
+		ruleSet.Namespace = record.NamespaceCode
 	}
 	return ruleSet, nil
 }

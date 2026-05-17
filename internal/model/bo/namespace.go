@@ -6,6 +6,7 @@ type Namespace struct {
 	Name        string                     `json:"name,omitempty"`
 	Description string                     `json:"description,omitempty"`
 	Policies    map[string]NamespacePolicy `json:"policies"`
+	Version     int                        `json:"version"`
 }
 
 type NamespacePolicy struct {
@@ -28,8 +29,9 @@ func DefaultNamespaceForwardAction() Action {
 
 func DefaultNamespace(id string) Namespace {
 	return Namespace{
-		ID:   id,
-		Name: id,
+		ID:      id,
+		Name:    id,
+		Version: 1,
 		Policies: map[string]NamespacePolicy{
 			"http": {
 				RulesetMissAction: DefaultNamespaceForwardAction(),

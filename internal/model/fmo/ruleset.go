@@ -7,17 +7,23 @@ import (
 
 type RuleSetDraftFields struct {
 	CommonFmo
-	RuleSetCode dbspi.Field[string]
-	Version     dbspi.Field[int]
-	RuleSetJSON dbspi.Field[string]
+	RuleSetCode   dbspi.Field[string]
+	RuleSetName   dbspi.Field[string]
+	ProtocolName  dbspi.Field[string]
+	NamespaceCode dbspi.Field[string]
+	Version       dbspi.Field[int]
+	RuleSetJSON   dbspi.Field[string]
 }
 
 func NewRuleSetDraftFields() RuleSetDraftFields {
 	return RuleSetDraftFields{
-		CommonFmo:   NewCommonFmo(),
-		RuleSetCode: dbhelper.NewField[string]("ruleset_code"),
-		Version:     dbhelper.NewField[int]("version"),
-		RuleSetJSON: dbhelper.NewField[string]("ruleset_json"),
+		CommonFmo:     NewCommonFmo(),
+		RuleSetCode:   dbhelper.NewField[string]("ruleset_code"),
+		RuleSetName:   dbhelper.NewField[string]("ruleset_name"),
+		ProtocolName:  dbhelper.NewField[string]("protocol_name"),
+		NamespaceCode: dbhelper.NewField[string]("namespace_code"),
+		Version:       dbhelper.NewField[int]("version"),
+		RuleSetJSON:   dbhelper.NewField[string]("ruleset_json"),
 	}
 }
 
@@ -60,6 +66,7 @@ func NewPublishedRuleSetSnapshotFields() PublishedRuleSetSnapshotFields {
 type NamespaceConfigFields struct {
 	CommonFmo
 	NamespaceCode dbspi.Field[string]
+	NamespaceName dbspi.Field[string]
 	Version       dbspi.Field[int]
 	NamespaceJSON dbspi.Field[string]
 }
@@ -68,6 +75,7 @@ func NewNamespaceConfigFields() NamespaceConfigFields {
 	return NamespaceConfigFields{
 		CommonFmo:     NewCommonFmo(),
 		NamespaceCode: dbhelper.NewField[string]("namespace_code"),
+		NamespaceName: dbhelper.NewField[string]("namespace_name"),
 		Version:       dbhelper.NewField[int]("version"),
 		NamespaceJSON: dbhelper.NewField[string]("namespace_json"),
 	}

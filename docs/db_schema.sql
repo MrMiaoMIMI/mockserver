@@ -14,6 +14,9 @@ USE mockserver_db;
 CREATE TABLE IF NOT EXISTS mockserver_rule_set_draft_tab (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Auto increment primary key',
     ruleset_code VARCHAR(96) NOT NULL COMMENT 'Ruleset business code',
+    ruleset_name VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'Ruleset display name',
+    protocol_name VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'Protocol name',
+    namespace_code VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'Namespace business code',
     version INT UNSIGNED NOT NULL DEFAULT 1 COMMENT 'Draft version',
     ruleset_json LONGTEXT NOT NULL COMMENT 'Serialized ruleset JSON',
     creator VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Creator',
@@ -23,6 +26,7 @@ CREATE TABLE IF NOT EXISTS mockserver_rule_set_draft_tab (
     deleted TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Soft delete flag',
     PRIMARY KEY (id),
     UNIQUE KEY idx_ruleset_code (ruleset_code),
+    UNIQUE KEY idx_namespace_protocol_ruleset_name (namespace_code, protocol_name, ruleset_name),
     KEY idx_mtime (mtime)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Mockserver ruleset draft table';
 
@@ -61,6 +65,7 @@ CREATE TABLE IF NOT EXISTS mockserver_published_rule_set_tab (
 CREATE TABLE IF NOT EXISTS mockserver_namespace_tab (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Auto increment primary key',
     namespace_code VARCHAR(64) NOT NULL COMMENT 'Namespace business code',
+    namespace_name VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'Namespace display name',
     version INT UNSIGNED NOT NULL DEFAULT 1 COMMENT 'Namespace version',
     namespace_json LONGTEXT NOT NULL COMMENT 'Serialized namespace JSON',
     creator VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Creator',
@@ -69,7 +74,8 @@ CREATE TABLE IF NOT EXISTS mockserver_namespace_tab (
     mtime BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Update time in UNIX milliseconds',
     deleted TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Soft delete flag',
     PRIMARY KEY (id),
-    UNIQUE KEY idx_namespace_code (namespace_code)
+    UNIQUE KEY idx_namespace_code (namespace_code),
+    UNIQUE KEY idx_namespace_name (namespace_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Mockserver namespace table';
 
 CREATE TABLE IF NOT EXISTS mockserver_traffic_event_tab (

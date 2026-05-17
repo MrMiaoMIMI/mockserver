@@ -23,23 +23,45 @@ func newGosharedNamespaceTableDAO(manager dbspi.Manager) namespaceTableDAO {
 	}
 }
 
-func (d *gosharedNamespaceTableDAO) UpsertNamespace(ctx context.Context, namespace modeldo.NamespaceConfig) error {
+func (d *gosharedNamespaceTableDAO) UpsertNamespace(ctx context.Context, namespace modeldo.NamespaceConfig, expectedVersion int) error {
 	query := dbhelper.Q(d.namespaceFields.NamespaceCode.Eq(&namespace.NamespaceCode))
 	exists, _, err := d.namespaceStore.Exists(ctx, query)
 	if err != nil {
 		return fmt.Errorf("get namespace %s: %w", namespace.NamespaceCode, err)
 	}
+	if expectedVersion <= 0 && exists {
+		return ErrConflict
+	}
 	if !exists {
 		if err := d.namespaceStore.Create(ctx, &namespace); err != nil {
+			if isDuplicateEntryError(err) {
+				return ErrConflict
+			}
 			return fmt.Errorf("insert namespace %s: %w", namespace.NamespaceCode, err)
 		}
 		return nil
 	}
 
 	updater := dbhelper.NewUpdater().
+		Set(d.namespaceFields.NamespaceName, namespace.NamespaceName).
+		Set(d.namespaceFields.Version, namespace.Version).
 		Set(d.namespaceFields.NamespaceJSON, namespace.NamespaceJSON)
-	if err := d.namespaceStore.UpdateByQuery(ctx, query, updater); err != nil {
+	updateQuery := dbhelper.Q(
+		d.namespaceFields.NamespaceCode.Eq(&namespace.NamespaceCode),
+		d.namespaceFields.Version.Eq(&expectedVersion),
+	)
+	if err := d.namespaceStore.UpdateByQuery(ctx, updateQuery, updater); err != nil {
+		if isDuplicateEntryError(err) {
+			return ErrConflict
+		}
 		return fmt.Errorf("update namespace %s: %w", namespace.NamespaceCode, err)
+	}
+	updated, ok, err := d.GetNamespace(ctx, namespace.NamespaceCode)
+	if err != nil {
+		return err
+	}
+	if !ok || updated.Version != namespace.Version {
+		return ErrConflict
 	}
 	return nil
 }

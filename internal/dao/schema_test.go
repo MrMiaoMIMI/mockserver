@@ -21,12 +21,17 @@ func TestDefaultSchemaSQLFollowsMySQLDesignGuide(t *testing.T) {
 		"publish_time BIGINT UNSIGNED",
 		"deleted TINYINT UNSIGNED",
 		"ruleset_code VARCHAR(96)",
+		"ruleset_name VARCHAR(128)",
+		"protocol_name VARCHAR(64)",
 		"snapshot_code VARCHAR(40)",
 		"namespace_code VARCHAR(64)",
+		"namespace_name VARCHAR(128)",
 		"event_code VARCHAR(48)",
 		"UNIQUE KEY idx_ruleset_code",
+		"UNIQUE KEY idx_namespace_protocol_ruleset_name",
 		"UNIQUE KEY idx_snapshot_code",
 		"UNIQUE KEY idx_namespace_code",
+		"UNIQUE KEY idx_namespace_name",
 		"UNIQUE KEY idx_event_code",
 		"KEY idx_traffic_source_event_time_id",
 		"KEY idx_mtime",
@@ -66,6 +71,7 @@ func TestDefaultSchemaSQLFollowsMySQLDesignGuide(t *testing.T) {
 		"create_time",
 		"update_time",
 		"is_deleted",
+		"UNIQUE KEY idx_ruleset_name (ruleset_name)",
 	}
 	upperSchema := strings.ToUpper(defaultSchemaSQL)
 	for _, item := range forbidden {

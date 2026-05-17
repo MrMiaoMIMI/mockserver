@@ -28,6 +28,7 @@ type NamespaceResponse struct {
 	Name        string                        `json:"name,omitempty"`
 	Description string                        `json:"description,omitempty"`
 	Policies    map[string]bo.NamespacePolicy `json:"policies"`
+	Version     int                           `json:"version"`
 }
 
 type ListNamespacesResponse struct {

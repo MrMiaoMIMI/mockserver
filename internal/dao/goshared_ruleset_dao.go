@@ -12,6 +12,7 @@ import (
 )
 
 type gosharedRuleSetTableDAO struct {
+	manager        dbspi.Manager
 	draftStore     dbspi.SoftDeleteTableStore[*modeldo.RuleSetDraft]
 	currentStore   dbspi.SoftDeleteTableStore[*modeldo.PublishedRuleSetCurrent]
 	snapshotStore  dbspi.SoftDeleteTableStore[*modeldo.PublishedRuleSetSnapshot]
@@ -22,6 +23,7 @@ type gosharedRuleSetTableDAO struct {
 
 func newGosharedRuleSetTableDAO(manager dbspi.Manager) ruleSetTableDAO {
 	return &gosharedRuleSetTableDAO{
+		manager:        manager,
 		draftStore:     dbhelper.NewSoftDeleteTableStore(&modeldo.RuleSetDraft{}, dbhelper.WithManager(manager)),
 		currentStore:   dbhelper.NewSoftDeleteTableStore(&modeldo.PublishedRuleSetCurrent{}, dbhelper.WithManager(manager)),
 		snapshotStore:  dbhelper.NewSoftDeleteTableStore(&modeldo.PublishedRuleSetSnapshot{}, dbhelper.WithManager(manager)),
@@ -34,12 +36,18 @@ func newGosharedRuleSetTableDAO(manager dbspi.Manager) ruleSetTableDAO {
 func (d *gosharedRuleSetTableDAO) UpsertDraft(ctx context.Context, draft modeldo.RuleSetDraft, expectedVersion int) error {
 	if expectedVersion <= 0 {
 		if err := d.draftStore.Create(ctx, &draft); err != nil {
+			if isDuplicateEntryError(err) {
+				return ErrConflict
+			}
 			return fmt.Errorf("insert draft %s: %w", draft.RuleSetCode, err)
 		}
 		return nil
 	}
 
 	updater := dbhelper.NewUpdater().
+		Set(d.draftFields.RuleSetName, draft.RuleSetName).
+		Set(d.draftFields.ProtocolName, draft.ProtocolName).
+		Set(d.draftFields.NamespaceCode, draft.NamespaceCode).
 		Set(d.draftFields.Version, draft.Version).
 		Set(d.draftFields.RuleSetJSON, draft.RuleSetJSON)
 	query := dbhelper.Q(
@@ -47,6 +55,9 @@ func (d *gosharedRuleSetTableDAO) UpsertDraft(ctx context.Context, draft modeldo
 		d.draftFields.Version.Eq(&expectedVersion),
 	)
 	if err := d.draftStore.UpdateByQuery(ctx, query, updater); err != nil {
+		if isDuplicateEntryError(err) {
+			return ErrConflict
+		}
 		return fmt.Errorf("update draft %s: %w", draft.RuleSetCode, err)
 	}
 	updated, ok, err := d.GetDraft(ctx, draft.RuleSetCode)
@@ -86,6 +97,25 @@ func (d *gosharedRuleSetTableDAO) ListDrafts(ctx context.Context) ([]modeldo.Rul
 }
 
 func (d *gosharedRuleSetTableDAO) PublishSnapshot(ctx context.Context, snapshot modeldo.PublishedRuleSetSnapshot) (modeldo.PublishedRuleSetSnapshot, error) {
+	var saved modeldo.PublishedRuleSetSnapshot
+	err := dbhelper.Transaction(ctx, func(tx *dbhelper.Tx) error {
+		txDAO := &gosharedRuleSetTableDAO{
+			snapshotStore:  dbhelper.NewSoftDeleteTableStore(&modeldo.PublishedRuleSetSnapshot{}, dbhelper.WithTx(tx)),
+			currentStore:   dbhelper.NewSoftDeleteTableStore(&modeldo.PublishedRuleSetCurrent{}, dbhelper.WithTx(tx)),
+			currentFields:  d.currentFields,
+			snapshotFields: d.snapshotFields,
+		}
+		var err error
+		saved, err = txDAO.publishSnapshot(ctx, snapshot)
+		return err
+	}, dbhelper.WithManager(d.manager))
+	if err != nil {
+		return modeldo.PublishedRuleSetSnapshot{}, err
+	}
+	return saved, nil
+}
+
+func (d *gosharedRuleSetTableDAO) publishSnapshot(ctx context.Context, snapshot modeldo.PublishedRuleSetSnapshot) (modeldo.PublishedRuleSetSnapshot, error) {
 	if err := d.snapshotStore.Create(ctx, &snapshot); err != nil {
 		return modeldo.PublishedRuleSetSnapshot{}, fmt.Errorf("insert published snapshot %s: %w", snapshot.SnapshotCode, err)
 	}

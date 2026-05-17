@@ -507,11 +507,13 @@ const actionTitle = computed(() => {
   return 'Static mock response'
 })
 const existingRuleIds = computed(() => props.ruleSet?.rules.map((rule) => rule.id) || [])
+const existingRules = computed(() => props.ruleSet?.rules || [])
 const protocolSpec = computed(() => {
   return props.ruleSet ? store.protocolMap.get(props.ruleSet.protocol) : undefined
 })
 const buildOptions = computed(() => ({
   existingRuleIds: existingRuleIds.value,
+  existingRules: existingRules.value,
   lockedRuleId: props.mode === 'edit' ? props.rule?.id : undefined,
   protocolSpec: protocolSpec.value,
 }))
@@ -623,6 +625,7 @@ function resetForm() {
   Object.assign(form, nextForm)
   const nextView = buildRuleAuthoringView(nextForm, props.ruleSet, {
     existingRuleIds: existingRuleIds.value,
+    existingRules: existingRules.value,
     lockedRuleId: props.mode === 'edit' ? props.rule?.id : undefined,
     protocolSpec: protocolSpec.value,
   })

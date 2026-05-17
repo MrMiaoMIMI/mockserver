@@ -16,6 +16,7 @@ type testRuleSetRepository struct {
 	published  map[string]testPublishedRecord
 	snapshots  map[string][]bo.PublishedRuleSetSnapshot
 	namespaces map[string]bo.Namespace
+	revision   uint64
 }
 
 type testPublishedRecord struct {
@@ -153,6 +154,12 @@ func (s *testRuleSetRepository) UpsertNamespace(ctx context.Context, namespace b
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	current, exists := s.namespaces[namespace.ID]
+	if exists {
+		namespace.Version = current.Version + 1
+	} else {
+		namespace.Version = 1
+	}
 	s.namespaces[namespace.ID] = namespace
 	return namespace, nil
 }
@@ -181,6 +188,12 @@ func (s *testRuleSetRepository) ListNamespaces(ctx context.Context) ([]bo.Namesp
 	return items, nil
 }
 
+func (s *testRuleSetRepository) PublishedRevision() uint64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.revision
+}
+
 func (s *testRuleSetRepository) publishSnapshot(ruleSet bo.RuleSet, audit *bo.AuditInfo) (bo.PublishedRuleSetSnapshot, error) {
 	publishedAt := time.Now().UTC()
 	snapshot := bo.PublishedRuleSetSnapshot{
@@ -193,6 +206,7 @@ func (s *testRuleSetRepository) publishSnapshot(ruleSet bo.RuleSet, audit *bo.Au
 		snapshot: snapshot,
 	}
 	s.snapshots[ruleSet.ID] = append(s.snapshots[ruleSet.ID], snapshot)
+	s.revision++
 	return snapshot, nil
 }
 

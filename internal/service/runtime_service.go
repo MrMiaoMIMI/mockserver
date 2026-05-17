@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/MrMiaoMIMI/mockserver/internal/dao"
 	"github.com/MrMiaoMIMI/mockserver/internal/engine"
@@ -14,6 +15,15 @@ type runtimeService struct {
 	ruleSets            dao.RuleSetRepository
 	namespaceRepository dao.NamespaceRepository
 	namespaceService    NamespaceService
+	cache               publishedRuntimeCache
+}
+
+type publishedRuntimeCache struct {
+	mu        sync.RWMutex
+	loaded    bool
+	revision  uint64
+	snapshots []bo.PublishedRuleSetSnapshot
+	compiled  []engine.CompiledRuleSet
 }
 
 func NewRuntimeService(ruleSetRepository dao.RuleSetRepository, namespaceRepository dao.NamespaceRepository, namespaceService NamespaceService) RuntimeService {
@@ -179,11 +189,7 @@ func effectiveForwardTimeoutMS(action bo.NamespaceForwardFallback) int {
 }
 
 func (s *runtimeService) matchPublished(ctx context.Context, event bo.Event) (bo.SimulationResult, error) {
-	snapshots, err := s.ruleSets.ListPublished(ctx)
-	if err != nil {
-		return bo.SimulationResult{}, err
-	}
-	compiledRuleSets, err := compilePublishedRuleSets(snapshots)
+	snapshots, compiledRuleSets, err := s.cachedPublishedRuleSets(ctx)
 	if err != nil {
 		return bo.SimulationResult{}, err
 	}
@@ -193,4 +199,45 @@ func (s *runtimeService) matchPublished(ctx context.Context, event bo.Event) (bo
 	}
 	attachPublishedSnapshotTrace(&result, snapshots)
 	return result, nil
+}
+
+func (s *runtimeService) cachedPublishedRuleSets(ctx context.Context) ([]bo.PublishedRuleSetSnapshot, []engine.CompiledRuleSet, error) {
+	revision := s.ruleSets.PublishedRevision()
+	s.cache.mu.RLock()
+	if s.cache.loaded && s.cache.revision == revision {
+		snapshots := s.cache.snapshots
+		compiled := s.cache.compiled
+		s.cache.mu.RUnlock()
+		return snapshots, compiled, nil
+	}
+	s.cache.mu.RUnlock()
+
+	s.cache.mu.Lock()
+	defer s.cache.mu.Unlock()
+	revision = s.ruleSets.PublishedRevision()
+	if s.cache.loaded && s.cache.revision == revision {
+		return s.cache.snapshots, s.cache.compiled, nil
+	}
+
+	for attempt := 0; attempt < 2; attempt++ {
+		before := s.ruleSets.PublishedRevision()
+		snapshots, err := s.ruleSets.ListPublished(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		compiled, err := compilePublishedRuleSets(snapshots)
+		if err != nil {
+			return nil, nil, err
+		}
+		after := s.ruleSets.PublishedRevision()
+		if before != after && attempt == 0 {
+			continue
+		}
+		s.cache.loaded = true
+		s.cache.revision = after
+		s.cache.snapshots = snapshots
+		s.cache.compiled = compiled
+		return snapshots, compiled, nil
+	}
+	return nil, nil, fmt.Errorf("published ruleset cache reload failed because publish revision kept changing")
 }

@@ -53,7 +53,7 @@ export function defaultRuleFilters(): RuleFilterState {
 
 export function orderedRules(rules: Rule[]) {
   return [...rules].sort((left, right) => {
-    if (left.priority !== right.priority) return left.priority - right.priority
+    if (left.priority !== right.priority) return right.priority - left.priority
     return left.id.localeCompare(right.id)
   })
 }

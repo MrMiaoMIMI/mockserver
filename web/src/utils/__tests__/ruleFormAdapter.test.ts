@@ -162,6 +162,22 @@ describe('rule form adapter', () => {
     })
   })
 
+  it('rejects duplicate rule names and priorities before saving', () => {
+    const form = defaultRuleForm(ruleSet, httpSpec)
+    form.id = 'new-rule'
+    form.name = ' existing   rule '
+    form.priority = 10
+
+    const result = formToRule(form, {
+      existingRuleIds: ruleSet.rules.map((rule) => rule.id),
+      existingRules: ruleSet.rules,
+      protocolSpec: httpSpec,
+    })
+
+    expect(result.rule).toBeUndefined()
+    expect(result.errors.map((error) => error.field)).toEqual(expect.arrayContaining(['name', 'priority']))
+  })
+
   it('uses cache-friendly default conditions for cache rulesets', () => {
     const form = defaultRuleForm({ ...ruleSet, protocol: 'cache' }, cacheSpec)
 

@@ -97,6 +97,7 @@ func (v *namespaceView) UpsertNamespace(ctx context.Context, req request.UpsertN
 		Name:        req.Name,
 		Description: req.Description,
 		Policies:    req.Policies,
+		Version:     req.Version,
 	})
 	if err != nil {
 		return response.NamespaceResponse{}, err
@@ -268,6 +269,7 @@ func toNamespaceResponse(namespace bo.Namespace) response.NamespaceResponse {
 		Name:        namespace.Name,
 		Description: namespace.Description,
 		Policies:    namespace.Policies,
+		Version:     namespace.Version,
 	}
 }
 

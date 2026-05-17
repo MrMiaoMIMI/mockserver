@@ -52,6 +52,7 @@ export interface RuleFormError {
 export interface BuildRuleOptions {
   source?: RuleFormBuildSource
   existingRuleIds?: string[]
+  existingRules?: Rule[]
   lockedRuleId?: string
   protocolSpec?: ProtocolSpec
 }
@@ -390,6 +391,24 @@ function validateRuleIdentity(rule: Rule, errors: RuleFormError[], options: Buil
   if (duplicateId) {
     errors.push({ section: 'identity', field: 'id', message: `Rule ID ${rule.id} already exists` })
   }
+  const duplicateName = options.existingRules?.some((item) => {
+    if (item.id === options.lockedRuleId) return false
+    return normalizedRuleName(item.name) === normalizedRuleName(rule.name)
+  })
+  if (duplicateName) {
+    errors.push({ section: 'identity', field: 'name', message: `Rule Name ${rule.name} already exists` })
+  }
+  const duplicatePriority = options.existingRules?.some((item) => {
+    if (item.id === options.lockedRuleId) return false
+    return item.priority === rule.priority
+  })
+  if (duplicatePriority) {
+    errors.push({ section: 'identity', field: 'priority', message: `Priority ${rule.priority} already exists` })
+  }
+}
+
+function normalizedRuleName(value: string) {
+  return value.trim().replace(/\s+/g, ' ').toLowerCase()
 }
 
 function validateConditionTree(condition: Condition): string[] {

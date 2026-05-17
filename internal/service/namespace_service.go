@@ -2,8 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
 	"github.com/MrMiaoMIMI/mockserver/internal/dao"
 	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
@@ -20,14 +18,13 @@ func NewNamespaceService(namespaceRepository dao.NamespaceRepository) NamespaceS
 func (s *namespaceService) UpsertNamespace(ctx context.Context, namespace bo.Namespace) (bo.Namespace, error) {
 	namespace.ID = normalizeNamespaceID(namespace.ID)
 	if namespace.ID == "" {
-		id, err := s.newNamespaceID(ctx, namespace)
-		if err != nil {
-			return bo.Namespace{}, err
-		}
-		namespace.ID = id
+		return bo.Namespace{}, validationErrorf("namespace id is required")
 	}
 	normalized, err := normalizeNamespace(namespace)
 	if err != nil {
+		return bo.Namespace{}, err
+	}
+	if err := s.validateNamespaceWrite(ctx, normalized); err != nil {
 		return bo.Namespace{}, err
 	}
 	return s.namespaces.UpsertNamespace(ctx, normalized)
@@ -47,7 +44,7 @@ func (s *namespaceService) EnsureDefaultNamespace(ctx context.Context) (bo.Names
 func (s *namespaceService) GetNamespace(ctx context.Context, id string) (bo.Namespace, error) {
 	normalizedID := normalizeNamespaceID(id)
 	if normalizedID == "" {
-		return bo.Namespace{}, fmt.Errorf("namespace id is required")
+		return bo.Namespace{}, validationErrorf("namespace id is required")
 	}
 	namespace, ok, err := s.namespaces.GetNamespace(ctx, normalizedID)
 	if err != nil {
@@ -57,7 +54,7 @@ func (s *namespaceService) GetNamespace(ctx context.Context, id string) (bo.Name
 		if normalizedID == "default" {
 			return s.EnsureDefaultNamespace(ctx)
 		}
-		return bo.Namespace{}, fmt.Errorf("namespace %s not found", normalizedID)
+		return bo.Namespace{}, notFoundErrorf("namespace %s not found", normalizedID)
 	}
 	return namespace, nil
 }
@@ -84,29 +81,34 @@ func (s *namespaceService) ListNamespaces(ctx context.Context) ([]bo.Namespace, 
 	return items, nil
 }
 
-func (s *namespaceService) newNamespaceID(ctx context.Context, namespace bo.Namespace) (string, error) {
-	base := slugifyNamespaceID(namespace.Name)
-	if base == "" {
-		base = "namespace"
+func (s *namespaceService) validateNamespaceWrite(ctx context.Context, namespace bo.Namespace) error {
+	current, exists, err := s.namespaces.GetNamespace(ctx, namespace.ID)
+	if err != nil {
+		return err
 	}
-	const suffixLength = 8
-	maxBaseLength := maxNamespaceCodeLength - suffixLength - 1
-	if len(base) > maxBaseLength {
-		base = strings.Trim(base[:maxBaseLength], "-")
-	}
-	if base == "" {
-		base = "namespace"
-	}
-	for i := 0; i < 20; i++ {
-		candidate := base + "-" + randomIDToken()
-		_, exists, err := s.namespaces.GetNamespace(ctx, candidate)
-		if err != nil {
-			return "", err
+	if exists {
+		if namespace.Version <= 0 {
+			return conflictErrorf("namespace %s already exists; version is required for updates", namespace.ID)
 		}
-		if exists {
+		if namespace.Version != current.Version {
+			return conflictErrorf("namespace %s version conflict: got %d, current %d", namespace.ID, namespace.Version, current.Version)
+		}
+	} else if namespace.Version != 0 {
+		return conflictErrorf("namespace %s does not exist; create requests must omit version", namespace.ID)
+	}
+
+	items, err := s.namespaces.ListNamespaces(ctx)
+	if err != nil {
+		return err
+	}
+	nameKey := normalizedDisplayName(namespace.Name)
+	for _, item := range items {
+		if item.ID == namespace.ID {
 			continue
 		}
-		return candidate, nil
+		if normalizedDisplayName(item.Name) == nameKey {
+			return conflictErrorf("namespace name %q is already used by namespace %s", namespace.Name, item.ID)
+		}
 	}
-	return "", fmt.Errorf("generate unique namespace id failed")
+	return nil
 }

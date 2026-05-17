@@ -428,6 +428,7 @@ func TestNamespaceFallbackResponseFlow(t *testing.T) {
 	handler := router.New(adminController, runtimeController, router.AdminAuthConfig{}, nil)
 
 	namespaceBody := map[string]any{
+		"id":   "fallback-namespace",
 		"name": "fallback namespace",
 		"policies": httpNamespacePolicies(
 			httpStaticActionPayload(418, map[string]any{"fallback": "ruleset"}),
@@ -444,8 +445,8 @@ func TestNamespaceFallbackResponseFlow(t *testing.T) {
 		t.Fatalf("decode namespace response: %v", err)
 	}
 	namespaceID := namespaceEnvelope.Data.ID
-	if namespaceID == "" {
-		t.Fatalf("expected generated namespace id")
+	if namespaceID != "fallback-namespace" {
+		t.Fatalf("unexpected namespace id: %s", namespaceID)
 	}
 
 	rulesetMissResp := doJSON(t, handler, http.MethodGet, "/mockserver/runtime/"+namespaceID+"/http/no-ruleset", nil, http.StatusTeapot)
@@ -500,6 +501,7 @@ func TestSDKDecisionEndpointReturnsResponseFallbackDecisions(t *testing.T) {
 	handler := router.New(adminController, runtimeController, router.AdminAuthConfig{}, nil)
 
 	namespaceResp := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/namespaces", map[string]any{
+		"id":   "sdk-response-fallback",
 		"name": "sdk response fallback",
 		"policies": httpNamespacePolicies(
 			httpStaticActionPayloadWithHeaders(418, map[string]any{"x-sdk-fallback": []string{"ruleset"}}, map[string]any{"fallback": "ruleset"}),
@@ -629,6 +631,7 @@ func TestSDKDecisionEndpointEndToEndDecisions(t *testing.T) {
 	doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/rulesets/sdk-e2e/publish", nil, http.StatusOK)
 
 	namespaceResp := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/namespaces", map[string]any{
+		"id":   "sdk-e2e-response-fallback",
 		"name": "sdk e2e response fallback",
 		"policies": httpNamespacePolicies(
 			httpStaticActionPayload(451, map[string]any{"decision": "response-fallback"}),
@@ -879,6 +882,7 @@ func TestNamespaceCreateDefaultsToForwardFallback(t *testing.T) {
 	handler := router.New(adminController, runtimeController, router.AdminAuthConfig{}, nil)
 
 	createResp := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/namespaces", map[string]any{
+		"id":          "pass-through",
 		"name":        "pass through",
 		"description": "created without explicit fallback",
 	}, http.StatusOK)
@@ -890,14 +894,15 @@ func TestNamespaceCreateDefaultsToForwardFallback(t *testing.T) {
 
 	var envelope struct {
 		Data struct {
-			ID string `json:"id"`
+			ID      string `json:"id"`
+			Version int    `json:"version"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(createBody, &envelope); err != nil {
 		t.Fatalf("decode namespace create response: %v", err)
 	}
-	if envelope.Data.ID == "" {
-		t.Fatalf("expected generated namespace id")
+	if envelope.Data.ID != "pass-through" {
+		t.Fatalf("unexpected namespace id: %s", envelope.Data.ID)
 	}
 
 	getResp := doJSON(t, handler, http.MethodGet, "/mockserver/api/v1/admin/namespaces/"+envelope.Data.ID, nil, http.StatusOK)
@@ -914,6 +919,7 @@ func TestNamespaceCreateDefaultsToForwardFallback(t *testing.T) {
 	updateResp := doJSON(t, handler, http.MethodPut, "/mockserver/api/v1/admin/namespaces/"+envelope.Data.ID, map[string]any{
 		"name":        "strict namespace",
 		"description": "explicit response fallback",
+		"version":     envelope.Data.Version,
 		"policies": httpNamespacePolicies(
 			httpStaticActionPayload(418, map[string]any{"fallback": "ruleset"}),
 			httpStaticActionPayload(409, map[string]any{"fallback": "rule"}),
@@ -924,6 +930,44 @@ func TestNamespaceCreateDefaultsToForwardFallback(t *testing.T) {
 	assertBytesContain(t, updateBody, `"status":418`)
 	assertBytesContain(t, updateBody, `"rule_miss_action":{"type":"respond"`)
 	assertBytesContain(t, updateBody, `"status":409`)
+}
+
+func TestAdminBusinessErrorsUseSpecificStatusCodes(t *testing.T) {
+	ruleSetRepository := newTestRuleSetRepository()
+	namespaceService := service.NewNamespaceService(ruleSetRepository)
+	ruleSetService := service.NewRuleSetService(ruleSetRepository, namespaceService)
+	runtimeService := service.NewRuntimeService(ruleSetRepository, ruleSetRepository, namespaceService)
+	ruleSetView := view.NewRuleSetView(ruleSetService)
+	namespaceView := view.NewNamespaceView(namespaceService)
+	runtimeView := view.NewRuntimeView(runtimeService)
+
+	adminController := controller.NewAdminController(ruleSetView, namespaceView)
+	runtimeController := controller.NewRuntimeController(runtimeView, observability.NewRuntimeMetrics())
+	handler := router.New(adminController, runtimeController, router.AdminAuthConfig{}, nil)
+
+	doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/namespaces", map[string]any{
+		"id":   "tenant-a",
+		"name": "Tenant A",
+	}, http.StatusOK)
+	conflictResp := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/namespaces", map[string]any{
+		"id":   "tenant-b",
+		"name": "tenant a",
+	}, http.StatusConflict)
+	assertBytesContain(t, readBody(t, conflictResp), `"code":40900000`)
+
+	validationResp := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/rulesets", map[string]any{
+		"id":        "bad ruleset",
+		"name":      "Bad Ruleset",
+		"enabled":   true,
+		"protocol":  "http",
+		"namespace": "default",
+		"selector":  httpPathSelectorBody("/api/"),
+		"rules":     []map[string]any{},
+	}, http.StatusBadRequest)
+	assertBytesContain(t, readBody(t, validationResp), `"code":40000000`)
+
+	notFoundResp := doJSON(t, handler, http.MethodGet, "/mockserver/api/v1/admin/namespaces/missing", nil, http.StatusNotFound)
+	assertBytesContain(t, readBody(t, notFoundResp), `"code":40400000`)
 }
 
 func TestDefaultNamespaceRulesetMissForwardsOriginalRequest(t *testing.T) {
@@ -1126,6 +1170,7 @@ func TestNamespaceForwardFallbackUsesOriginalRequestTarget(t *testing.T) {
 	handler := router.New(adminController, runtimeController, router.AdminAuthConfig{}, nil)
 
 	namespaceResp := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/namespaces", map[string]any{
+		"id":       "forward-namespace",
 		"name":     "forward namespace",
 		"policies": httpNamespacePolicies(forwardActionPayload(3000), forwardActionPayload(3000)),
 	}, http.StatusOK)

@@ -4,12 +4,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 
 	"github.com/MrMiaoMIMI/goshared/db/dbspi"
+	"github.com/MrMiaoMIMI/goshared/util/servererr"
 	"github.com/MrMiaoMIMI/goshared/util/serverresp"
 	"github.com/gin-gonic/gin"
 
+	"github.com/MrMiaoMIMI/mockserver/internal/dao"
 	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
 	"github.com/MrMiaoMIMI/mockserver/internal/model/request"
 	"github.com/MrMiaoMIMI/mockserver/internal/model/response"
@@ -36,7 +39,7 @@ func (c *AdminController) CreateOrUpdateDraft(ctx *gin.Context) {
 	}
 	result, err := c.ruleSetView.UpsertDraft(ctx.Request.Context(), req)
 	if err != nil {
-		serverresp.InternalServerError(ctx, err)
+		writeBusinessError(ctx, err)
 		return
 	}
 	serverresp.Success(ctx, result)
@@ -241,7 +244,6 @@ func (c *AdminController) CreateNamespace(ctx *gin.Context) {
 	if !bindJSON(ctx, &req) {
 		return
 	}
-	req.ID = ""
 	result, err := c.namespaceView.UpsertNamespace(ctx.Request.Context(), req)
 	if err != nil {
 		writeBusinessError(ctx, err)
@@ -270,12 +272,12 @@ func (c *AdminController) GetNamespace(ctx *gin.Context) {
 
 func (c *AdminController) UpdateNamespace(ctx *gin.Context) {
 	namespaceID := ctx.Param("namespace_id")
-	if _, err := c.namespaceView.GetNamespace(ctx.Request.Context(), namespaceID); err != nil {
-		writeBusinessError(ctx, err)
-		return
-	}
 	var req request.UpsertNamespaceRequest
 	if !bindJSON(ctx, &req) {
+		return
+	}
+	if _, err := c.namespaceView.GetNamespace(ctx.Request.Context(), namespaceID); err != nil {
+		writeBusinessError(ctx, err)
 		return
 	}
 	req.ID = namespaceID
@@ -307,6 +309,18 @@ func bindOptionalJSON(ctx *gin.Context, target any) bool {
 }
 
 func writeBusinessError(ctx *gin.Context, err error) {
+	var bizErr *servererr.BizError
+	if errors.As(err, &bizErr) {
+		serverresp.Error(ctx, bizErr)
+		return
+	}
+	if errors.Is(err, dao.ErrConflict) {
+		ctx.JSON(http.StatusConflict, serverresp.Response{
+			Code:    servererr.ErrConflict,
+			Message: err.Error(),
+		})
+		return
+	}
 	if errors.Is(err, errNotFound) || strings.Contains(strings.ToLower(err.Error()), "not found") {
 		serverresp.NotFoundError(ctx, err)
 		return

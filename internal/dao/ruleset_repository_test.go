@@ -224,9 +224,16 @@ func (d *fakeRuleSetTableDAO) ListPublishedSnapshots(ctx context.Context, id str
 	return items, nil
 }
 
-func (d *fakeRuleSetTableDAO) UpsertNamespace(ctx context.Context, namespace modeldo.NamespaceConfig) error {
+func (d *fakeRuleSetTableDAO) UpsertNamespace(ctx context.Context, namespace modeldo.NamespaceConfig, expectedVersion int) error {
 	d.observeContext(ctx)
-	if current, ok := d.namespaces[namespace.NamespaceCode]; ok {
+	current, exists := d.namespaces[namespace.NamespaceCode]
+	if expectedVersion == 0 && exists {
+		return ErrConflict
+	}
+	if expectedVersion > 0 && (!exists || current.Version != expectedVersion) {
+		return ErrConflict
+	}
+	if exists {
 		namespace.Id = current.Id
 	} else {
 		namespace.Id = d.nextPrimaryID()

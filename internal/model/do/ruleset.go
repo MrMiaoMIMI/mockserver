@@ -2,9 +2,12 @@ package modeldo
 
 type RuleSetDraft struct {
 	CommonDo
-	RuleSetCode string `gorm:"column:ruleset_code"`
-	Version     int    `gorm:"column:version"`
-	RuleSetJSON string `gorm:"column:ruleset_json"`
+	RuleSetCode   string `gorm:"column:ruleset_code"`
+	RuleSetName   string `gorm:"column:ruleset_name"`
+	ProtocolName  string `gorm:"column:protocol_name"`
+	NamespaceCode string `gorm:"column:namespace_code"`
+	Version       int    `gorm:"column:version"`
+	RuleSetJSON   string `gorm:"column:ruleset_json"`
 }
 
 func (*RuleSetDraft) TableName() string {
@@ -50,6 +53,7 @@ func (*PublishedRuleSetSnapshot) IdFieldName() string {
 type NamespaceConfig struct {
 	CommonDo
 	NamespaceCode string `gorm:"column:namespace_code"`
+	NamespaceName string `gorm:"column:namespace_name"`
 	Version       int    `gorm:"column:version"`
 	NamespaceJSON string `gorm:"column:namespace_json"`
 }

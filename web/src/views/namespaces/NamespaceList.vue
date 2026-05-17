@@ -214,18 +214,36 @@
               <strong>Profile</strong>
               <span>Namespace-level fields shared by every protocol policy.</span>
             </header>
-            <div v-if="editingNamespace" class="generated-id-row">
-              <span>Namespace ID</span>
-              <code>{{ form.id }}</code>
-            </div>
             <div class="form-grid">
               <el-form-item label="Name">
-                <el-input v-model="form.name" placeholder="default" />
+                <el-input v-model="form.name" placeholder="order service" />
               </el-form-item>
               <el-form-item label="Description">
                 <el-input v-model="form.description" placeholder="optional" />
               </el-form-item>
+              <el-form-item v-if="editingNamespace" label="Namespace key">
+                <el-input
+                  :model-value="form.id"
+                  disabled
+                />
+              </el-form-item>
             </div>
+            <details v-if="!editingNamespace" class="namespace-advanced">
+              <summary>Advanced</summary>
+              <el-form-item label="Namespace key">
+                <el-input
+                  :model-value="form.id"
+                  placeholder="generated from name"
+                  @update:model-value="handleNamespaceKeyInput"
+                >
+                  <template #append>
+                    <el-tooltip content="Use generated key" placement="top">
+                      <el-button :icon="Refresh" @click="useGeneratedNamespaceKey" />
+                    </el-tooltip>
+                  </template>
+                </el-input>
+              </el-form-item>
+            </details>
           </section>
 
           <section class="policy-section">
@@ -350,6 +368,7 @@ interface NamespaceForm {
   id: string
   name: string
   description: string
+  version?: number
   activeProtocol: string
   policies: Record<string, NamespacePolicyForm>
 }
@@ -381,11 +400,14 @@ const sortOptions: Array<{ label: string; value: NamespaceSortKey }> = [
 const filters = reactive(defaultNamespaceEntryFilters())
 const dialogVisible = ref(false)
 const editingNamespace = ref<NamespaceConfig | null>(null)
+const namespaceKeyOverridden = ref(false)
+const maxNamespaceKeyLength = 64
 
 const form = reactive<NamespaceForm>({
   id: '',
   name: '',
   description: '',
+  version: undefined,
   activeProtocol: 'http',
   policies: {
     http: createPolicyForm('http'),
@@ -427,7 +449,7 @@ const protocolFilterOptions = computed<Array<{ label: string; value: NamespacePr
 const activePolicy = computed(() => ensurePolicyForm(form.activeProtocol))
 const activeProtocolSpec = computed(() => protocolSpecFor(activeProtocolKey()))
 const activePolicyUsage = computed(() => {
-  const namespaceID = editingNamespace.value?.id || form.id
+  const namespaceID = editingNamespace.value?.id || namespaceKey()
   const protocol = activeProtocolKey()
   const related = store.drafts.filter(
     (ruleSet) => ruleSet.namespace === namespaceID && ruleSet.protocol.toLowerCase() === protocol
@@ -470,10 +492,11 @@ async function submit() {
     return
   }
   const payload: NamespaceConfig = {
-    id: editingNamespace.value ? form.id.trim().toLowerCase() : '',
+    id: namespaceKey(),
     name: form.name.trim(),
     description: form.description.trim(),
     policies: policiesFromForm(),
+    version: editingNamespace.value ? form.version : undefined,
   }
   await store.saveNamespace(payload)
   dialogVisible.value = false
@@ -481,9 +504,11 @@ async function submit() {
 }
 
 function resetForm(namespace: NamespaceConfig | null, protocol?: string) {
+  namespaceKeyOverridden.value = false
   form.id = namespace?.id || ''
   form.name = namespace?.name || ''
   form.description = namespace?.description || ''
+  form.version = namespace?.version
   form.policies = namespace ? policyFormsFromNamespace(namespace) : { http: createPolicyForm('http') }
   form.activeProtocol = protocol || preferredProtocol(namespace)
 }
@@ -518,17 +543,92 @@ function onPolicyTabChange() {
 
 function validateForm() {
   const issues: string[] = []
-  if (editingNamespace.value && !form.id.trim()) {
-    issues.push('Namespace ID is required')
+  const name = normalizedName(form.name)
+  if (!name) {
+    issues.push('Name is required')
   }
-  if (editingNamespace.value && !/^[a-zA-Z0-9_-]+$/.test(form.id.trim())) {
-    issues.push('Namespace ID can only contain letters, numbers, underscores, and hyphens')
+  const id = namespaceKey()
+  if (!id) {
+    issues.push('Namespace key is required')
+  }
+  if (id.length > maxNamespaceKeyLength) {
+    issues.push(`Namespace key must be at most ${maxNamespaceKeyLength} characters`)
+  }
+  if (id && !/^[a-zA-Z0-9_-]+$/.test(id)) {
+    issues.push('Namespace key can only contain letters, numbers, underscores, and hyphens')
+  }
+  if (!editingNamespace.value && store.namespaceMap.has(id)) {
+    issues.push(`Namespace key ${id} already exists`)
+  }
+  if (editingNamespace.value && !form.version) {
+    issues.push('Namespace version is required; refresh the namespace list and try again')
+  }
+  const duplicateName = store.namespaces.find((namespace) => {
+    if (editingNamespace.value?.id === namespace.id) return false
+    return normalizedName(namespace.name || namespace.id) === name
+  })
+  if (duplicateName) {
+    issues.push(`Namespace name is already used by ${duplicateName.id}`)
   }
   for (const [protocol, policy] of Object.entries(form.policies)) {
     validateFallbackForm(policy.rulesetMiss, `${protocol} ruleset miss`, issues, protocolSpecFor(protocol))
     validateFallbackForm(policy.ruleMiss, `${protocol} rule miss`, issues, protocolSpecFor(protocol))
   }
   return issues
+}
+
+function normalizedName(value: string) {
+  return value.trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+function namespaceKey() {
+  return form.id.trim().toLowerCase()
+}
+
+function handleNamespaceKeyInput(value: string) {
+  namespaceKeyOverridden.value = true
+  form.id = normalizeNamespaceKeyInput(value)
+}
+
+function useGeneratedNamespaceKey() {
+  namespaceKeyOverridden.value = false
+  form.id = generatedNamespaceKey(form.name)
+}
+
+function generatedNamespaceKey(name: string) {
+  const base = slugNamespaceName(name)
+  return uniqueNamespaceKey(base)
+}
+
+function uniqueNamespaceKey(base: string) {
+  const normalizedBase = truncateNamespaceKey(base || 'namespace')
+  if (!store.namespaceMap.has(normalizedBase)) return normalizedBase
+  for (let index = 2; index < 1000; index += 1) {
+    const suffix = `-${index}`
+    const candidate = `${truncateNamespaceKey(normalizedBase, maxNamespaceKeyLength - suffix.length)}${suffix}`
+    if (!store.namespaceMap.has(candidate)) return candidate
+  }
+  const fallbackSuffix = `-${Date.now().toString(36).slice(-8)}`
+  return `${truncateNamespaceKey(normalizedBase, maxNamespaceKeyLength - fallbackSuffix.length)}${fallbackSuffix}`
+}
+
+function slugNamespaceName(name: string) {
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^[-_]+|[-_]+$/g, '')
+  return slug || (name.trim() ? 'namespace' : '')
+}
+
+function truncateNamespaceKey(value: string, maxLength = maxNamespaceKeyLength) {
+  const truncated = value.slice(0, Math.max(1, maxLength)).replace(/[-_]+$/g, '')
+  return truncated || 'namespace'
+}
+
+function normalizeNamespaceKeyInput(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, '-')
 }
 
 function validateFallbackForm(
@@ -659,6 +759,14 @@ watch(
     ensurePolicyForm(form.activeProtocol)
   },
   { immediate: true }
+)
+
+watch(
+  () => [form.name, store.namespaces.length] as const,
+  () => {
+    if (editingNamespace.value || namespaceKeyOverridden.value) return
+    form.id = generatedNamespaceKey(form.name)
+  }
 )
 </script>
 
@@ -1146,21 +1254,23 @@ watch(
   gap: var(--ms-space-4);
 }
 
-.generated-id-row {
-  display: flex;
-  align-items: center;
-  gap: var(--ms-space-2);
-  margin-bottom: var(--ms-space-3);
-  padding: var(--ms-space-2) var(--ms-space-3);
-  border: 1px solid var(--ms-border-light);
-  border-radius: var(--ms-radius-md);
-  background: var(--ms-panel-bg);
-  color: var(--ms-text-tertiary);
-  font-size: var(--ms-text-sm);
+.namespace-advanced {
+  margin-top: var(--ms-space-3);
+  padding-top: var(--ms-space-3);
+  border-top: 1px solid var(--ms-border-light);
 
-  code {
+  summary {
+    width: fit-content;
+    margin-bottom: var(--ms-space-3);
     color: var(--ms-text-secondary);
     font-size: var(--ms-text-sm);
+    font-weight: var(--ms-font-semibold);
+    cursor: pointer;
+  }
+
+  :deep(.el-form-item) {
+    max-width: 560px;
+    margin-bottom: 0;
   }
 }
 

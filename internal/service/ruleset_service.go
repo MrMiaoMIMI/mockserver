@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -47,7 +48,7 @@ func (s *rulesetService) UpsertDraft(ctx context.Context, ruleSet bo.RuleSet) (b
 		return bo.RuleSet{}, err
 	}
 	if ruleSet.ID != "" && !isValidBusinessCode(ruleSet.ID, maxRuleSetCodeLength) {
-		return bo.RuleSet{}, fmt.Errorf("ruleset id can only contain letters, numbers, underscores and hyphens, and must be at most %d characters", maxRuleSetCodeLength)
+		return bo.RuleSet{}, validationErrorf("ruleset id can only contain letters, numbers, underscores and hyphens, and must be at most %d characters", maxRuleSetCodeLength)
 	}
 	if ruleSet.ID == "" {
 		id, err := s.newRuleSetID(ctx, ruleSet)
@@ -61,6 +62,9 @@ func (s *rulesetService) UpsertDraft(ctx context.Context, ruleSet bo.RuleSet) (b
 	if err != nil {
 		return bo.RuleSet{}, err
 	}
+	if err := s.validateRuleSetNameUnique(ctx, ruleSet); err != nil {
+		return bo.RuleSet{}, err
+	}
 	return s.ruleSets.UpsertDraft(ctx, ruleSet)
 }
 
@@ -71,7 +75,7 @@ func (s *rulesetService) GetDraft(ctx context.Context, id string) (bo.RuleSet, e
 		return bo.RuleSet{}, err
 	}
 	if !ok {
-		return bo.RuleSet{}, fmt.Errorf("ruleset %s not found", id)
+		return bo.RuleSet{}, notFoundErrorf("ruleset %s not found", id)
 	}
 	return ruleSet, nil
 }
@@ -87,7 +91,7 @@ func (s *rulesetService) GetPublished(ctx context.Context, id string) (bo.Publis
 		return bo.PublishedRuleSetSnapshot{}, err
 	}
 	if !ok {
-		return bo.PublishedRuleSetSnapshot{}, fmt.Errorf("published ruleset %s not found", id)
+		return bo.PublishedRuleSetSnapshot{}, notFoundErrorf("published ruleset %s not found", id)
 	}
 	return snapshot, nil
 }
@@ -101,7 +105,7 @@ func (s *rulesetService) ListPublishedSnapshots(ctx context.Context, id string) 
 	if _, ok, err := s.ruleSets.GetPublished(ctx, id); err != nil {
 		return nil, err
 	} else if !ok {
-		return nil, fmt.Errorf("published ruleset %s not found", id)
+		return nil, notFoundErrorf("published ruleset %s not found", id)
 	}
 	return s.ruleSets.ListPublishedSnapshots(ctx, id)
 }
@@ -113,7 +117,7 @@ func (s *rulesetService) ValidateDraft(ctx context.Context, id string) (bo.Valid
 		return bo.ValidationResult{}, err
 	}
 	if !ok {
-		return bo.ValidationResult{}, fmt.Errorf("ruleset %s not found", id)
+		return bo.ValidationResult{}, notFoundErrorf("ruleset %s not found", id)
 	}
 	return engine.ValidateRuleSet(ruleSet), nil
 }
@@ -126,10 +130,13 @@ func (s *rulesetService) Publish(ctx context.Context, id string, audit bo.AuditI
 	}
 	if !ok {
 		logger.Warn(ctx, "PublishRuleSet draft not found", logger.String("ruleset_id", id))
-		return bo.PublishedRuleSetSnapshot{}, fmt.Errorf("ruleset %s not found", id)
+		return bo.PublishedRuleSetSnapshot{}, notFoundErrorf("ruleset %s not found", id)
 	}
 	if _, err := engine.CompileRuleSet(ruleSet); err != nil {
 		logger.Error(ctx, "PublishRuleSet compile failed", logger.String("ruleset_id", id), logger.Err(err))
+		return bo.PublishedRuleSetSnapshot{}, validationErrorf("ruleset %s is not publishable: %v", id, err)
+	}
+	if err := s.validatePublishedSelectorConflict(ctx, ruleSet); err != nil {
 		return bo.PublishedRuleSetSnapshot{}, err
 	}
 	normalizedAudit := normalizeAudit(audit, "publish", "")
@@ -155,10 +162,10 @@ func (s *rulesetService) AddDraftRule(ctx context.Context, id string, rule bo.Ru
 		return bo.RuleSet{}, err
 	}
 	if !ok {
-		return bo.RuleSet{}, fmt.Errorf("ruleset %s not found", id)
+		return bo.RuleSet{}, notFoundErrorf("ruleset %s not found", id)
 	}
 	if _, ok := findRuleIndex(ruleSet.Rules, rule.ID); ok {
-		return bo.RuleSet{}, fmt.Errorf("rule %s already exists in ruleset %s", rule.ID, id)
+		return bo.RuleSet{}, conflictErrorf("rule %s already exists in ruleset %s", rule.ID, id)
 	}
 	ruleSet.Rules = append(ruleSet.Rules, rule)
 	return s.validateAndSaveDraft(ctx, ruleSet)
@@ -173,17 +180,17 @@ func (s *rulesetService) UpdateDraftRule(ctx context.Context, id string, ruleID 
 		return bo.RuleSet{}, err
 	}
 	if !ok {
-		return bo.RuleSet{}, fmt.Errorf("ruleset %s not found", id)
+		return bo.RuleSet{}, notFoundErrorf("ruleset %s not found", id)
 	}
 	index, ok := findRuleIndex(ruleSet.Rules, ruleID)
 	if !ok {
-		return bo.RuleSet{}, fmt.Errorf("rule %s not found in ruleset %s", ruleID, id)
+		return bo.RuleSet{}, notFoundErrorf("rule %s not found in ruleset %s", ruleID, id)
 	}
 	if rule.ID == "" {
 		rule.ID = ruleID
 	}
 	if rule.ID != ruleID {
-		return bo.RuleSet{}, fmt.Errorf("rule id in body must match path rule id %s", ruleID)
+		return bo.RuleSet{}, validationErrorf("rule id in body must match path rule id %s", ruleID)
 	}
 	ruleSet.Rules[index] = rule
 	return s.validateAndSaveDraft(ctx, ruleSet)
@@ -197,11 +204,11 @@ func (s *rulesetService) DeleteDraftRule(ctx context.Context, id string, ruleID 
 		return bo.RuleSet{}, err
 	}
 	if !ok {
-		return bo.RuleSet{}, fmt.Errorf("ruleset %s not found", id)
+		return bo.RuleSet{}, notFoundErrorf("ruleset %s not found", id)
 	}
 	index, ok := findRuleIndex(ruleSet.Rules, ruleID)
 	if !ok {
-		return bo.RuleSet{}, fmt.Errorf("rule %s not found in ruleset %s", ruleID, id)
+		return bo.RuleSet{}, notFoundErrorf("rule %s not found in ruleset %s", ruleID, id)
 	}
 	ruleSet.Rules = append(ruleSet.Rules[:index], ruleSet.Rules[index+1:]...)
 	return s.validateAndSaveDraft(ctx, ruleSet)
@@ -215,11 +222,11 @@ func (s *rulesetService) SetDraftRuleEnabled(ctx context.Context, id string, rul
 		return bo.RuleSet{}, err
 	}
 	if !ok {
-		return bo.RuleSet{}, fmt.Errorf("ruleset %s not found", id)
+		return bo.RuleSet{}, notFoundErrorf("ruleset %s not found", id)
 	}
 	index, ok := findRuleIndex(ruleSet.Rules, ruleID)
 	if !ok {
-		return bo.RuleSet{}, fmt.Errorf("rule %s not found in ruleset %s", ruleID, id)
+		return bo.RuleSet{}, notFoundErrorf("rule %s not found in ruleset %s", ruleID, id)
 	}
 	ruleSet.Rules[index].Enabled = enabled
 	return s.validateAndSaveDraft(ctx, ruleSet)
@@ -233,11 +240,11 @@ func (s *rulesetService) SetDraftRulePriority(ctx context.Context, id string, ru
 		return bo.RuleSet{}, err
 	}
 	if !ok {
-		return bo.RuleSet{}, fmt.Errorf("ruleset %s not found", id)
+		return bo.RuleSet{}, notFoundErrorf("ruleset %s not found", id)
 	}
 	index, ok := findRuleIndex(ruleSet.Rules, ruleID)
 	if !ok {
-		return bo.RuleSet{}, fmt.Errorf("rule %s not found in ruleset %s", ruleID, id)
+		return bo.RuleSet{}, notFoundErrorf("rule %s not found in ruleset %s", ruleID, id)
 	}
 	ruleSet.Rules[index].Priority = priority
 	return s.validateAndSaveDraft(ctx, ruleSet)
@@ -255,7 +262,7 @@ func (s *rulesetService) RollbackPreview(ctx context.Context, id, snapshotID str
 			logger.String("ruleset_id", id),
 			logger.String("snapshot_id", snapshotID),
 		)
-		return bo.RollbackPreviewResult{}, fmt.Errorf("snapshot %s for ruleset %s not found", snapshotID, id)
+		return bo.RollbackPreviewResult{}, notFoundErrorf("snapshot %s for ruleset %s not found", snapshotID, id)
 	}
 	current, _, err := s.ruleSets.GetPublished(ctx, id)
 	if err != nil {
@@ -323,7 +330,7 @@ func (s *rulesetService) Rollback(ctx context.Context, id, snapshotID string, au
 			logger.String("ruleset_id", id),
 			logger.String("snapshot_id", snapshotID),
 		)
-		return bo.PublishedRuleSetSnapshot{}, fmt.Errorf("snapshot %s for ruleset %s not found", snapshotID, id)
+		return bo.PublishedRuleSetSnapshot{}, notFoundErrorf("snapshot %s for ruleset %s not found", snapshotID, id)
 	}
 	if _, err := engine.CompileRuleSet(snapshot.RuleSet); err != nil {
 		logger.Error(ctx, "RollbackRuleSet compile failed",
@@ -331,6 +338,9 @@ func (s *rulesetService) Rollback(ctx context.Context, id, snapshotID string, au
 			logger.String("snapshot_id", snapshotID),
 			logger.Err(err),
 		)
+		return bo.PublishedRuleSetSnapshot{}, validationErrorf("snapshot %s for ruleset %s is not publishable: %v", snapshotID, id, err)
+	}
+	if err := s.validatePublishedSelectorConflict(ctx, snapshot.RuleSet); err != nil {
 		return bo.PublishedRuleSetSnapshot{}, err
 	}
 	normalizedAudit := normalizeAudit(audit, "rollback", snapshotID)
@@ -370,7 +380,7 @@ func (s *rulesetService) SimulateDraft(ctx context.Context, id string, event bo.
 		}
 		if !ok {
 			logger.Warn(ctx, "SimulateDraft ruleset not found", logger.String("ruleset_id", id))
-			return bo.SimulationResult{}, fmt.Errorf("ruleset %s not found", id)
+			return bo.SimulationResult{}, notFoundErrorf("ruleset %s not found", id)
 		}
 	}
 	compiled, err := engine.CompileRuleSet(ruleSet)
@@ -463,7 +473,7 @@ func (s *rulesetService) validateAndSaveDraft(ctx context.Context, ruleSet bo.Ru
 	}
 	validation := engine.ValidateRuleSet(ruleSet)
 	if !validation.Valid {
-		return bo.RuleSet{}, fmt.Errorf("ruleset validation failed: %+v", validation.Issues)
+		return bo.RuleSet{}, validationErrorf("ruleset validation failed: %+v", validation.Issues)
 	}
 	return s.ruleSets.UpsertDraft(ctx, ruleSet)
 }
@@ -518,10 +528,10 @@ func snapshotAuditOperator(audit *bo.AuditInfo) string {
 func normalizeNamespace(namespace bo.Namespace) (bo.Namespace, error) {
 	namespace.ID = normalizeNamespaceID(namespace.ID)
 	if namespace.ID == "" {
-		return bo.Namespace{}, fmt.Errorf("namespace id is required")
+		return bo.Namespace{}, validationErrorf("namespace id is required")
 	}
 	if !isValidNamespaceID(namespace.ID) {
-		return bo.Namespace{}, fmt.Errorf("namespace id can only contain letters, numbers, underscores and hyphens")
+		return bo.Namespace{}, validationErrorf("namespace id can only contain letters, numbers, underscores and hyphens")
 	}
 	namespace.Name = strings.TrimSpace(namespace.Name)
 	namespace.Description = strings.TrimSpace(namespace.Description)
@@ -535,7 +545,7 @@ func normalizeNamespace(namespace bo.Namespace) (bo.Namespace, error) {
 	for protocol, policy := range namespace.Policies {
 		protocol = strings.ToLower(strings.TrimSpace(protocol))
 		if protocol == "" {
-			return bo.Namespace{}, fmt.Errorf("policy protocol is required")
+			return bo.Namespace{}, validationErrorf("policy protocol is required")
 		}
 		normalizedPolicies[protocol] = policy
 	}
@@ -559,7 +569,7 @@ func normalizeNamespace(namespace bo.Namespace) (bo.Namespace, error) {
 	}
 	for protocol, policy := range namespace.Policies {
 		if _, ok := mockprotocol.DefaultRegistry().Get(protocol); !ok {
-			return bo.Namespace{}, fmt.Errorf("policies.%s uses unsupported protocol", protocol)
+			return bo.Namespace{}, validationErrorf("policies.%s uses unsupported protocol", protocol)
 		}
 		if err := validateNamespacePolicyAction(protocol, policy.RulesetMissAction, "policies."+protocol+".ruleset_miss_action"); err != nil {
 			return bo.Namespace{}, err
@@ -609,44 +619,170 @@ func isValidBusinessCode(id string, maxLength int) bool {
 
 func normalizeAndValidateRuleSetIdentifiers(ruleSet bo.RuleSet) (bo.RuleSet, error) {
 	ruleSet.ID = normalizeRuleSetID(ruleSet.ID)
+	ruleSet.Name = strings.TrimSpace(ruleSet.Name)
+	ruleSet.Protocol = strings.ToLower(strings.TrimSpace(ruleSet.Protocol))
 	ruleSet.Namespace = normalizeNamespaceID(ruleSet.Namespace)
+	if ruleSet.Name == "" {
+		return bo.RuleSet{}, validationErrorf("ruleset name is required")
+	}
 	if !isValidBusinessCode(ruleSet.ID, maxRuleSetCodeLength) {
-		return bo.RuleSet{}, fmt.Errorf("ruleset id can only contain letters, numbers, underscores and hyphens, and must be at most %d characters", maxRuleSetCodeLength)
+		return bo.RuleSet{}, validationErrorf("ruleset id can only contain letters, numbers, underscores and hyphens, and must be at most %d characters", maxRuleSetCodeLength)
 	}
 	if !isValidBusinessCode(ruleSet.Namespace, maxNamespaceCodeLength) {
-		return bo.RuleSet{}, fmt.Errorf("namespace id can only contain letters, numbers, underscores and hyphens, and must be at most %d characters", maxNamespaceCodeLength)
+		return bo.RuleSet{}, validationErrorf("namespace id can only contain letters, numbers, underscores and hyphens, and must be at most %d characters", maxNamespaceCodeLength)
 	}
 	for i := range ruleSet.Rules {
 		ruleSet.Rules[i].ID = normalizeRuleID(ruleSet.Rules[i].ID)
+		ruleSet.Rules[i].Name = strings.TrimSpace(ruleSet.Rules[i].Name)
 		if !isValidBusinessCode(ruleSet.Rules[i].ID, maxRuleCodeLength) {
-			return bo.RuleSet{}, fmt.Errorf("rule id can only contain letters, numbers, underscores and hyphens, and must be at most %d characters", maxRuleCodeLength)
+			return bo.RuleSet{}, validationErrorf("rule id can only contain letters, numbers, underscores and hyphens, and must be at most %d characters", maxRuleCodeLength)
 		}
 	}
 	return ruleSet, nil
+}
+
+func (s *rulesetService) validateRuleSetNameUnique(ctx context.Context, ruleSet bo.RuleSet) error {
+	items, err := s.ruleSets.ListDrafts(ctx)
+	if err != nil {
+		return err
+	}
+	nameKey := normalizedDisplayName(ruleSet.Name)
+	namespaceKey := normalizeNamespaceID(ruleSet.Namespace)
+	protocolKey := strings.ToLower(strings.TrimSpace(ruleSet.Protocol))
+	for _, item := range items {
+		if item.ID == ruleSet.ID {
+			continue
+		}
+		if normalizeNamespaceID(item.Namespace) != namespaceKey ||
+			strings.ToLower(strings.TrimSpace(item.Protocol)) != protocolKey {
+			continue
+		}
+		if normalizedDisplayName(item.Name) == nameKey {
+			return conflictErrorf(
+				"ruleset name %q is already used by ruleset %s in namespace %s protocol %s",
+				ruleSet.Name,
+				item.ID,
+				namespaceKey,
+				protocolKey,
+			)
+		}
+	}
+	return nil
+}
+
+func (s *rulesetService) validatePublishedSelectorConflict(ctx context.Context, candidate bo.RuleSet) error {
+	if !candidate.Enabled {
+		return nil
+	}
+	published, err := s.ruleSets.ListPublished(ctx)
+	if err != nil {
+		return err
+	}
+	candidateKey, err := publishedSelectorConflictKey(candidate)
+	if err != nil {
+		return err
+	}
+	for _, snapshot := range published {
+		existing := snapshot.RuleSet
+		if existing.ID == candidate.ID || !existing.Enabled {
+			continue
+		}
+		existingKey, err := publishedSelectorConflictKey(existing)
+		if err != nil {
+			return err
+		}
+		if existingKey == candidateKey {
+			return conflictErrorf(
+				"ruleset %s conflicts with published ruleset %s: same namespace, protocol, and selector",
+				candidate.ID,
+				existing.ID,
+			)
+		}
+	}
+	return nil
+}
+
+func normalizedDisplayName(value string) string {
+	return strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(value)), " "))
+}
+
+func publishedSelectorConflictKey(ruleSet bo.RuleSet) (string, error) {
+	selector := canonicalSelector(ruleSet.Selector)
+	raw, err := json.Marshal(selector)
+	if err != nil {
+		return "", err
+	}
+	return strings.Join([]string{
+		strings.ToLower(strings.TrimSpace(ruleSet.Namespace)),
+		strings.ToLower(strings.TrimSpace(ruleSet.Protocol)),
+		string(raw),
+	}, "\x00"), nil
+}
+
+func canonicalSelector(selector bo.Selector) bo.Selector {
+	return bo.Selector{All: canonicalConditions(selector.All)}
+}
+
+func canonicalConditions(conditions []bo.Condition) []bo.Condition {
+	result := make([]bo.Condition, 0, len(conditions))
+	for _, condition := range conditions {
+		result = append(result, canonicalCondition(condition))
+	}
+	sort.SliceStable(result, func(i, j int) bool {
+		left, _ := json.Marshal(result[i])
+		right, _ := json.Marshal(result[j])
+		return string(left) < string(right)
+	})
+	return result
+}
+
+func canonicalCondition(condition bo.Condition) bo.Condition {
+	condition.Field = strings.TrimSpace(condition.Field)
+	condition.Op = strings.TrimSpace(condition.Op)
+	condition.Expr = strings.TrimSpace(condition.Expr)
+	condition.All = canonicalConditions(condition.All)
+	condition.Any = canonicalConditions(condition.Any)
+	if condition.Not != nil {
+		normalized := canonicalCondition(*condition.Not)
+		condition.Not = &normalized
+	}
+	if value, ok := condition.Value.(string); ok {
+		value = strings.TrimSpace(value)
+		switch condition.Field {
+		case "request.host", "request.original_host":
+			value = strings.ToLower(value)
+		case "request.method":
+			value = strings.ToUpper(value)
+		case "request.operation":
+			value = strings.ToLower(value)
+		}
+		condition.Value = value
+	}
+	return condition
 }
 
 func validateNamespacePolicyAction(protocol string, action bo.Action, path string) error {
 	switch action.Type {
 	case eo.ActionTypeRespond:
 		if renderer := strings.TrimSpace(action.Renderer); renderer != "" && renderer != eo.ActionRendererStatic {
-			return fmt.Errorf("%s.renderer only supports static for namespace policies", path)
+			return validationErrorf("%s.renderer only supports static for namespace policies", path)
 		}
 		var payload map[string]any
 		if action.Response != nil {
 			payload = action.Response.Payload
 		}
 		if _, err := mockprotocol.NormalizeResponsePayload(protocol, payload); err != nil {
-			return fmt.Errorf("%s.response.payload: %w", path, err)
+			return validationErrorf("%s.response.payload: %v", path, err)
 		}
 	case eo.ActionTypeForward:
 		if action.Forward == nil {
-			return fmt.Errorf("%s.forward is required", path)
+			return validationErrorf("%s.forward is required", path)
 		}
 		if action.Forward.TimeoutMS < 0 || action.Forward.TimeoutMS > 30000 {
-			return fmt.Errorf("%s.forward.timeout_ms must be between 0 and 30000", path)
+			return validationErrorf("%s.forward.timeout_ms must be between 0 and 30000", path)
 		}
 	default:
-		return fmt.Errorf("%s.type must be respond or forward", path)
+		return validationErrorf("%s.type must be respond or forward", path)
 	}
 	return nil
 }
@@ -858,10 +994,6 @@ func (s *rulesetService) newRuleSetID(ctx context.Context, ruleSet bo.RuleSet) (
 		return candidate, nil
 	}
 	return "", fmt.Errorf("generate unique ruleset id failed")
-}
-
-func slugifyNamespaceID(value string) string {
-	return slugifyRuleSetID(value)
 }
 
 func slugifyRuleSetID(value string) string {

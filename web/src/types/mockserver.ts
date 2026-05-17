@@ -98,6 +98,7 @@ export interface NamespaceConfig {
   name?: string
   description?: string
   policies: Record<string, NamespacePolicy>
+  version?: number
 }
 
 export interface NamespaceFallbackForm {

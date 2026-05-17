@@ -1061,7 +1061,7 @@ function clearRollbackWorkflow() {
 }
 
 function firstRuleId(ruleSet: RuleSet) {
-  return [...ruleSet.rules].sort((left, right) => left.priority - right.priority)[0]?.id || ''
+  return [...ruleSet.rules].sort((left, right) => right.priority - left.priority)[0]?.id || ''
 }
 
 function syncActiveRuleAfterLoad(ruleSet: RuleSet) {

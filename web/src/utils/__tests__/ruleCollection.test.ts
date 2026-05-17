@@ -49,10 +49,10 @@ describe('rule collection view helpers', () => {
   it('orders rule rows by priority and keeps readable summaries', () => {
     const rows = buildRuleRows(ruleSet, defaultRuleFilters(), 'primary-rule')
 
-    expect(rows.map((row) => row.rule.id)).toEqual(['primary-rule', 'disabled-rule'])
-    expect(rows[0].selected).toBe(true)
-    expect(rows[0].condition).toContain('ALL 2')
-    expect(rows[0].action).toContain('static response')
+    expect(rows.map((row) => row.rule.id)).toEqual(['disabled-rule', 'primary-rule'])
+    expect(rows[1].selected).toBe(true)
+    expect(rows[1].condition).toContain('ALL 2')
+    expect(rows[1].action).toContain('static response')
   })
 
   it('filters by search, enabled state, action type, and diagnostics', () => {
@@ -88,7 +88,7 @@ describe('rule collection view helpers', () => {
       matched: 1,
       missed: 0,
     })
-    expect(resolveStableSelectedRuleId(ruleSet, 'missing-rule')).toBe('primary-rule')
+    expect(resolveStableSelectedRuleId(ruleSet, 'missing-rule')).toBe('disabled-rule')
     expect(resolveStableSelectedRuleId(ruleSet, 'disabled-rule')).toBe('disabled-rule')
   })
 
@@ -98,8 +98,10 @@ describe('rule collection view helpers', () => {
       'disabled-rule': { simulation: 'not_reached' },
     })
 
-    const missed = rows[0].statuses.find((status) => status.key === 'missed')
-    const notReached = rows[1].statuses.find((status) => status.key === 'not_reached')
+    const missed = rows.find((row) => row.rule.id === 'primary-rule')?.statuses.find((status) => status.key === 'missed')
+    const notReached = rows
+      .find((row) => row.rule.id === 'disabled-rule')
+      ?.statuses.find((status) => status.key === 'not_reached')
 
     expect(missed?.tone).toBe('warn')
     expect(notReached?.tone).toBe('caution')

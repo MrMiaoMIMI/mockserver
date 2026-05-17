@@ -341,6 +341,15 @@ function validateSettings() {
   if (!form.name.trim()) {
     issues.push('Name is required')
   }
+  const duplicateName = store.drafts.find((draft) => {
+    if (props.ruleSet?.id === draft.id) return false
+    if (normalizeScopeValue(draft.namespace) !== normalizeScopeValue(form.namespace)) return false
+    if (normalizeScopeValue(draft.protocol) !== normalizeScopeValue(form.protocol)) return false
+    return normalizedName(draft.name) === normalizedName(form.name)
+  })
+  if (duplicateName) {
+    issues.push(`Ruleset name is already used by ${duplicateName.id} in this namespace and protocol`)
+  }
   if (!form.protocol.trim()) {
     issues.push('Protocol is required')
   }
@@ -380,6 +389,14 @@ function validateSettings() {
     }
   }
   return issues
+}
+
+function normalizedName(value: string) {
+  return value.trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+function normalizeScopeValue(value: string) {
+  return value.trim().toLowerCase()
 }
 
 function rowToCondition(row: SelectorRow): Condition | null {

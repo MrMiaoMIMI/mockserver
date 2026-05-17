@@ -626,12 +626,49 @@ func TestValidateRuleSetRejectsUnsafeOrAmbiguousRules(t *testing.T) {
 			wantReason: "rule name is required",
 		},
 		{
+			name: "missing ruleset name",
+			mutate: func(ruleSet *bo.RuleSet) {
+				ruleSet.Name = ""
+			},
+			wantPath:   "name",
+			wantReason: "name is required",
+		},
+		{
 			name: "duplicate rule id",
 			mutate: func(ruleSet *bo.RuleSet) {
 				ruleSet.Rules = append(ruleSet.Rules, ruleSet.Rules[0])
 			},
 			wantPath:   "rules[1].id",
 			wantReason: "duplicate rule id",
+		},
+		{
+			name: "duplicate rule name",
+			mutate: func(ruleSet *bo.RuleSet) {
+				duplicate := ruleSet.Rules[0]
+				duplicate.ID = "duplicate-name"
+				ruleSet.Rules = append(ruleSet.Rules, duplicate)
+			},
+			wantPath:   "rules[1].name",
+			wantReason: "duplicate rule name",
+		},
+		{
+			name: "duplicate rule priority",
+			mutate: func(ruleSet *bo.RuleSet) {
+				duplicate := ruleSet.Rules[0]
+				duplicate.ID = "duplicate-priority"
+				duplicate.Name = "Duplicate priority"
+				ruleSet.Rules = append(ruleSet.Rules, duplicate)
+			},
+			wantPath:   "rules[1].priority",
+			wantReason: "duplicate rule priority",
+		},
+		{
+			name: "negative rule priority",
+			mutate: func(ruleSet *bo.RuleSet) {
+				ruleSet.Rules[0].Priority = -1
+			},
+			wantPath:   "rules[0].priority",
+			wantReason: "non-negative",
 		},
 		{
 			name: "invalid status",

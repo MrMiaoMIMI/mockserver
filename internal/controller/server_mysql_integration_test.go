@@ -51,6 +51,7 @@ func TestAdminRuntimeFlowWithMySQLRepository(t *testing.T) {
 
 	handler := newMySQLBackedHandler(db.GetRuleSetRepository(), db.GetNamespaceRepository())
 	namespaceResp := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/namespaces", map[string]any{
+		"id":   id + "-namespace",
 		"name": id,
 		"policies": httpNamespacePolicies(
 			httpStaticActionPayload(404, map[string]any{"message": "no mock ruleset matched"}),
@@ -66,8 +67,8 @@ func TestAdminRuntimeFlowWithMySQLRepository(t *testing.T) {
 		t.Fatalf("decode namespace response: %v", err)
 	}
 	namespaceID = namespaceEnvelope.Data.ID
-	if namespaceID == "" {
-		t.Fatalf("expected generated namespace id")
+	if namespaceID != id+"-namespace" {
+		t.Fatalf("unexpected namespace id: %s", namespaceID)
 	}
 
 	upsertBody := map[string]any{
