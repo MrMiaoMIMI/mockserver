@@ -19,12 +19,24 @@ type Selector struct {
 }
 
 type Rule struct {
-	ID       string    `json:"id"`
-	Name     string    `json:"name"`
-	Enabled  bool      `json:"enabled"`
-	Priority int       `json:"priority"`
-	When     Condition `json:"when"`
-	Action   Action    `json:"action"`
+	ID        string         `json:"id"`
+	Name      string         `json:"name"`
+	Enabled   bool           `json:"enabled"`
+	Priority  int            `json:"priority"`
+	When      Condition      `json:"when"`
+	Action    Action         `json:"action"`
+	Authoring *RuleAuthoring `json:"authoring,omitempty"`
+}
+
+type RuleAuthoring struct {
+	SampleRequest *SampleRequestAuthoring `json:"sample_request,omitempty"`
+}
+
+type SampleRequestAuthoring struct {
+	Format string `json:"format"`
+	Root   string `json:"root,omitempty"`
+	Raw    string `json:"raw"`
+	Parsed any    `json:"parsed,omitempty"`
 }
 
 type Condition struct {

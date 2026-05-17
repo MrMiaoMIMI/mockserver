@@ -33,6 +33,13 @@ const jsonOperators = [
   'lte',
 ]
 
+const hiddenDefaultRuleConditionFields = new Set([
+  'request.scheme',
+  'request.host',
+  'request.original_host',
+  'request.client_ip',
+])
+
 export function fieldForPath(protocolSpec: ProtocolSpec | undefined, fieldPath: string): ProtocolFieldSpec | undefined {
   if (!fieldPath) return undefined
   for (const field of protocolSpec?.fields || []) {
@@ -51,7 +58,7 @@ export function operatorsForField(field: ProtocolFieldSpec | undefined): string[
 }
 
 export function ruleConditionFields(fields: ProtocolFieldSpec[]): ProtocolFieldSpec[] {
-  return fields.filter((field) => isRuleConditionFieldPath(field.path))
+  return sortRuleConditionFields(fields.filter((field) => isRuleConditionFieldPath(field.path)))
 }
 
 export function isRuleConditionFieldPath(path: string): boolean {
@@ -61,6 +68,13 @@ export function isRuleConditionFieldPath(path: string): boolean {
     && normalized !== 'namespace'
     && normalized !== 'meta'
     && !normalized.startsWith('meta.')
+    && !hiddenDefaultRuleConditionFields.has(normalized)
+}
+
+export function sortRuleConditionFields<T extends Pick<ProtocolFieldSpec, 'path'>>(fields: T[]): T[] {
+  return [...fields].sort((left, right) => {
+    return ruleConditionFieldSortKey(left.path).localeCompare(ruleConditionFieldSortKey(right.path))
+  })
 }
 
 export function dynamicFieldParts(
@@ -170,4 +184,11 @@ function normalizeDynamicSuffix(rootPath: string, suffix: string): string {
     normalized = normalized.replace(/\[(?:\*|0|\d+)]$/, '')
   }
   return normalized
+}
+
+function ruleConditionFieldSortKey(path: string): string {
+  return path.trim()
+    .toLowerCase()
+    .replace(/\[(\d+)]/g, (_match, index: string) => `[${index.padStart(8, '0')}]`)
+    .replace(/\[\*]/g, '[99999999]')
 }

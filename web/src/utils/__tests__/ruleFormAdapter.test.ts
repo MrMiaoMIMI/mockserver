@@ -247,4 +247,47 @@ describe('rule form adapter', () => {
       message: 'Invalid JSON value. String values must use double quotes.',
     })
   })
+
+  it('persists valid rule-level sample request authoring metadata', () => {
+    const form = defaultRuleForm(ruleSet, httpSpec)
+    form.name = 'Sample request rule'
+    form.id = 'sample-request-rule'
+    form.sampleRequestRaw = `curl -X POST 'https://demo.com/api/order?region=SG' -H 'x-env: test' --data-raw '{"amount":123}'`
+
+    const result = formToRule(form, { protocolSpec: httpSpec })
+
+    expect(result.errors).toEqual([])
+    expect(result.rule?.authoring?.sample_request).toMatchObject({
+      format: 'curl',
+      root: 'request',
+      raw: form.sampleRequestRaw,
+      parsed: {
+        method: 'POST',
+        host: 'demo.com',
+        path: '/api/order',
+        query: { region: ['SG'] },
+        headers: { 'x-env': ['test'] },
+        body: { amount: 123 },
+      },
+    })
+
+    const roundTripped = ruleToForm(result.rule as Rule, httpSpec)
+    expect(roundTripped.sampleRequestRaw).toBe(form.sampleRequestRaw)
+  })
+
+  it('rejects invalid sample request content before saving a rule', () => {
+    const form = defaultRuleForm(ruleSet, httpSpec)
+    form.name = 'Bad sample request'
+    form.id = 'bad-sample-request'
+    form.sampleRequestRaw = `curl https://demo.com -d 'amount=123'`
+
+    const result = formToRule(form, { protocolSpec: httpSpec })
+
+    expect(result.rule).toBeUndefined()
+    expect(result.errors.some((error) => (
+      error.section === 'condition'
+        && error.field === 'sampleRequestRaw'
+        && error.message.includes('valid JSON')
+    ))).toBe(true)
+  })
 })

@@ -49,6 +49,20 @@ export interface Rule {
   priority: number
   when: Condition
   action: RuleAction
+  authoring?: RuleAuthoring
+}
+
+export interface RuleAuthoring {
+  sample_request?: SampleRequestAuthoring
+}
+
+export type SampleRequestFormat = 'json' | 'curl'
+
+export interface SampleRequestAuthoring {
+  format: SampleRequestFormat
+  root?: string
+  raw: string
+  parsed?: unknown
 }
 
 export interface RuleSet {

@@ -144,7 +144,7 @@
             <header>
               <button class="sample-assist-summary" type="button" @click="sampleAssistExpanded = !sampleAssistExpanded">
                 <span>sample request</span>
-                <strong>{{ sampleRootPath }}</strong>
+                <strong>{{ sampleRequestTargetLabel }}</strong>
                 <small>{{ sampleAssistStatus }}</small>
               </button>
               <div class="sample-assist-actions">
@@ -160,9 +160,9 @@
                     </button>
                   </template>
                   <div class="sample-assist-help">
-                    <strong>Optional authoring sample</strong>
-                    <p>Paste one request JSON value to infer selectable field paths and advisory type warnings.</p>
-                    <p>For this ruleset it maps to <code>{{ sampleRootPath }}</code>. It is not saved with the rule.</p>
+                    <strong>Saved authoring sample</strong>
+                    <p>Paste a JSON body or a common cURL command. The editor detects the format automatically.</p>
+                    <p>Valid samples are saved with this rule as metadata and are only used for field suggestions and warnings.</p>
                   </div>
                 </el-popover>
                 <el-tag size="small" effect="plain">optional</el-tag>
@@ -177,10 +177,11 @@
             </header>
             <div v-if="sampleAssistExpanded" class="sample-assist-body">
               <JsonEditor
-                v-model="sampleRequestJson"
+                v-model="form.sampleRequestRaw"
                 :min-height="150"
                 :placeholder="sampleRequestPlaceholder"
-                title="Sample JSON"
+                :show-format="false"
+                title="Sample Request"
               />
               <div class="sample-assist-status">
                 <span v-if="sampleRequestError" class="field-error">{{ sampleRequestError }}</span>
@@ -443,8 +444,7 @@ import ResultInspector from '@/components/rulesets/ResultInspector.vue'
 import { useMockserverStore } from '@/store'
 import type { MockEvent, Rule, RuleSet } from '@/types'
 import {
-  buildSampleRequestFields,
-  parseOptionalSampleJSON,
+  parseSampleRequestInput,
   sampleRootForProtocol,
 } from '@/utils/sampleRequestFields'
 import {
@@ -488,7 +488,6 @@ const previewEventJson = ref('')
 const previewEventDirty = ref(false)
 const previewResultJson = ref('')
 const previewError = ref('')
-const sampleRequestJson = ref('')
 const sampleAssistExpanded = ref(false)
 
 const actionProfiles = ACTION_AUTHORING_PROFILES
@@ -539,17 +538,29 @@ const celPayloadPlaceholder = computed(() => payloadExampleForAction('cel'))
 const sampleRootPath = computed(() => sampleRootForProtocol(
   protocolSpec.value?.name || props.ruleSet?.protocol || form.protocol || 'http'
 ))
-const parsedSampleRequest = computed(() => parseOptionalSampleJSON(sampleRequestJson.value))
+const parsedSampleRequest = computed(() => parseSampleRequestInput(
+  form.sampleRequestRaw,
+  protocolSpec.value?.name || props.ruleSet?.protocol || form.protocol || 'http'
+))
 const sampleRequestError = computed(() => parsedSampleRequest.value.error || '')
 const sampleRequestFields = computed(() => {
-  if (parsedSampleRequest.value.value === undefined || sampleRequestError.value) return []
-  return buildSampleRequestFields(sampleRootPath.value, parsedSampleRequest.value.value)
+  if (sampleRequestError.value) return []
+  return parsedSampleRequest.value.fields
 })
 const sampleFieldPreview = computed(() => sampleRequestFields.value.slice(0, 8))
 const sampleAssistStatus = computed(() => {
   if (sampleRequestError.value) return sampleRequestError.value
   if (sampleRequestFields.value.length) return `${sampleRequestFields.value.length} fields inferred`
   return 'No sample fields'
+})
+const sampleRequestTargetLabel = computed(() => {
+  if (parsedSampleRequest.value.format === 'curl') return 'cURL -> request.*'
+  if (parsedSampleRequest.value.format === 'json') return parsedSampleRequest.value.root
+  const protocol = (protocolSpec.value?.name || props.ruleSet?.protocol || form.protocol || 'http').toLowerCase()
+  if (protocol === 'http') {
+    return `${sampleRootPath.value} or cURL`
+  }
+  return sampleRootPath.value
 })
 const sampleRequestPlaceholder = computed(() => sampleRequestExampleForProtocol(
   protocolSpec.value?.name || props.ruleSet?.protocol || form.protocol || 'http'
@@ -620,7 +631,6 @@ function resetForm() {
   previewEventDirty.value = false
   previewResultJson.value = ''
   previewError.value = ''
-  sampleRequestJson.value = ''
   sampleAssistExpanded.value = false
   activeSection.value = 'identity'
 }
@@ -828,6 +838,18 @@ function celPayloadExample(protocol: string) {
 
 function sampleRequestExampleForProtocol(protocol: string) {
   const normalized = protocol.toLowerCase()
+  if (normalized === 'http') {
+    return `{
+  "order_id": "o-1",
+  "amount": 123,
+  "enabled": true
+}
+
+curl -X POST 'https://demo.com/api/order?region=SG' \\
+  -H 'content-type: application/json' \\
+  -H 'x-env: test' \\
+  --data-raw '{"order_id":"o-1","amount":123}'`
+  }
   if (normalized === 'spex') {
     return `{
   "id": "demo",
@@ -847,14 +869,7 @@ function sampleRequestExampleForProtocol(protocol: string) {
   "enabled": true
 }`
   }
-  return `{
-  "order_id": "o-1",
-  "amount": 123,
-  "enabled": true,
-  "items": [
-    {"sku": "A-1", "qty": 2}
-  ]
-}`
+  return `{"value":"demo"}`
 }
 
 function sectionHasError(section: EditorSection) {

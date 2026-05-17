@@ -197,6 +197,7 @@ import {
   isRuleConditionFieldPath,
   operatorsForField,
   ruleConditionFields,
+  sortRuleConditionFields,
   type DynamicIndexMode,
 } from '@/utils/protocolFields'
 import {
@@ -242,7 +243,7 @@ const activePreset = computed(() => resolveConditionPreset(props.modelValue))
 const activePresetKey = computed(() => conditionPresetKey(props.modelValue))
 const protocolFieldOptions = computed(() => mergeProtocolFieldOptions(
   ruleConditionFields(props.protocolSpec?.fields || []),
-  props.sampleFields || []
+  (props.sampleFields || []).filter((field) => isRuleConditionFieldPath(field.path))
 ))
 const combinedProtocolSpec = computed<ProtocolSpec | undefined>(() => props.protocolSpec
   ? { ...props.protocolSpec, fields: protocolFieldOptions.value }
@@ -486,7 +487,7 @@ function mergeProtocolFieldOptions(
   protocolFields.forEach((field) => {
     if (!result.has(field.path)) result.set(field.path, field)
   })
-  return [...result.values()]
+  return sortRuleConditionFields([...result.values()])
 }
 </script>
 

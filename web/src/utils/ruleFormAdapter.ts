@@ -1,4 +1,5 @@
-import type { Condition, ProtocolSpec, Rule, RuleAction, RuleSet, SequenceStep } from '@/types'
+import type { Condition, ProtocolSpec, Rule, RuleAction, RuleAuthoring, RuleSet, SequenceStep } from '@/types'
+import { parseSampleRequestInput } from '@/utils/sampleRequestFields'
 import { isInvalidJSONLiteralValue } from '@/utils/valueInputSpec'
 import {
   buildResponsePayload,
@@ -38,6 +39,7 @@ export interface RuleFormState {
   webhookMethod: string
   webhookTimeoutMS: number
   webhookHeadersJson: string
+  sampleRequestRaw: string
   rawRuleJson: string
 }
 
@@ -104,6 +106,7 @@ export function ruleToForm(rule: Rule, protocolSpec?: ProtocolSpec): RuleFormSta
     webhookMethod: rule.action.webhook?.method || 'POST',
     webhookTimeoutMS: rule.action.webhook?.timeout_ms || 3000,
     webhookHeadersJson: formatJSON(rule.action.webhook?.headers || {}),
+    sampleRequestRaw: rule.authoring?.sample_request?.raw || '',
     rawRuleJson: '',
   }
   form.rawRuleJson = formatJSON(formToRuleUnsafe(form))
@@ -172,9 +175,10 @@ function buildRuleFromForm(form: RuleFormState, errors: RuleFormError[], options
 
   const when = buildCondition(form, errors)
   const action = buildAction(form, errors, options.protocolSpec)
+  const authoring = buildAuthoring(form, errors, options.protocolSpec)
   if (!id || !name || !when || !action || errors.length) return undefined
 
-  return {
+  const rule: Rule = {
     id,
     name,
     enabled: form.enabled,
@@ -182,6 +186,26 @@ function buildRuleFromForm(form: RuleFormState, errors: RuleFormError[], options
     when,
     action,
   }
+  if (authoring) rule.authoring = authoring
+  return rule
+}
+
+function buildAuthoring(
+  form: RuleFormState,
+  errors: RuleFormError[],
+  protocolSpec?: ProtocolSpec
+): RuleAuthoring | undefined {
+  if (!form.sampleRequestRaw.trim()) return undefined
+  const parsed = parseSampleRequestInput(form.sampleRequestRaw, form.protocol || protocolSpec?.name || 'http')
+  if (parsed.error || !parsed.authoring) {
+    errors.push({
+      section: 'condition',
+      field: 'sampleRequestRaw',
+      message: parsed.error || 'Sample Request is invalid',
+    })
+    return undefined
+  }
+  return { sample_request: parsed.authoring }
 }
 
 function buildCondition(form: RuleFormState, errors: RuleFormError[]): Condition | undefined {
@@ -494,7 +518,7 @@ function nextPriority(ruleSet?: RuleSet | null) {
 }
 
 function formToRuleUnsafe(form: RuleFormState): Rule {
-  return {
+  const rule: Rule = {
     id: form.id,
     name: form.name,
     enabled: form.enabled,
@@ -507,6 +531,9 @@ function formToRuleUnsafe(form: RuleFormState): Rule {
           : clone(form.conditionTree),
     action: actionFromFormUnsafe(form),
   }
+  const authoring = buildAuthoringUnsafe(form)
+  if (authoring) rule.authoring = authoring
+  return rule
 }
 
 function actionFromFormUnsafe(form: RuleFormState): RuleAction {
@@ -534,6 +561,12 @@ function actionFromFormUnsafe(form: RuleFormState): RuleAction {
     }
   }
   return action
+}
+
+function buildAuthoringUnsafe(form: RuleFormState): RuleAuthoring | undefined {
+  if (!form.sampleRequestRaw.trim()) return undefined
+  const parsed = parseSampleRequestInput(form.sampleRequestRaw, form.protocol || 'http')
+  return parsed.authoring ? { sample_request: parsed.authoring } : undefined
 }
 
 function parseJSON<T>(

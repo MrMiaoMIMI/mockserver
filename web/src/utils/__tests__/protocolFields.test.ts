@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ProtocolSpec } from '@/types'
+import type { ProtocolFieldSpec, ProtocolSpec } from '@/types'
 import {
   buildDynamicFieldPath,
   dynamicFieldParts,
@@ -7,6 +7,7 @@ import {
   isRuleConditionFieldPath,
   operatorsForField,
   ruleConditionFields,
+  sortRuleConditionFields,
 } from '@/utils/protocolFields'
 
 const cacheSpec: ProtocolSpec = {
@@ -68,12 +69,68 @@ describe('protocol field helpers', () => {
       { path: 'protocol', type: 'string' },
       { path: 'namespace', type: 'string' },
       { path: 'meta.trace_id', type: 'string' },
+      { path: 'request.scheme', type: 'string' },
+      { path: 'request.host', type: 'string' },
+      { path: 'request.original_host', type: 'string' },
+      { path: 'request.client_ip', type: 'string' },
       { path: 'request.cmd', type: 'string' },
       { path: 'request.req', type: 'json', dynamic_path: true },
     ])
 
     expect(fields.map((field) => field.path)).toEqual(['request.cmd', 'request.req'])
     expect(isRuleConditionFieldPath('meta.extra.debug')).toBe(false)
+    expect(isRuleConditionFieldPath('request.host')).toBe(false)
+    expect(isRuleConditionFieldPath('request.original_host')).toBe(false)
     expect(isRuleConditionFieldPath('request.body.id')).toBe(true)
+  })
+
+  it('sorts rule condition fields by normalized path name', () => {
+    const fields: ProtocolFieldSpec[] = [
+      { path: 'request.body.order_id', type: 'string' },
+      { path: 'request.raw_body', type: 'string' },
+      { path: 'request.headers.x-env[*]', type: 'string' },
+      { path: 'request.query.region[*]', type: 'string' },
+      { path: 'request.method', type: 'string' },
+      { path: 'request.headers.x-env[0]', type: 'string' },
+      { path: 'request.query.region[0]', type: 'string' },
+      { path: 'request.path', type: 'string' },
+      { path: 'request.body.amount', type: 'number' },
+    ]
+
+    expect(sortRuleConditionFields(fields).map((field) => field.path)).toEqual([
+      'request.body.amount',
+      'request.body.order_id',
+      'request.headers.x-env[0]',
+      'request.headers.x-env[*]',
+      'request.method',
+      'request.path',
+      'request.query.region[0]',
+      'request.query.region[*]',
+      'request.raw_body',
+    ])
+  })
+
+  it('sorts SPEX and cache rule condition fields without protocol-specific priority', () => {
+    expect(sortRuleConditionFields([
+      { path: 'request.req.user_id', type: 'number' },
+      { path: 'request.param', type: 'string' },
+      { path: 'request.cmd', type: 'string' },
+    ]).map((field) => field.path)).toEqual([
+      'request.cmd',
+      'request.param',
+      'request.req.user_id',
+    ])
+
+    expect(sortRuleConditionFields([
+      { path: 'request.value.user_id', type: 'number' },
+      { path: 'request.ttl_ms', type: 'number' },
+      { path: 'request.key', type: 'string' },
+      { path: 'request.operation', type: 'string' },
+    ]).map((field) => field.path)).toEqual([
+      'request.key',
+      'request.operation',
+      'request.ttl_ms',
+      'request.value.user_id',
+    ])
   })
 })
