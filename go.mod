@@ -7,6 +7,7 @@ require (
 	github.com/gin-gonic/gin v1.11.0
 	github.com/go-sql-driver/mysql v1.7.0
 	github.com/goccy/go-yaml v1.19.2
+	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/google/cel-go v0.22.1
 	go.uber.org/fx v1.24.0
 )

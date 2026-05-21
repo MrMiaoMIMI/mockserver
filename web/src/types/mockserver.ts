@@ -76,6 +76,19 @@ export interface RuleSet {
   version?: number
 }
 
+export interface DebugLoginRequest {
+  email: string
+}
+
+export interface UserInfo {
+  email: string
+}
+
+export interface LoginResponse {
+  token: string
+  user: UserInfo
+}
+
 export type NamespaceFallbackType = 'respond' | 'forward'
 
 export interface NamespaceForwardFallback {

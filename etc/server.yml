@@ -20,3 +20,9 @@ admin:
   read_token: ""
   write_token: ""
   publish_token: ""
+
+auth:
+  # Local debug secret. Override with MOCKSERVER_AUTH_JWT_SECRET in shared environments.
+  jwt_secret: "mockserver-debug-secret"
+  debug_login_enabled: true
+  token_ttl_seconds: 86400

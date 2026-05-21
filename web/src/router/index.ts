@@ -1,9 +1,16 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import { useAuthStore } from '@/store'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    {
+      path: '/login',
+      name: 'Login',
+      component: () => import('@/views/Login.vue'),
+      meta: { title: 'Login', public: true },
+    },
     {
       path: '/',
       component: AppLayout,
@@ -42,6 +49,23 @@ const router = createRouter({
       meta: { title: 'Not found' },
     },
   ],
+})
+
+router.beforeEach((to) => {
+  const auth = useAuthStore()
+  if (to.meta.public) {
+    if (to.name === 'Login' && auth.isAuthenticated) {
+      return '/rulesets'
+    }
+    return true
+  }
+  if (!auth.isAuthenticated) {
+    return {
+      path: '/login',
+      query: { redirect: to.fullPath },
+    }
+  }
+  return true
 })
 
 router.afterEach((to) => {

@@ -25,6 +25,10 @@ admin:
   read_token: "read"
   write_token: "write"
   publish_token: "publish"
+auth:
+  jwt_secret: "jwt-secret"
+  debug_login_enabled: false
+  token_ttl_seconds: 3600
 `
 	if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
@@ -58,6 +62,9 @@ admin:
 	}
 	if cfg.AdminToken != "all" || cfg.AdminReadToken != "read" || cfg.AdminWriteToken != "write" || cfg.AdminPublishToken != "publish" {
 		t.Fatalf("unexpected admin tokens: %#v", cfg)
+	}
+	if cfg.AuthJWTSecret != "jwt-secret" || cfg.AuthDebugLoginEnabled || cfg.AuthTokenTTLSeconds != 3600 {
+		t.Fatalf("unexpected auth config: %#v", cfg)
 	}
 }
 

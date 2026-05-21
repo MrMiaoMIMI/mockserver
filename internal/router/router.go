@@ -36,9 +36,15 @@ func NewWithTraffic(adminController *controller.AdminController, runtimeControll
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	engine.RedirectTrailingSlash = false
-	engine.Use(traceMiddleware(), operatorMiddleware(), accessLogMiddleware(), recoveryMiddleware(), adminAuthMiddleware(authConfig))
+	engine.Use(traceMiddleware(), operatorMiddleware(), accessLogMiddleware(), recoveryMiddleware())
+
+	authController := controller.NewAuthController(authConfig.JWT)
+	authRoutes := engine.Group("/mockserver/api/v1/auth")
+	authRoutes.POST("/debug/login", authController.DebugLogin)
+	authRoutes.GET("/me", jwtAuthMiddleware(authConfig), authController.CurrentUser)
 
 	admin := engine.Group("/mockserver/api/v1/admin")
+	admin.Use(jwtAuthMiddleware(authConfig), adminAuthMiddleware(authConfig))
 	admin.POST("/rulesets", adminController.CreateOrUpdateDraft)
 	admin.GET("/rulesets", adminController.ListDrafts)
 	admin.GET("/rulesets/:ruleset_id", adminController.GetDraft)

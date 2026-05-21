@@ -26,6 +26,9 @@ type Config struct {
 	AdminReadToken           string
 	AdminWriteToken          string
 	AdminPublishToken        string
+	AuthJWTSecret            string
+	AuthDebugLoginEnabled    bool
+	AuthTokenTTLSeconds      int
 }
 
 type fileConfig struct {
@@ -50,6 +53,11 @@ type fileConfig struct {
 		WriteToken   string `yaml:"write_token"`
 		PublishToken string `yaml:"publish_token"`
 	} `yaml:"admin"`
+	Auth struct {
+		JWTSecret         string `yaml:"jwt_secret"`
+		DebugLoginEnabled *bool  `yaml:"debug_login_enabled"`
+		TokenTTLSeconds   int    `yaml:"token_ttl_seconds"`
+	} `yaml:"auth"`
 }
 
 func Load() (Config, error) {
@@ -82,9 +90,11 @@ func Load() (Config, error) {
 
 func Default() Config {
 	return Config{
-		Address:      ":8080",
-		DBDriver:     "mysql",
-		DBInitSchema: true,
+		Address:               ":8080",
+		DBDriver:              "mysql",
+		DBInitSchema:          true,
+		AuthDebugLoginEnabled: true,
+		AuthTokenTTLSeconds:   24 * 60 * 60,
 	}
 }
 
@@ -112,6 +122,13 @@ func applyFileConfig(cfg *Config, fc fileConfig) {
 	setString(&cfg.AdminReadToken, fc.Admin.ReadToken)
 	setString(&cfg.AdminWriteToken, fc.Admin.WriteToken)
 	setString(&cfg.AdminPublishToken, fc.Admin.PublishToken)
+	setString(&cfg.AuthJWTSecret, fc.Auth.JWTSecret)
+	if fc.Auth.DebugLoginEnabled != nil {
+		cfg.AuthDebugLoginEnabled = *fc.Auth.DebugLoginEnabled
+	}
+	if fc.Auth.TokenTTLSeconds > 0 {
+		cfg.AuthTokenTTLSeconds = fc.Auth.TokenTTLSeconds
+	}
 }
 
 func applyEnvOverrides(cfg *Config) error {
@@ -138,6 +155,13 @@ func applyEnvOverrides(cfg *Config) error {
 	setStringFromEnv(&cfg.AdminReadToken, "MOCKSERVER_ADMIN_READ_TOKEN")
 	setStringFromEnv(&cfg.AdminWriteToken, "MOCKSERVER_ADMIN_WRITE_TOKEN")
 	setStringFromEnv(&cfg.AdminPublishToken, "MOCKSERVER_ADMIN_PUBLISH_TOKEN")
+	setStringFromEnv(&cfg.AuthJWTSecret, "MOCKSERVER_AUTH_JWT_SECRET")
+	if err := setBoolFromEnv(&cfg.AuthDebugLoginEnabled, "MOCKSERVER_AUTH_DEBUG_LOGIN_ENABLED"); err != nil {
+		return err
+	}
+	if err := setIntFromEnv(&cfg.AuthTokenTTLSeconds, "MOCKSERVER_AUTH_TOKEN_TTL_SECONDS"); err != nil {
+		return err
+	}
 	return nil
 }
 

@@ -2,7 +2,23 @@ import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse 
 import { ElMessage } from 'element-plus'
 import type { CommonResponse } from '@/types'
 
-const TOKEN_KEY = 'auth_token'
+export const TOKEN_KEY = 'auth_token'
+
+export function getAuthToken() {
+  return localStorage.getItem(TOKEN_KEY) || ''
+}
+
+export function setAuthToken(token: string) {
+  localStorage.setItem(TOKEN_KEY, token)
+}
+
+export function clearAuthToken() {
+  localStorage.removeItem(TOKEN_KEY)
+}
+
+function notifyAuthCleared() {
+  window.dispatchEvent(new Event('mockserver-auth-cleared'))
+}
 
 const request: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '',
@@ -13,7 +29,7 @@ const request: AxiosInstance = axios.create({
 })
 
 request.interceptors.request.use((config) => {
-  const token = localStorage.getItem(TOKEN_KEY)
+  const token = getAuthToken()
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -31,7 +47,8 @@ request.interceptors.response.use(
   (error) => {
     const message = error.response?.data?.message || error.message || 'Request failed'
     if (error.response?.status === 401) {
-      localStorage.removeItem(TOKEN_KEY)
+      clearAuthToken()
+      notifyAuthCleared()
     }
     ElMessage.error(message)
     return Promise.reject(new Error(message))

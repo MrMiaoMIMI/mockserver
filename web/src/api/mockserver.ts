@@ -1,10 +1,12 @@
 import { http } from '@/utils/request'
 import type {
+  DebugLoginRequest,
   ListPublishedRuleSetsResponse,
   ListNamespacesResponse,
   ListProtocolsResponse,
   ListRuleSetsResponse,
   ListTrafficEventsResponse,
+  LoginResponse,
   NamespaceConfig,
   PublishedRuleSetResponse,
   PublishRuleSetResponse,
@@ -18,12 +20,20 @@ import type {
   SimulateRuleSetResponse,
   TrafficEvent,
   TrafficQueryParams,
+  UserInfo,
   ValidateRuleSetResponse,
 } from '@/types'
 
 const adminBase = '/mockserver/api/v1/admin'
+const authBase = '/mockserver/api/v1/auth'
 
 export const mockserverApi = {
+  debugLogin(data: DebugLoginRequest): Promise<LoginResponse> {
+    return http.post(`${authBase}/debug/login`, data)
+  },
+  currentUser(): Promise<UserInfo> {
+    return http.get(`${authBase}/me`)
+  },
   listDrafts(): Promise<ListRuleSetsResponse> {
     return http.get(`${adminBase}/rulesets`)
   },

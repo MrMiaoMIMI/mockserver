@@ -9,7 +9,7 @@
 - `selector` 粗筛 + 条件树精匹配
 - `respond` action + `static` / `template` / `cel` / `sequence` / `webhook` renderers
 - HTTP 管理接口
-- admin token 鉴权和 read / write / publish 权限分层
+- JWT debug 登录、admin token 兼容鉴权和 read / write / publish 权限分层
 - publish / rollback snapshot 审计 metadata
 - DB schema / DAO repository 第一阶段骨架
 - HTTP runtime adapter
@@ -26,7 +26,7 @@
 当前版本先把架构闭环做通，已经接入部分 V2 能力。仍未包含：
 
 - 任意 Go 脚本执行
-- 用户体系、登录、JWT、完整 RBAC 和租户隔离
+- 完整用户体系、RBAC 和租户隔离
 - 独立审计表、不可变审计日志和审批流
 
 ## 目录结构
@@ -53,7 +53,7 @@ examples/mockserver.postman_collection.json  Postman 调试集合
 
 ## 启动
 
-服务默认读取 `etc/server.yml`。其中包含监听地址、启动规则源、MySQL DSN、连接池和 admin token 配置。
+服务默认读取 `etc/server.yml`。其中包含监听地址、启动规则源、MySQL DSN、连接池、JWT 登录和 admin token 配置。
 
 ```bash
 go run ./cmd/server
@@ -120,7 +120,24 @@ bootstrap:
   ruleset_file: ./examples/ruleset.json,./examples/ruleset-cel.json
 ```
 
-默认 admin 接口不鉴权，便于本地开发。一旦配置任意 admin token，所有 `/mockserver/api/v1/admin/*` 接口都会启用 token 鉴权；runtime mock 接口不受 admin token 影响。
+`/mockserver/api/v1/admin/*` 支持 JWT 鉴权。默认 `etc/server.yml` 开启 debug 登录，可在前端登录页手动填写邮箱，后端会签发 JWT；JWT 校验通过后会把邮箱写入请求 context，作为未显式传入 `X-Mockserver-Operator` 时的默认 operator。runtime mock 接口不受 JWT 影响。
+
+```yaml
+auth:
+  jwt_secret: mockserver-debug-secret
+  debug_login_enabled: true
+  token_ttl_seconds: 86400
+```
+
+debug 登录接口：
+
+```bash
+curl -X POST http://127.0.0.1:8080/mockserver/api/v1/auth/debug/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@example.com"}'
+```
+
+保留 admin token 兼容路径。一旦配置任意 admin token，没有 JWT 的 admin 请求仍可用 token 鉴权；runtime mock 接口不受 admin token 影响。
 
 ```yaml
 admin:
@@ -141,9 +158,9 @@ admin:
 - `admin.write_token`：读写 draft 权限，可创建/更新 ruleset 和 rule，但不能 publish / rollback
 - `admin.publish_token`：发布权限，可 publish / rollback，也可读
 
-请求时使用 `Authorization: Bearer <token>` 或 `X-Mockserver-Admin-Token: <token>`。
+请求时使用 `Authorization: Bearer <jwt>`。如果使用 admin token，推荐使用 `X-Mockserver-Admin-Token: <token>`；JWT 未启用时也兼容 `Authorization: Bearer <token>`。
 
-发布和回滚会在生成的新 snapshot 中记录 `audit` metadata。操作者来自 `X-Mockserver-Operator` 或 `X-Operator`，trace 来自 `X-Trace-ID`，原因来自请求 body 的 `reason` 字段；如果未传操作者，会记录为 `anonymous`。
+发布和回滚会在生成的新 snapshot 中记录 `audit` metadata。操作者优先来自 `X-Mockserver-Operator` 或 `X-Operator`，其次来自 JWT 里的用户邮箱，trace 来自 `X-Trace-ID`，原因来自请求 body 的 `reason` 字段；如果未传操作者且没有 JWT 用户，会记录为 `anonymous`。
 
 ## 当前规则模型
 
@@ -307,7 +324,7 @@ SPEX 字段：
 /mockserver/api/v1/admin
 ```
 
-如果启动时配置了 admin token，下面所有接口都需要携带 `Authorization: Bearer <token>` 或 `X-Mockserver-Admin-Token: <token>`。
+如果启动时配置了 `auth.jwt_secret`，下面所有接口都需要携带 `Authorization: Bearer <jwt>`。也可以继续用 `X-Mockserver-Admin-Token` 兼容旧的 admin token 调用。
 
 接口列表：
 
@@ -732,7 +749,7 @@ curl 'http://127.0.0.1:8080/mockserver/api/v1/admin/traffic/events/35'
 - 当前版本快照支持查询、预演、回滚和 MySQL 存储；DB schema 位于 `docs/db_schema.sql`。
 - 后端启动装配已切到 `go.uber.org/fx v1.24.0`；HTTP server 由 Fx lifecycle 负责启动和优雅关闭。
 - DB 访问层已切到 `goshared/db/dbspi.Manager` + `dbhelper.NewSoftDeleteTableStore`；提供 `MOCKSERVER_MYSQL_TEST_DSN` 时会执行真实 MySQL 集成测试。
-- admin token 已支持 read / write / publish 权限分层，但还没有用户体系、登录、JWT、RBAC 和租户隔离。
+- admin token 已支持 read / write / publish 权限分层，JWT debug 登录已可用，但还没有完整 RBAC 和租户隔离。
 - snapshot 已记录 publish / rollback 审计 metadata，但还没有独立审计表、不可变审计日志和审批流。
 - `renderer: "template"` 已支持常用 helper，但还没有做模板沙箱、模板限流和更强的调试信息。
 - `request.body` 的路径访问目前只覆盖基础 JSON 对象场景。

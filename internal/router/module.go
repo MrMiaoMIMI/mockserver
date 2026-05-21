@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
 
+	authlib "github.com/MrMiaoMIMI/mockserver/internal/auth"
 	"github.com/MrMiaoMIMI/mockserver/internal/config"
 	"github.com/MrMiaoMIMI/mockserver/internal/controller"
 )
@@ -21,6 +22,11 @@ func newAdminAuthConfig(cfg config.Config) AdminAuthConfig {
 		ReadToken:    cfg.AdminReadToken,
 		WriteToken:   cfg.AdminWriteToken,
 		PublishToken: cfg.AdminPublishToken,
+		JWT: authlib.Config{
+			JWTSecret:         cfg.AuthJWTSecret,
+			DebugLoginEnabled: cfg.AuthDebugLoginEnabled,
+			TokenTTLSeconds:   cfg.AuthTokenTTLSeconds,
+		},
 	}
 }
 

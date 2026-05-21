@@ -6,8 +6,12 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/MrMiaoMIMI/goshared/db/dbspi"
+	"github.com/MrMiaoMIMI/goshared/logger"
 	"github.com/MrMiaoMIMI/goshared/util/serverresp"
 	"github.com/gin-gonic/gin"
+
+	authlib "github.com/MrMiaoMIMI/mockserver/internal/auth"
 )
 
 type adminAuthRole string
@@ -23,6 +27,7 @@ type AdminAuthConfig struct {
 	ReadToken    string
 	WriteToken   string
 	PublishToken string
+	JWT          authlib.Config
 }
 
 func (c AdminAuthConfig) enabled() bool {
@@ -31,6 +36,10 @@ func (c AdminAuthConfig) enabled() bool {
 
 func adminAuthMiddleware(config AdminAuthConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if _, ok := c.Get(authlib.UserEmailContextKey); ok {
+			c.Next()
+			return
+		}
 		if !config.enabled() {
 			c.Next()
 			return
@@ -60,6 +69,48 @@ func adminAuthMiddleware(config AdminAuthConfig) gin.HandlerFunc {
 			return
 		}
 
+		c.Next()
+	}
+}
+
+func jwtAuthMiddleware(config AdminAuthConfig) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !config.JWT.JWTEnabled() {
+			c.Next()
+			return
+		}
+
+		token := bearerToken(c.Request)
+		if token == "" {
+			if strings.TrimSpace(c.GetHeader("X-Mockserver-Admin-Token")) != "" {
+				c.Next()
+				return
+			}
+			serverresp.UnauthorizedError(c, errors.New("jwt token is required"))
+			c.Abort()
+			return
+		}
+		if config.hasToken(token) {
+			c.Next()
+			return
+		}
+
+		claims, err := authlib.ValidateToken(config.JWT, token)
+		if err != nil {
+			message := "invalid jwt token"
+			if errors.Is(err, authlib.ErrExpiredToken) {
+				message = "jwt token has expired"
+			}
+			logger.Warn(c.Request.Context(), "JWT authentication failed", logger.Err(err), logger.String("reason", message))
+			serverresp.UnauthorizedError(c, errors.New(message))
+			c.Abort()
+			return
+		}
+
+		c.Set(authlib.UserEmailContextKey, claims.Email)
+		if _, ok := dbspi.OperatorFromContext(c.Request.Context()); !ok {
+			c.Request = c.Request.WithContext(dbspi.WithOperator(c.Request.Context(), claims.Email))
+		}
 		c.Next()
 	}
 }
@@ -95,10 +146,13 @@ func bearerOrHeaderToken(r *http.Request) string {
 	if token := strings.TrimSpace(r.Header.Get("X-Mockserver-Admin-Token")); token != "" {
 		return token
 	}
-	authorization := strings.TrimSpace(r.Header.Get("Authorization"))
-	const bearerPrefix = "Bearer "
-	if strings.HasPrefix(authorization, bearerPrefix) {
-		return strings.TrimSpace(strings.TrimPrefix(authorization, bearerPrefix))
+	return bearerToken(r)
+}
+
+func bearerToken(r *http.Request) string {
+	parts := strings.Fields(strings.TrimSpace(r.Header.Get("Authorization")))
+	if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+		return strings.TrimSpace(parts[1])
 	}
 	return ""
 }

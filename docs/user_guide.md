@@ -23,7 +23,7 @@ MockServer 用规则来模拟协议调用结果。HTTP runtime 适合本地调�
 go run ./cmd/server
 ```
 
-服务默认读取 `etc/server.yml`，MySQL DSN、监听地址、启动规则源和 admin token 都建议维护在这个文件里。
+服务默认读取 `etc/server.yml`，MySQL DSN、监听地址、启动规则源、JWT 登录和 admin token 都建议维护在这个文件里。
 
 如果要使用前端页面，需要 Node.js：
 
@@ -130,7 +130,7 @@ VITE_MOCKSERVER_PROXY_TARGET=http://127.0.0.1:18080 npm run dev
 - JSON 根字段使用 JSON 输入；动态 JSON 子字段如 `request.body.status` 默认按普通值填写。
 - `request.query`、`request.headers` 这类动态字段会提供 key/path 输入，header key 会归一化为小写，query/header 可选择 `[0]` 或 `[*]`。
 
-如果后端启用了 admin token，在前端右上角填写 token。发布和回滚建议同时填写：
+如果后端启用了 JWT，进入前端后先用登录页填写邮箱。发布和回滚时，后端会默认使用 JWT 中的邮箱作为 operator；也可以在请求里显式传入：
 
 - `Operator`：操作者，例如 `admin@example.com`。
 - `Trace ID`：本次操作的追踪 ID，例如 `manual-release-001`。
@@ -781,9 +781,18 @@ curl -X POST http://127.0.0.1:8080/mockserver/api/v1/admin/published/rulesets/ht
 
 ## 10. 鉴权和权限
 
-默认本地开发不启用 admin 鉴权。
+默认 `etc/server.yml` 启用 JWT debug 登录。前端登录页会调用 `/mockserver/api/v1/auth/debug/login`，用手动填写的邮箱换取 JWT。
 
-如果设置任意 admin token，所有 `/mockserver/api/v1/admin/*` 接口都会要求 token；runtime mock 接口不受影响。
+JWT 配置：
+
+```yaml
+auth:
+  jwt_secret: mockserver-debug-secret
+  debug_login_enabled: true
+  token_ttl_seconds: 86400
+```
+
+如果设置任意 admin token，没有 JWT 的 `/mockserver/api/v1/admin/*` 请求仍可用 token 鉴权；runtime mock 接口不受影响。
 
 超级 token：
 
@@ -801,10 +810,15 @@ admin:
   publish_token: publish-secret
 ```
 
-请求时二选一：
+JWT 请求：
 
 ```text
-Authorization: Bearer <token>
+Authorization: Bearer <jwt>
+```
+
+admin token 兼容请求：
+
+```text
 X-Mockserver-Admin-Token: <token>
 ```
 
@@ -912,7 +926,7 @@ VITE_MOCKSERVER_PROXY_TARGET=http://127.0.0.1:18080 npm run dev
 检查：
 
 - 是否在 `etc/server.yml` 设置了 `admin.token` 或分权限 token。
-- 请求是否携带 `Authorization: Bearer <token>`。
+- 请求是否携带 `Authorization: Bearer <jwt>`，或兼容模式下携带 `X-Mockserver-Admin-Token: <token>`。
 - token 权限是否满足接口要求。
 
 常见情况：
