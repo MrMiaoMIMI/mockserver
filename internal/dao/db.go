@@ -28,7 +28,10 @@ func NewDB(ctx context.Context, cfg config.Config) (DB, error) {
 		return nil, fmt.Errorf("db.dsn is required")
 	}
 
-	manager := newManagerFromConfig(cfg)
+	manager, err := newManagerFromConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create db manager: %w", err)
+	}
 	if cfg.DBInitSchema {
 		if err := applySchema(ctx, manager, defaultSchemaSQL); err != nil {
 			return nil, fmt.Errorf("apply db schema: %w", err)
@@ -46,7 +49,7 @@ func NewDB(ctx context.Context, cfg config.Config) (DB, error) {
 	}, nil
 }
 
-func newManagerFromConfig(cfg config.Config) dbspi.Manager {
+func newManagerFromConfig(cfg config.Config) (dbspi.Manager, error) {
 	return dbhelper.NewManager(dbspi.DatabaseConfig{
 		DatabaseGroups: map[string]dbspi.DatabaseGroupConfig{
 			dbspi.DefaultDatabaseGroupKey: {

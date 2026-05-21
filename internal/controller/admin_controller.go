@@ -315,7 +315,7 @@ func writeBusinessError(ctx *gin.Context, err error) {
 		return
 	}
 	if errors.Is(err, dao.ErrConflict) {
-		ctx.JSON(http.StatusConflict, serverresp.Response{
+		ctx.JSON(http.StatusConflict, serverresp.Response[any]{
 			Code:    servererr.ErrConflict,
 			Message: err.Error(),
 		})

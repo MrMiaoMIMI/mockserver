@@ -92,7 +92,7 @@ MOCKSERVER_DB_DEBUG=true \
 go run ./cmd/server
 ```
 
-后端对象装配使用 `go.uber.org/fx v1.24.0`，各后端 package 暴露自己的 `Module`，由 `cmd/server` 入口统一组合；DB 访问层使用 `github.com/MrMiaoMIMI/goshared v0.0.10` 的 `dbspi.Manager` + `dbhelper.NewSoftDeleteTableStore`，并通过 common-field autofill 维护 `creator`、`updater`、`ctime`、`mtime`。当前 Go 基线为 `1.25.9`。
+后端对象装配使用 `go.uber.org/fx v1.24.0`，各后端 package 暴露自己的 `Module`，由 `cmd/server` 入口统一组合；DB 访问层使用 `github.com/MrMiaoMIMI/goshared v0.0.13` 的 `dbspi.Manager` + `dbhelper.NewSoftDeleteTableStore`，并通过 common-field autofill 维护 `creator`、`updater`、`ctime`、`mtime`。当前 Go 基线为 `1.23.0`。
 
 运行时只支持 MySQL 存储，已移除其他存储分支。
 
