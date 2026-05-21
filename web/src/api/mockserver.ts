@@ -1,4 +1,5 @@
 import { http } from '@/utils/request'
+import { apiPath } from '@/utils/apiPrefix'
 import type {
   DebugLoginRequest,
   ListPublishedRuleSetsResponse,
@@ -24,8 +25,8 @@ import type {
   ValidateRuleSetResponse,
 } from '@/types'
 
-const adminBase = '/mockserver/api/v1/admin'
-const authBase = '/mockserver/api/v1/auth'
+const adminBase = apiPath('/mockserver/api/v1/admin')
+const authBase = apiPath('/mockserver/api/v1/auth')
 
 export const mockserverApi = {
   debugLogin(data: DebugLoginRequest): Promise<LoginResponse> {

@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	authlib "github.com/MrMiaoMIMI/mockserver/internal/auth"
+	"github.com/MrMiaoMIMI/mockserver/internal/controller"
 )
 
 func TestTraceMiddlewareSetsLoggerTraceID(t *testing.T) {
@@ -183,5 +184,33 @@ func TestRecoveryMiddlewareCapturesPanic(t *testing.T) {
 	}
 	if got := recorder.Header().Get("X-Trace-ID"); got != "trace-panic-test" {
 		t.Fatalf("unexpected response trace id: %q", got)
+	}
+}
+
+func TestNewWithConfigAppliesAPIPrefixToAllRoutes(t *testing.T) {
+	adminController := controller.NewAdminController(nil, nil)
+	runtimeController := controller.NewRuntimeController(nil, nil)
+	engine := NewWithConfig(adminController, runtimeController, AuthConfig{}, RouteConfig{APIPrefix: "tenant-a/"}, nil, nil)
+
+	paths := map[string]bool{}
+	for _, route := range engine.Routes() {
+		paths[route.Path] = true
+	}
+
+	expectedPaths := []string{
+		"/tenant-a/mockserver/api/v1/auth/debug/login",
+		"/tenant-a/mockserver/api/v1/auth/me",
+		"/tenant-a/mockserver/api/v1/admin/rulesets",
+		"/tenant-a/mockserver/api/v1/sdk/decision",
+		"/tenant-a/mockserver/runtime/:namespace/http",
+		"/tenant-a/mockserver/runtime/:namespace/http/*runtime_path",
+	}
+	for _, path := range expectedPaths {
+		if !paths[path] {
+			t.Fatalf("expected route %s to be registered", path)
+		}
+	}
+	if paths["/mockserver/api/v1/admin/rulesets"] {
+		t.Fatalf("unexpected unprefixed admin route")
 	}
 }

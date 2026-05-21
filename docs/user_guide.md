@@ -23,7 +23,7 @@ MockServer 用规则来模拟协议调用结果。HTTP runtime 适合本地调�
 go run ./cmd/server
 ```
 
-服务默认读取 `etc/server.yml`，MySQL 连接配置和 JWT 登录配置都建议维护在这个文件里。HTTP 监听端口优先读取环境变量 `PORT`，未设置时默认使用 `8080`。
+服务默认读取 `etc/server.yml`，HTTP API 前缀、MySQL 连接配置和 JWT 登录配置都建议维护在这个文件里。HTTP 监听端口优先读取环境变量 `PORT`，未设置时默认使用 `8080`。
 
 如果要使用前端页面，需要 Node.js：
 
@@ -75,6 +75,33 @@ http://localhost:8080
 
 ```bash
 VITE_MOCKSERVER_PROXY_TARGET=http://127.0.0.1:18080 npm run dev
+```
+
+如果部署环境要求后端统一挂在某个路径前缀下，可以在后端配置：
+
+```yaml
+server:
+  api_prefix: "/tenant-a"
+```
+
+或用环境变量覆盖：
+
+```bash
+MOCKSERVER_API_PREFIX=/tenant-a go run ./cmd/server
+```
+
+配置后，现有接口会整体前移，例如 `/mockserver/api/v1/admin` 变为 `/tenant-a/mockserver/api/v1/admin`，runtime 路径也会变为 `/tenant-a/mockserver/runtime/{namespace}/http/{actual_path}`。前端使用同样的前缀：
+
+```bash
+VITE_API_PREFIX=/tenant-a npm run dev
+```
+
+静态部署时，也可以在页面加载前注入：
+
+```html
+<script>
+  window.__MOCKSERVER_API_PREFIX__ = '/tenant-a'
+</script>
 ```
 
 ## 4. 推荐的使用方式

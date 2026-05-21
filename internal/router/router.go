@@ -28,22 +28,31 @@ const (
 	operatorHeader           = "X-Operator"
 )
 
+type RouteConfig struct {
+	APIPrefix string
+}
+
 func New(adminController *controller.AdminController, runtimeController *controller.RuntimeController, authConfig AuthConfig, metricsController *controller.MetricsController) *gin.Engine {
 	return NewWithTraffic(adminController, runtimeController, authConfig, metricsController, nil)
 }
 
 func NewWithTraffic(adminController *controller.AdminController, runtimeController *controller.RuntimeController, authConfig AuthConfig, metricsController *controller.MetricsController, trafficController *controller.TrafficController) *gin.Engine {
+	return NewWithConfig(adminController, runtimeController, authConfig, RouteConfig{}, metricsController, trafficController)
+}
+
+func NewWithConfig(adminController *controller.AdminController, runtimeController *controller.RuntimeController, authConfig AuthConfig, routeConfig RouteConfig, metricsController *controller.MetricsController, trafficController *controller.TrafficController) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	engine.RedirectTrailingSlash = false
 	engine.Use(traceMiddleware(), operatorMiddleware(), accessLogMiddleware(), recoveryMiddleware())
 
 	authController := controller.NewAuthController(authConfig.JWT)
-	authRoutes := engine.Group("/mockserver/api/v1/auth")
+	root := engine.Group(normalizeRoutePrefix(routeConfig.APIPrefix))
+	authRoutes := root.Group("/mockserver/api/v1/auth")
 	authRoutes.POST("/debug/login", authController.DebugLogin)
 	authRoutes.GET("/me", jwtAuthMiddleware(authConfig), authController.CurrentUser)
 
-	admin := engine.Group("/mockserver/api/v1/admin")
+	admin := root.Group("/mockserver/api/v1/admin")
 	admin.Use(jwtAuthMiddleware(authConfig))
 	admin.POST("/rulesets", adminController.CreateOrUpdateDraft)
 	admin.GET("/rulesets", adminController.ListDrafts)
@@ -77,10 +86,21 @@ func NewWithTraffic(adminController *controller.AdminController, runtimeControll
 		admin.GET("/traffic/events", trafficController.ListEvents)
 		admin.GET("/traffic/events/:traffic_event_id", trafficController.GetEvent)
 	}
-	engine.POST("/mockserver/api/v1/sdk/decision", runtimeController.DecidePublished)
-	engine.Any("/mockserver/runtime/:namespace/http", runtimeController.HandleHTTP)
-	engine.Any("/mockserver/runtime/:namespace/http/*runtime_path", runtimeController.HandleHTTP)
+	root.POST("/mockserver/api/v1/sdk/decision", runtimeController.DecidePublished)
+	root.Any("/mockserver/runtime/:namespace/http", runtimeController.HandleHTTP)
+	root.Any("/mockserver/runtime/:namespace/http/*runtime_path", runtimeController.HandleHTTP)
 	return engine
+}
+
+func normalizeRoutePrefix(prefix string) string {
+	normalized := strings.TrimSpace(prefix)
+	if normalized == "" || normalized == "/" {
+		return ""
+	}
+	if !strings.HasPrefix(normalized, "/") {
+		normalized = "/" + normalized
+	}
+	return strings.TrimRight(normalized, "/")
 }
 
 func traceMiddleware() gin.HandlerFunc {

@@ -3,6 +3,18 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
+function normalizeApiPrefix(value?: string) {
+  const prefix = (value || '').trim()
+  if (!prefix || prefix === '/') {
+    return ''
+  }
+  const withLeadingSlash = prefix.startsWith('/') ? prefix : `/${prefix}`
+  return withLeadingSlash.replace(/\/+$/, '')
+}
+
+const apiPrefix = normalizeApiPrefix(process.env.VITE_API_PREFIX)
+const proxyBasePath = `${apiPrefix}/mockserver`
+
 export default defineConfig({
   plugins: [vue()],
   resolve: {
@@ -20,7 +32,7 @@ export default defineConfig({
   server: {
     port: 6173,
     proxy: {
-      '/mockserver': {
+      [proxyBasePath]: {
         target: process.env.VITE_MOCKSERVER_PROXY_TARGET || 'http://localhost:8080',
         changeOrigin: true,
         secure: false,

@@ -53,7 +53,7 @@ examples/mockserver.postman_collection.json  Postman 调试集合
 
 ## 启动
 
-服务默认读取 `etc/server.yml`。其中包含 MySQL 连接配置、连接池和 JWT 登录配置。HTTP 监听端口优先读取环境变量 `PORT`，未设置时默认使用 `8080`。
+服务默认读取 `etc/server.yml`。其中包含 HTTP API 前缀、MySQL 连接配置、连接池和 JWT 登录配置。HTTP 监听端口优先读取环境变量 `PORT`，未设置时默认使用 `8080`。
 
 ```bash
 go run ./cmd/server
@@ -68,6 +68,10 @@ MOCKSERVER_CONFIG_FILE=etc/server.yml go run ./cmd/server
 配置文件示例：
 
 ```yaml
+server:
+  # Optional. Prepended to every backend route, for example /tenant-a/mockserver/api/v1/admin.
+  api_prefix: ""
+
 db:
   database_groups:
     default:
@@ -86,11 +90,14 @@ db:
 
 ```bash
 PORT=18080 \
+MOCKSERVER_API_PREFIX=/tenant-a \
 MOCKSERVER_DB_HOST=127.0.0.1 \
 MOCKSERVER_DB_DATABASE_NAME=mockserver_db \
 MOCKSERVER_DB_DEBUG=true \
 go run ./cmd/server
 ```
+
+`server.api_prefix` 只表示部署路径前缀，会拼接在现有 `/mockserver/...` 路由之前；例如配置为 `/tenant-a` 后，debug 登录接口会变成 `/tenant-a/mockserver/api/v1/auth/debug/login`。前端可通过 `VITE_API_PREFIX=/tenant-a` 或在页面加载前设置 `window.__MOCKSERVER_API_PREFIX__ = "/tenant-a"` 使用同一个前缀。
 
 后端对象装配使用 `go.uber.org/fx v1.24.0`，各后端 package 暴露自己的 `Module`，由 `cmd/server` 入口统一组合；DB 访问层使用 `github.com/MrMiaoMIMI/goshared v0.0.13` 的 `dbspi.Manager` + `dbhelper.NewSoftDeleteTableStore`，并通过 common-field autofill 维护 `creator`、`updater`、`ctime`、`mtime`。当前 Go 基线为 `1.23.0`。
 
@@ -278,10 +285,16 @@ SPEX 字段：
 
 ## 管理接口
 
-统一前缀：
+未配置 `server.api_prefix` 时，管理接口统一前缀：
 
 ```text
 /mockserver/api/v1/admin
+```
+
+配置 `server.api_prefix: /tenant-a` 后，统一前缀变为：
+
+```text
+/tenant-a/mockserver/api/v1/admin
 ```
 
 如果启动时配置了 `auth.jwt_secret`，下面所有接口都需要携带 `Authorization: Bearer <jwt>`。

@@ -37,7 +37,7 @@
         <transition name="brand-copy">
           <div v-if="!collapse" class="signal-copy">
             <strong>admin</strong>
-            <span>/mockserver/api/v1</span>
+            <span>{{ adminApiPath }}</span>
           </div>
         </transition>
       </div>
@@ -50,6 +50,7 @@ import { computed, markRaw } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { Box, Connection, Tickets, TrendCharts } from '@element-plus/icons-vue'
 import { useMockserverStore } from '@/store'
+import { apiPath } from '@/utils/apiPrefix'
 
 defineProps<{
   collapse: boolean
@@ -57,6 +58,7 @@ defineProps<{
 
 const route = useRoute()
 const store = useMockserverStore()
+const adminApiPath = apiPath('/mockserver/api/v1')
 
 const navItems = computed(() => [
   {

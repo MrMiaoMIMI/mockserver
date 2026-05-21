@@ -14,12 +14,16 @@ const DefaultConfigFile = "etc/server.yml"
 
 type Config struct {
 	ConfigFile            string
+	APIPrefix             string
 	DB                    dbspi.DatabaseConfig
 	AuthJWTSecret         string
 	AuthDebugLoginEnabled bool
 }
 
 type fileConfig struct {
+	Server struct {
+		APIPrefix string `yaml:"api_prefix"`
+	} `yaml:"server"`
 	DB   dbspi.DatabaseConfig `yaml:"db"`
 	Auth struct {
 		JWTSecret         string `yaml:"jwt_secret"`
@@ -52,6 +56,9 @@ func Load() (Config, error) {
 	if err := applyEnvOverrides(&cfg); err != nil {
 		return Config{}, err
 	}
+	if err := normalize(&cfg); err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
 }
 
@@ -62,6 +69,7 @@ func Default() Config {
 }
 
 func applyFileConfig(cfg *Config, fc fileConfig) {
+	setString(&cfg.APIPrefix, fc.Server.APIPrefix)
 	if fc.DB.DatabaseGroups != nil {
 		cfg.DB = fc.DB
 	}
@@ -72,6 +80,7 @@ func applyFileConfig(cfg *Config, fc fileConfig) {
 }
 
 func applyEnvOverrides(cfg *Config) error {
+	setStringFromEnv(&cfg.APIPrefix, "MOCKSERVER_API_PREFIX")
 	setDefaultDatabaseGroupStringFromEnv(cfg, "MOCKSERVER_DB_HOST", func(group *dbspi.DatabaseGroupConfig, value string) {
 		group.Host = value
 	})
@@ -114,6 +123,29 @@ func applyEnvOverrides(cfg *Config) error {
 		return err
 	}
 	return nil
+}
+
+func normalize(cfg *Config) error {
+	apiPrefix, err := NormalizeAPIPrefix(cfg.APIPrefix)
+	if err != nil {
+		return err
+	}
+	cfg.APIPrefix = apiPrefix
+	return nil
+}
+
+func NormalizeAPIPrefix(value string) (string, error) {
+	prefix := strings.TrimSpace(value)
+	if prefix == "" || prefix == "/" {
+		return "", nil
+	}
+	if strings.ContainsAny(prefix, " \t\r\n?#:*") {
+		return "", fmt.Errorf("invalid api prefix %q: must be a literal URL path prefix", value)
+	}
+	if !strings.HasPrefix(prefix, "/") {
+		prefix = "/" + prefix
+	}
+	return strings.TrimRight(prefix, "/"), nil
 }
 
 func setString(dst *string, value string) {

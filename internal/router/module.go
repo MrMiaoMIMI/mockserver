@@ -12,6 +12,7 @@ import (
 var Module = fx.Module("router",
 	fx.Provide(
 		newAuthConfig,
+		newRouteConfig,
 		newEngine,
 	),
 )
@@ -25,6 +26,12 @@ func newAuthConfig(cfg config.Config) AuthConfig {
 	}
 }
 
+func newRouteConfig(cfg config.Config) RouteConfig {
+	return RouteConfig{
+		APIPrefix: cfg.APIPrefix,
+	}
+}
+
 type engineParams struct {
 	fx.In
 
@@ -33,8 +40,9 @@ type engineParams struct {
 	MetricsController *controller.MetricsController
 	TrafficController *controller.TrafficController
 	AuthConfig        AuthConfig
+	RouteConfig       RouteConfig
 }
 
 func newEngine(p engineParams) *gin.Engine {
-	return NewWithTraffic(p.AdminController, p.RuntimeController, p.AuthConfig, p.MetricsController, p.TrafficController)
+	return NewWithConfig(p.AdminController, p.RuntimeController, p.AuthConfig, p.RouteConfig, p.MetricsController, p.TrafficController)
 }

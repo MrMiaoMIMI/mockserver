@@ -1,3 +1,7 @@
+server:
+  # Optional. Prepended to every backend route, for example /tenant-a/mockserver/api/v1/admin.
+  api_prefix: ""
+
 db:
   database_groups:
     default:
