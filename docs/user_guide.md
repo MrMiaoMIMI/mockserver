@@ -23,7 +23,7 @@ MockServer 用规则来模拟协议调用结果。HTTP runtime 适合本地调�
 go run ./cmd/server
 ```
 
-服务默认读取 `etc/server.yml`，MySQL 连接配置、监听地址和 JWT 登录配置都建议维护在这个文件里。
+服务默认读取 `etc/server.yml`，MySQL 连接配置和 JWT 登录配置都建议维护在这个文件里。HTTP 监听端口优先读取环境变量 `PORT`，未设置时默认使用 `8080`。
 
 如果要使用前端页面，需要 Node.js：
 

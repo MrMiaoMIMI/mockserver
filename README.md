@@ -53,7 +53,7 @@ examples/mockserver.postman_collection.json  Postman 调试集合
 
 ## 启动
 
-服务默认读取 `etc/server.yml`。其中包含监听地址、MySQL 连接配置、连接池和 JWT 登录配置。
+服务默认读取 `etc/server.yml`。其中包含 MySQL 连接配置、连接池和 JWT 登录配置。HTTP 监听端口优先读取环境变量 `PORT`，未设置时默认使用 `8080`。
 
 ```bash
 go run ./cmd/server
@@ -68,9 +68,6 @@ MOCKSERVER_CONFIG_FILE=etc/server.yml go run ./cmd/server
 配置文件示例：
 
 ```yaml
-server:
-  address: ":8080"
-
 db:
   database_groups:
     default:
@@ -88,7 +85,7 @@ db:
 环境变量仍然可用于部署时覆盖配置，例如：
 
 ```bash
-MOCKSERVER_ADDR=:18080 \
+PORT=18080 \
 MOCKSERVER_DB_HOST=127.0.0.1 \
 MOCKSERVER_DB_DATABASE_NAME=mockserver_db \
 MOCKSERVER_DB_DEBUG=true \

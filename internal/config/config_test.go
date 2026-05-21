@@ -10,9 +10,7 @@ import (
 
 func TestLoadReadsServerYAMLAndEnvOverrides(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "server.yml")
-	content := `server:
-  address: ":19090"
-db:
+	content := `db:
   database_groups:
     default:
       host: "127.0.0.1"
@@ -33,7 +31,6 @@ auth:
 	}
 
 	t.Setenv("MOCKSERVER_CONFIG_FILE", configPath)
-	t.Setenv("MOCKSERVER_ADDR", ":18080")
 	t.Setenv("MOCKSERVER_DB_HOST", "mysql.local")
 	t.Setenv("MOCKSERVER_DB_PORT", "3307")
 	t.Setenv("MOCKSERVER_DB_DEBUG", "true")
@@ -44,9 +41,6 @@ auth:
 	}
 	if cfg.ConfigFile != configPath {
 		t.Fatalf("unexpected config file: %s", cfg.ConfigFile)
-	}
-	if cfg.Address != ":18080" {
-		t.Fatalf("unexpected address: %s", cfg.Address)
 	}
 	defaultGroup := cfg.DB.DatabaseGroups[dbspi.DefaultDatabaseGroupKey]
 	if defaultGroup.Host != "mysql.local" || defaultGroup.Port != 3307 {
@@ -76,7 +70,7 @@ func TestLoadReturnsErrorForExplicitMissingConfigFile(t *testing.T) {
 
 func TestLoadRejectsInvalidEnvValues(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "server.yml")
-	if err := os.WriteFile(configPath, []byte("server:\n  address: ':8081'\n"), 0o644); err != nil {
+	if err := os.WriteFile(configPath, []byte("auth:\n  jwt_secret: test-secret\n"), 0o644); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 	t.Setenv("MOCKSERVER_CONFIG_FILE", configPath)

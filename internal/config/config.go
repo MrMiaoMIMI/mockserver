@@ -14,16 +14,12 @@ const DefaultConfigFile = "etc/server.yml"
 
 type Config struct {
 	ConfigFile            string
-	Address               string
 	DB                    dbspi.DatabaseConfig
 	AuthJWTSecret         string
 	AuthDebugLoginEnabled bool
 }
 
 type fileConfig struct {
-	Server struct {
-		Address string `yaml:"address"`
-	} `yaml:"server"`
 	DB   dbspi.DatabaseConfig `yaml:"db"`
 	Auth struct {
 		JWTSecret         string `yaml:"jwt_secret"`
@@ -61,13 +57,11 @@ func Load() (Config, error) {
 
 func Default() Config {
 	return Config{
-		Address:               ":8080",
 		AuthDebugLoginEnabled: true,
 	}
 }
 
 func applyFileConfig(cfg *Config, fc fileConfig) {
-	setString(&cfg.Address, fc.Server.Address)
 	if fc.DB.DatabaseGroups != nil {
 		cfg.DB = fc.DB
 	}
@@ -78,7 +72,6 @@ func applyFileConfig(cfg *Config, fc fileConfig) {
 }
 
 func applyEnvOverrides(cfg *Config) error {
-	setStringFromEnv(&cfg.Address, "MOCKSERVER_ADDR")
 	setDefaultDatabaseGroupStringFromEnv(cfg, "MOCKSERVER_DB_HOST", func(group *dbspi.DatabaseGroupConfig, value string) {
 		group.Host = value
 	})

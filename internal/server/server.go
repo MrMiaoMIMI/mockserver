@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
+	"strconv"
+	"strings"
 
 	"github.com/MrMiaoMIMI/goshared/logger"
 	"github.com/gin-gonic/gin"
@@ -72,11 +75,27 @@ func initializeRuleSetData(p initializerParams) error {
 	return nil
 }
 
-func newHTTPServer(cfg config.Config, engine *gin.Engine) *http.Server {
-	return &http.Server{
-		Addr:    cfg.Address,
-		Handler: engine,
+func newHTTPServer(engine *gin.Engine) (*http.Server, error) {
+	address, err := listenAddressFromEnv()
+	if err != nil {
+		return nil, err
 	}
+	return &http.Server{
+		Addr:    address,
+		Handler: engine,
+	}, nil
+}
+
+func listenAddressFromEnv() (string, error) {
+	port := strings.TrimSpace(os.Getenv("PORT"))
+	if port == "" {
+		port = "8080"
+	}
+	parsed, err := strconv.ParseUint(port, 10, 16)
+	if err != nil || parsed == 0 {
+		return "", fmt.Errorf("invalid PORT %q: must be an integer from 1 to 65535", port)
+	}
+	return ":" + port, nil
 }
 
 func registerHTTPServer(lc fx.Lifecycle, server *http.Server) {
