@@ -23,7 +23,7 @@ MockServer 用规则来模拟协议调用结果。HTTP runtime 适合本地调�
 go run ./cmd/server
 ```
 
-服务默认读取 `etc/server.yml`，MySQL DSN、监听地址、启动规则源、JWT 登录和 admin token 都建议维护在这个文件里。
+服务默认读取 `etc/server.yml`，MySQL 连接配置、监听地址和 JWT 登录配置都建议维护在这个文件里。
 
 如果要使用前端页面，需要 Node.js：
 
@@ -33,7 +33,7 @@ npm install
 npm run dev
 ```
 
-运行时只支持 MySQL 存储；本地快速体验也需要配置 MySQL DSN。
+运行时只支持 MySQL 存储；本地快速体验也需要配置 MySQL 连接信息。
 
 ## 3. 快速启动
 
@@ -49,35 +49,7 @@ go run ./cmd/server
 http://127.0.0.1:8080
 ```
 
-### 3.2 启动时自动加载示例规则
-
-推荐第一次体验时直接加载示例规则：
-
-```yaml
-bootstrap:
-  ruleset_file: ./examples/ruleset.json
-```
-
-然后启动：
-
-```bash
-go run ./cmd/server
-```
-
-启动后示例规则会自动导入并发布，之后可以直接调用 runtime：
-
-```bash
-curl 'http://127.0.0.1:8080/mockserver/runtime/default/http/api/v1/debug?q1=qv1' \
-  -H 'Host: demo.com'
-```
-
-预期返回：
-
-```json
-{"message":"hello qv1","path":"/api/v1/debug"}
-```
-
-### 3.3 启动前端
+### 3.2 启动前端
 
 另开一个终端：
 
@@ -789,25 +761,6 @@ JWT 配置：
 auth:
   jwt_secret: mockserver-debug-secret
   debug_login_enabled: true
-  token_ttl_seconds: 86400
-```
-
-如果设置任意 admin token，没有 JWT 的 `/mockserver/api/v1/admin/*` 请求仍可用 token 鉴权；runtime mock 接口不受影响。
-
-超级 token：
-
-```yaml
-admin:
-  token: admin-secret
-```
-
-分权限 token：
-
-```yaml
-admin:
-  read_token: read-secret
-  write_token: write-secret
-  publish_token: publish-secret
 ```
 
 JWT 请求：
@@ -816,20 +769,7 @@ JWT 请求：
 Authorization: Bearer <jwt>
 ```
 
-admin token 兼容请求：
-
-```text
-X-Mockserver-Admin-Token: <token>
-```
-
-权限说明：
-
-| Token | 权限 |
-| --- | --- |
-| `admin.token` | 全部权限 |
-| `admin.read_token` | 查询、validate、simulate、rollback preview、metrics |
-| `admin.write_token` | 读权限 + draft 创建/更新/rule 管理 |
-| `admin.publish_token` | 读权限 + publish/rollback |
+admin API 只支持 JWT 鉴权；runtime mock 接口不受 JWT 影响。
 
 ## 11. 存储方式
 
@@ -839,13 +779,17 @@ X-Mockserver-Admin-Token: <token>
 
 ```yaml
 db:
-  driver: mysql
-  dsn: "root:123456@tcp(127.0.0.1:3306)/mockserver_db?charset=utf8mb4&parseTime=True&loc=Local"
-  init_schema: true
-  max_open_conns: 20
-  max_idle_conns: 5
-  conn_max_lifetime_seconds: 3600
-  debug: false
+  database_groups:
+    default:
+      host: "127.0.0.1"
+      port: 3306
+      user: "root"
+      password: "123456"
+      database_name: "mockserver_db"
+      max_open_conns: 20
+      max_idle_conns: 5
+      conn_max_lifetime_seconds: 3600
+      debug: false
 ```
 
 特点：
@@ -855,18 +799,12 @@ db:
 - 后端对象装配使用 `go.uber.org/fx v1.24.0`，各后端 package 暴露自己的 `Module`，HTTP server 由 Fx lifecycle 负责启动和优雅关闭。
 - DB 访问层使用 `github.com/MrMiaoMIMI/goshared/db/dbspi.Manager` + `dbhelper.NewSoftDeleteTableStore`。
 - `ctime`、`mtime`、`publish_time` 使用 UnixMilli；`creator`、`updater` 通过请求上下文自动填充。
+- 服务启动时不会执行 DDL 或迁移，数据库和表结构需要用户自行创建。
 
-默认会自动初始化 schema。schema 文件：
+schema 参考文件：
 
 ```text
 docs/db_schema.sql
-```
-
-如果你希望手动管理 schema：
-
-```yaml
-db:
-  init_schema: false
 ```
 
 ## 12. 常见问题
@@ -925,15 +863,15 @@ VITE_MOCKSERVER_PROXY_TARGET=http://127.0.0.1:18080 npm run dev
 
 检查：
 
-- 是否在 `etc/server.yml` 设置了 `admin.token` 或分权限 token。
-- 请求是否携带 `Authorization: Bearer <jwt>`，或兼容模式下携带 `X-Mockserver-Admin-Token: <token>`。
-- token 权限是否满足接口要求。
+- 是否在 `etc/server.yml` 设置了 `auth.jwt_secret`。
+- 请求是否携带 `Authorization: Bearer <jwt>`。
+- JWT 是否有效或签名不匹配。
 
 常见情况：
 
-- read token 不能 publish。
-- write token 不能 rollback。
-- publish token 可以 publish/rollback，也可以读。
+- 没有先通过 debug login 获取 JWT。
+- 使用了旧的 `X-Mockserver-Admin-Token` header。
+- 本地服务重启后更换了 `auth.jwt_secret`，旧 JWT 会失效。
 
 ### 12.4 template renderer 没有按预期渲染
 
@@ -986,12 +924,12 @@ VITE_MOCKSERVER_PROXY_TARGET=http://127.0.0.1:18080 npm run dev
 
 第一次使用建议按这个顺序：
 
-1. 后端启动：在 `etc/server.yml` 配置 `db.dsn` 和 `bootstrap.ruleset_file: ./examples/ruleset.json`，然后执行 `go run ./cmd/server`。
-2. 调 runtime：`GET /mockserver/runtime/default/http/api/v1/debug?q1=qv1`，带 `Host: demo.com`。
-3. 导入 Postman collection：`examples/mockserver.postman_collection.json`。
-4. 执行 `02 Simulate`，理解 explain 输出。
-5. 启动前端：`cd web && npm install && npm run dev`。
-6. 在前端修改一条 rule，保存 draft。
+1. 后端启动：先手工创建数据库和表结构，再在 `etc/server.yml` 配置 `db.database_groups.default`，然后执行 `go run ./cmd/server`。
+2. 启动前端：`cd web && npm install && npm run dev`。
+3. 在前端登录并创建一条 rule，保存 draft。
+4. 发布 rule 后调 runtime：`GET /mockserver/runtime/default/http/api/v1/debug?q1=qv1`，带 `Host: demo.com`。
+5. 导入 Postman collection：`examples/mockserver.postman_collection.json`。
+6. 执行 `02 Simulate`，理解 explain 输出。
 7. validate、simulate、publish。
 8. 再调 runtime，确认发布生效。
 9. 查看 snapshots，执行 rollback preview。

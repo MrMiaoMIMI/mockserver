@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -23,17 +24,13 @@ import (
 )
 
 func TestAdminRuntimeFlowWithMySQLRepository(t *testing.T) {
-	dsn := os.Getenv("MOCKSERVER_MYSQL_TEST_DSN")
-	if dsn == "" {
-		t.Skip("set MOCKSERVER_MYSQL_TEST_DSN to run MySQL integration test")
+	mysqlConfig, ok := mysqlTestConfigFromEnv(t)
+	if !ok {
+		t.Skip("set MOCKSERVER_MYSQL_TEST_HOST, MOCKSERVER_MYSQL_TEST_USER, and MOCKSERVER_MYSQL_TEST_DATABASE_NAME to run MySQL integration test")
 	}
 
 	ctx := context.Background()
-	db, err := dao.NewDB(ctx, config.Config{
-		DBDriver:     "mysql",
-		DBDSN:        dsn,
-		DBInitSchema: true,
-	})
+	db, err := dao.NewDB(mysqlConfig)
 	if err != nil {
 		t.Fatalf("NewDB() error = %v", err)
 	}
@@ -111,10 +108,7 @@ func TestAdminRuntimeFlowWithMySQLRepository(t *testing.T) {
 	runtimeResp := doJSON(t, handler, http.MethodGet, runtimePath, nil, http.StatusAccepted)
 	assertBytesContain(t, readBody(t, runtimeResp), `"store":"mysql"`)
 
-	reloadedDB, err := dao.NewDB(ctx, config.Config{
-		DBDriver: "mysql",
-		DBDSN:    dsn,
-	})
+	reloadedDB, err := dao.NewDB(mysqlConfig)
 	if err != nil {
 		t.Fatalf("reload NewDB() error = %v", err)
 	}
@@ -139,7 +133,38 @@ func newMySQLBackedHandler(ruleSetRepository dao.RuleSetRepository, namespaceRep
 	adminController := controller.NewAdminController(ruleSetView, namespaceView)
 	runtimeController := controller.NewRuntimeController(runtimeView, runtimeMetrics)
 	metricsController := controller.NewMetricsController(runtimeMetrics)
-	return router.New(adminController, runtimeController, router.AdminAuthConfig{}, metricsController)
+	return router.New(adminController, runtimeController, router.AuthConfig{}, metricsController)
+}
+
+func mysqlTestConfigFromEnv(t testing.TB) (config.Config, bool) {
+	t.Helper()
+	host := os.Getenv("MOCKSERVER_MYSQL_TEST_HOST")
+	user := os.Getenv("MOCKSERVER_MYSQL_TEST_USER")
+	databaseName := os.Getenv("MOCKSERVER_MYSQL_TEST_DATABASE_NAME")
+	if host == "" || user == "" || databaseName == "" {
+		return config.Config{}, false
+	}
+	portText := os.Getenv("MOCKSERVER_MYSQL_TEST_PORT")
+	if portText == "" {
+		portText = "3306"
+	}
+	port, err := strconv.ParseUint(portText, 10, 0)
+	if err != nil {
+		t.Fatalf("parse mysql port %q: %v", portText, err)
+	}
+	return config.Config{
+		DB: dbspi.DatabaseConfig{
+			DatabaseGroups: map[string]dbspi.DatabaseGroupConfig{
+				dbspi.DefaultDatabaseGroupKey: {
+					Host:         host,
+					Port:         uint(port),
+					User:         user,
+					Password:     os.Getenv("MOCKSERVER_MYSQL_TEST_PASSWORD"),
+					DatabaseName: databaseName,
+				},
+			},
+		},
+	}, true
 }
 
 func cleanupMySQLRuleset(t *testing.T, ctx context.Context, manager dbspi.Manager, id string) {

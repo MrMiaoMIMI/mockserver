@@ -3,30 +3,24 @@ package dao
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/MrMiaoMIMI/goshared/db/dbhelper"
 	"github.com/MrMiaoMIMI/goshared/db/dbspi"
 
-	"github.com/MrMiaoMIMI/mockserver/internal/config"
 	"github.com/MrMiaoMIMI/mockserver/internal/model/bo"
 	modeldo "github.com/MrMiaoMIMI/mockserver/internal/model/do"
 )
 
 func TestRuleSetRepositoryWithMySQL(t *testing.T) {
-	dsn := os.Getenv("MOCKSERVER_MYSQL_TEST_DSN")
-	if dsn == "" {
-		t.Skip("set MOCKSERVER_MYSQL_TEST_DSN to run MySQL integration test")
+	mysqlConfig, ok := mysqlTestConfigFromEnv(t)
+	if !ok {
+		t.Skip("set MOCKSERVER_MYSQL_TEST_HOST, MOCKSERVER_MYSQL_TEST_USER, and MOCKSERVER_MYSQL_TEST_DATABASE_NAME to run MySQL integration test")
 	}
 
 	ctx := context.Background()
-	db, err := NewDB(ctx, config.Config{
-		DBDriver:     "mysql",
-		DBDSN:        dsn,
-		DBInitSchema: true,
-	})
+	db, err := NewDB(mysqlConfig)
 	if err != nil {
 		t.Fatalf("NewDB() error = %v", err)
 	}
@@ -85,10 +79,7 @@ func TestRuleSetRepositoryWithMySQL(t *testing.T) {
 		t.Fatalf("Publish() error = %v", err)
 	}
 
-	reloadedDB, err := NewDB(ctx, config.Config{
-		DBDriver: "mysql",
-		DBDSN:    dsn,
-	})
+	reloadedDB, err := NewDB(mysqlConfig)
 	if err != nil {
 		t.Fatalf("reload NewDB() error = %v", err)
 	}

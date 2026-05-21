@@ -6,6 +6,7 @@ import (
 	"github.com/MrMiaoMIMI/goshared/logger"
 
 	"github.com/MrMiaoMIMI/mockserver/internal/config"
+	"github.com/MrMiaoMIMI/mockserver/internal/server"
 )
 
 func main() {
@@ -14,7 +15,7 @@ func main() {
 	if err != nil {
 		logger.Fatal(ctx, "Load config failed", logger.Err(err))
 	}
-	if err := run(ctx, cfg); err != nil {
+	if err := server.Run(ctx, cfg); err != nil {
 		logger.Fatal(ctx, "Mockserver stopped", logger.Err(err))
 	}
 }

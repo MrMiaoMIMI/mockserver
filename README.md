@@ -9,7 +9,7 @@
 - `selector` 粗筛 + 条件树精匹配
 - `respond` action + `static` / `template` / `cel` / `sequence` / `webhook` renderers
 - HTTP 管理接口
-- JWT debug 登录、admin token 兼容鉴权和 read / write / publish 权限分层
+- JWT debug 登录和 admin API 鉴权
 - publish / rollback snapshot 审计 metadata
 - DB schema / DAO repository 第一阶段骨架
 - HTTP runtime adapter
@@ -53,7 +53,7 @@ examples/mockserver.postman_collection.json  Postman 调试集合
 
 ## 启动
 
-服务默认读取 `etc/server.yml`。其中包含监听地址、启动规则源、MySQL DSN、连接池、JWT 登录和 admin token 配置。
+服务默认读取 `etc/server.yml`。其中包含监听地址、MySQL 连接配置、连接池和 JWT 登录配置。
 
 ```bash
 go run ./cmd/server
@@ -71,23 +71,26 @@ MOCKSERVER_CONFIG_FILE=etc/server.yml go run ./cmd/server
 server:
   address: ":8080"
 
-bootstrap:
-  ruleset_file: ""
-
 db:
-  driver: mysql
-  dsn: "root:123456@tcp(127.0.0.1:3306)/mockserver_db?charset=utf8mb4&parseTime=True&loc=Local"
-  init_schema: true
-  max_open_conns: 20
-  max_idle_conns: 5
-  conn_max_lifetime_seconds: 3600
-  debug: false
+  database_groups:
+    default:
+      host: "127.0.0.1"
+      port: 3306
+      user: "root"
+      password: "123456"
+      database_name: "mockserver_db"
+      max_open_conns: 20
+      max_idle_conns: 5
+      conn_max_lifetime_seconds: 3600
+      debug: false
 ```
 
 环境变量仍然可用于部署时覆盖配置，例如：
 
 ```bash
 MOCKSERVER_ADDR=:18080 \
+MOCKSERVER_DB_HOST=127.0.0.1 \
+MOCKSERVER_DB_DATABASE_NAME=mockserver_db \
 MOCKSERVER_DB_DEBUG=true \
 go run ./cmd/server
 ```
@@ -96,29 +99,7 @@ go run ./cmd/server
 
 运行时只支持 MySQL 存储，已移除其他存储分支。
 
-默认会执行内置 schema 初始化；如需手动管理迁移，可以在 `etc/server.yml` 里设置：
-
-```yaml
-db:
-  init_schema: false
-```
-
-如果希望启动时自动加载并发布规则，可以在 `bootstrap.ruleset_file` 里配置单文件、目录，或逗号分隔的多个路径：
-
-```yaml
-bootstrap:
-  ruleset_file: ./examples/ruleset.json
-```
-
-```yaml
-bootstrap:
-  ruleset_file: ./examples
-```
-
-```yaml
-bootstrap:
-  ruleset_file: ./examples/ruleset.json,./examples/ruleset-cel.json
-```
+服务启动时不会执行 DDL 或迁移；数据库和表结构需要用户自行创建，可以参考 `docs/db_schema.sql`。
 
 `/mockserver/api/v1/admin/*` 支持 JWT 鉴权。默认 `etc/server.yml` 开启 debug 登录，可在前端登录页手动填写邮箱，后端会签发 JWT；JWT 校验通过后会把邮箱写入请求 context，作为未显式传入 `X-Mockserver-Operator` 时的默认 operator。runtime mock 接口不受 JWT 影响。
 
@@ -126,7 +107,6 @@ bootstrap:
 auth:
   jwt_secret: mockserver-debug-secret
   debug_login_enabled: true
-  token_ttl_seconds: 86400
 ```
 
 debug 登录接口：
@@ -137,28 +117,11 @@ curl -X POST http://127.0.0.1:8080/mockserver/api/v1/auth/debug/login \
   -d '{"email":"admin@example.com"}'
 ```
 
-保留 admin token 兼容路径。一旦配置任意 admin token，没有 JWT 的 admin 请求仍可用 token 鉴权；runtime mock 接口不受 admin token 影响。
+admin API 只支持 JWT 鉴权，请求时使用：
 
-```yaml
-admin:
-  token: admin-secret
+```text
+Authorization: Bearer <jwt>
 ```
-
-也可以拆分权限 token：
-
-```yaml
-admin:
-  read_token: read-secret
-  write_token: write-secret
-  publish_token: publish-secret
-```
-
-- `admin.token`：超级 token，具备 read / write / publish 全部权限
-- `admin.read_token`：只读权限，可访问查询、validate、simulate、rollback preview、metrics
-- `admin.write_token`：读写 draft 权限，可创建/更新 ruleset 和 rule，但不能 publish / rollback
-- `admin.publish_token`：发布权限，可 publish / rollback，也可读
-
-请求时使用 `Authorization: Bearer <jwt>`。如果使用 admin token，推荐使用 `X-Mockserver-Admin-Token: <token>`；JWT 未启用时也兼容 `Authorization: Bearer <token>`。
 
 发布和回滚会在生成的新 snapshot 中记录 `audit` metadata。操作者优先来自 `X-Mockserver-Operator` 或 `X-Operator`，其次来自 JWT 里的用户邮箱，trace 来自 `X-Trace-ID`，原因来自请求 body 的 `reason` 字段；如果未传操作者且没有 JWT 用户，会记录为 `anonymous`。
 
@@ -324,7 +287,7 @@ SPEX 字段：
 /mockserver/api/v1/admin
 ```
 
-如果启动时配置了 `auth.jwt_secret`，下面所有接口都需要携带 `Authorization: Bearer <jwt>`。也可以继续用 `X-Mockserver-Admin-Token` 兼容旧的 admin token 调用。
+如果启动时配置了 `auth.jwt_secret`，下面所有接口都需要携带 `Authorization: Bearer <jwt>`。
 
 接口列表：
 
@@ -427,16 +390,7 @@ GET /mockserver/runtime/default/http/api/v1/debug?q1=qv1
 go run ./cmd/server
 ```
 
-或者在 `etc/server.yml` 中配置规则源后启动：
-
-```yaml
-bootstrap:
-  ruleset_file: ./examples/ruleset.json
-```
-
 ### 2. 导入示例规则
-
-如果你上一条已经用 `bootstrap.ruleset_file` 自动加载了规则，这一步可以跳过。
 
 ```bash
 curl -X POST http://127.0.0.1:8080/mockserver/api/v1/admin/rulesets \
@@ -745,11 +699,11 @@ curl 'http://127.0.0.1:8080/mockserver/api/v1/admin/traffic/events/35'
 ## 已知限制
 
 - 运行时只支持 MySQL 存储。
-- 当前启动时支持单文件、目录扫描和逗号分隔多路径，但仍然只支持 `.json` 规则文件。
+- 示例规则需要通过前端、Postman 或 admin API 手动导入和发布。
 - 当前版本快照支持查询、预演、回滚和 MySQL 存储；DB schema 位于 `docs/db_schema.sql`。
 - 后端启动装配已切到 `go.uber.org/fx v1.24.0`；HTTP server 由 Fx lifecycle 负责启动和优雅关闭。
-- DB 访问层已切到 `goshared/db/dbspi.Manager` + `dbhelper.NewSoftDeleteTableStore`；提供 `MOCKSERVER_MYSQL_TEST_DSN` 时会执行真实 MySQL 集成测试。
-- admin token 已支持 read / write / publish 权限分层，JWT debug 登录已可用，但还没有完整 RBAC 和租户隔离。
+- DB 访问层已切到 `goshared/db/dbspi.Manager` + `dbhelper.NewSoftDeleteTableStore`；提供 MySQL 测试连接字段时会执行真实 MySQL 集成测试。
+- JWT debug 登录已可用，但还没有完整 RBAC 和租户隔离。
 - snapshot 已记录 publish / rollback 审计 metadata，但还没有独立审计表、不可变审计日志和审批流。
 - `renderer: "template"` 已支持常用 helper，但还没有做模板沙箱、模板限流和更强的调试信息。
 - `request.body` 的路径访问目前只覆盖基础 JSON 对象场景。
@@ -767,10 +721,14 @@ curl 'http://127.0.0.1:8080/mockserver/api/v1/admin/traffic/events/35'
 GOCACHE=$(pwd)/.gocache go test ./...
 ```
 
-如果要跑 MySQL DAO 集成测试，需要提供测试 DSN：
+如果要跑 MySQL DAO 集成测试，需要提供测试库连接字段：
 该测试会覆盖 DAO repository 和 admin/runtime HTTP 端到端链路。
 
 ```bash
-MOCKSERVER_MYSQL_TEST_DSN='root:123456@tcp(127.0.0.1:3306)/mockserver_db?charset=utf8mb4&parseTime=True&loc=Local' \
+MOCKSERVER_MYSQL_TEST_HOST=127.0.0.1 \
+MOCKSERVER_MYSQL_TEST_PORT=3306 \
+MOCKSERVER_MYSQL_TEST_USER=root \
+MOCKSERVER_MYSQL_TEST_PASSWORD=123456 \
+MOCKSERVER_MYSQL_TEST_DATABASE_NAME=mockserver_db \
 GOCACHE=$(pwd)/.gocache go test ./...
 ```

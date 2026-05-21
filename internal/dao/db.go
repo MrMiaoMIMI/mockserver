@@ -20,22 +20,10 @@ type dbImpl struct {
 	trafficRepository   TrafficRepository
 }
 
-func NewDB(ctx context.Context, cfg config.Config) (DB, error) {
-	if cfg.DBDriver != "" && cfg.DBDriver != "mysql" {
-		return nil, fmt.Errorf("unsupported db.driver %q; current db backend supports mysql", cfg.DBDriver)
-	}
-	if cfg.DBDSN == "" {
-		return nil, fmt.Errorf("db.dsn is required")
-	}
-
-	manager, err := newManagerFromConfig(cfg)
+func NewDB(cfg config.Config) (DB, error) {
+	manager, err := newManagerFromConfig(cfg.DB)
 	if err != nil {
 		return nil, fmt.Errorf("create db manager: %w", err)
-	}
-	if cfg.DBInitSchema {
-		if err := applySchema(ctx, manager, defaultSchemaSQL); err != nil {
-			return nil, fmt.Errorf("apply db schema: %w", err)
-		}
 	}
 
 	ruleSetTableDAO := newGosharedRuleSetTableDAO(manager)
@@ -49,18 +37,8 @@ func NewDB(ctx context.Context, cfg config.Config) (DB, error) {
 	}, nil
 }
 
-func newManagerFromConfig(cfg config.Config) (dbspi.Manager, error) {
-	return dbhelper.NewManager(dbspi.DatabaseConfig{
-		DatabaseGroups: map[string]dbspi.DatabaseGroupConfig{
-			dbspi.DefaultDatabaseGroupKey: {
-				DSN:                    cfg.DBDSN,
-				Debug:                  cfg.DBDebug,
-				MaxOpenConns:           cfg.DBMaxOpenConns,
-				MaxIdleConns:           cfg.DBMaxIdleConns,
-				ConnMaxLifetimeSeconds: cfg.DBConnMaxLifetimeSeconds,
-			},
-		},
-	}, dbhelper.WithCommonFieldAutoFill(true), dbhelper.WithCommonFieldTimeProvider(func(context.Context) uint64 {
+func newManagerFromConfig(dbConfig dbspi.DatabaseConfig) (dbspi.Manager, error) {
+	return dbhelper.NewManager(dbConfig, dbhelper.WithCommonFieldAutoFill(true), dbhelper.WithCommonFieldTimeProvider(func(context.Context) uint64 {
 		return uint64(time.Now().UnixMilli())
 	}), dbhelper.WithCommonFieldOperatorProvider(func(ctx context.Context) (string, bool) {
 		if operator, ok := dbspi.OperatorFromContext(ctx); ok {

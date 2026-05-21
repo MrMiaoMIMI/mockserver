@@ -8,7 +8,7 @@ import (
 )
 
 func TestGenerateTokenContainsOnlyEmailUserClaim(t *testing.T) {
-	cfg := Config{JWTSecret: "test-secret", TokenTTLSeconds: 3600}
+	cfg := Config{JWTSecret: "test-secret"}
 	token, err := GenerateToken(cfg, " user@example.com ")
 	if err != nil {
 		t.Fatalf("GenerateToken() error = %v", err)
@@ -31,5 +31,8 @@ func TestGenerateTokenContainsOnlyEmailUserClaim(t *testing.T) {
 	}
 	if _, ok := claims["name"]; ok {
 		t.Fatalf("unexpected name claim: %v", claims["name"])
+	}
+	if _, ok := claims["exp"]; ok {
+		t.Fatalf("unexpected exp claim: %v", claims["exp"])
 	}
 }

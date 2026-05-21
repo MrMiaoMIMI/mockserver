@@ -28,11 +28,11 @@ const (
 	operatorHeader           = "X-Operator"
 )
 
-func New(adminController *controller.AdminController, runtimeController *controller.RuntimeController, authConfig AdminAuthConfig, metricsController *controller.MetricsController) *gin.Engine {
+func New(adminController *controller.AdminController, runtimeController *controller.RuntimeController, authConfig AuthConfig, metricsController *controller.MetricsController) *gin.Engine {
 	return NewWithTraffic(adminController, runtimeController, authConfig, metricsController, nil)
 }
 
-func NewWithTraffic(adminController *controller.AdminController, runtimeController *controller.RuntimeController, authConfig AdminAuthConfig, metricsController *controller.MetricsController, trafficController *controller.TrafficController) *gin.Engine {
+func NewWithTraffic(adminController *controller.AdminController, runtimeController *controller.RuntimeController, authConfig AuthConfig, metricsController *controller.MetricsController, trafficController *controller.TrafficController) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	engine.RedirectTrailingSlash = false
@@ -44,7 +44,7 @@ func NewWithTraffic(adminController *controller.AdminController, runtimeControll
 	authRoutes.GET("/me", jwtAuthMiddleware(authConfig), authController.CurrentUser)
 
 	admin := engine.Group("/mockserver/api/v1/admin")
-	admin.Use(jwtAuthMiddleware(authConfig), adminAuthMiddleware(authConfig))
+	admin.Use(jwtAuthMiddleware(authConfig))
 	admin.POST("/rulesets", adminController.CreateOrUpdateDraft)
 	admin.GET("/rulesets", adminController.ListDrafts)
 	admin.GET("/rulesets/:ruleset_id", adminController.GetDraft)

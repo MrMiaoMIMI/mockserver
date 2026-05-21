@@ -11,21 +11,16 @@ import (
 
 var Module = fx.Module("router",
 	fx.Provide(
-		newAdminAuthConfig,
+		newAuthConfig,
 		newEngine,
 	),
 )
 
-func newAdminAuthConfig(cfg config.Config) AdminAuthConfig {
-	return AdminAuthConfig{
-		AdminToken:   cfg.AdminToken,
-		ReadToken:    cfg.AdminReadToken,
-		WriteToken:   cfg.AdminWriteToken,
-		PublishToken: cfg.AdminPublishToken,
+func newAuthConfig(cfg config.Config) AuthConfig {
+	return AuthConfig{
 		JWT: authlib.Config{
 			JWTSecret:         cfg.AuthJWTSecret,
 			DebugLoginEnabled: cfg.AuthDebugLoginEnabled,
-			TokenTTLSeconds:   cfg.AuthTokenTTLSeconds,
 		},
 	}
 }
@@ -37,7 +32,7 @@ type engineParams struct {
 	RuntimeController *controller.RuntimeController
 	MetricsController *controller.MetricsController
 	TrafficController *controller.TrafficController
-	AuthConfig        AdminAuthConfig
+	AuthConfig        AuthConfig
 }
 
 func newEngine(p engineParams) *gin.Engine {

@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	authlib "github.com/MrMiaoMIMI/mockserver/internal/auth"
 	"github.com/MrMiaoMIMI/mockserver/internal/controller"
 	"github.com/MrMiaoMIMI/mockserver/internal/observability"
 	"github.com/MrMiaoMIMI/mockserver/internal/router"
@@ -31,7 +32,7 @@ func TestAdminPublishAndRuntimeFlow(t *testing.T) {
 	adminController := controller.NewAdminController(ruleSetView, namespaceView)
 	runtimeController := controller.NewRuntimeController(runtimeView, runtimeMetrics)
 	metricsController := controller.NewMetricsController(runtimeMetrics)
-	handler := router.New(adminController, runtimeController, router.AdminAuthConfig{}, metricsController)
+	handler := router.New(adminController, runtimeController, router.AuthConfig{}, metricsController)
 
 	upsertBody := map[string]any{
 		"name":      "http default",
@@ -227,7 +228,7 @@ func TestSDKDecisionEndpointReturnsPublishedHitDecision(t *testing.T) {
 
 	adminController := controller.NewAdminController(ruleSetView, namespaceView)
 	runtimeController := controller.NewRuntimeController(runtimeView, runtimeMetrics)
-	handler := router.New(adminController, runtimeController, router.AdminAuthConfig{}, nil)
+	handler := router.New(adminController, runtimeController, router.AuthConfig{}, nil)
 
 	ruleSetBody := map[string]any{
 		"id":        "sdk-decision-ruleset",
@@ -312,7 +313,7 @@ func TestSDKDecisionEndpointReturnsForwardDecisionsAndDoesNotForward(t *testing.
 
 	adminController := controller.NewAdminController(ruleSetView, namespaceView)
 	runtimeController := controller.NewRuntimeController(runtimeView, observability.NewRuntimeMetrics())
-	handler := router.New(adminController, runtimeController, router.AdminAuthConfig{}, nil)
+	handler := router.New(adminController, runtimeController, router.AuthConfig{}, nil)
 
 	rulesetMissDecision := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/sdk/decision", map[string]any{
 		"event": map[string]any{
@@ -425,7 +426,7 @@ func TestNamespaceFallbackResponseFlow(t *testing.T) {
 
 	adminController := controller.NewAdminController(ruleSetView, namespaceView)
 	runtimeController := controller.NewRuntimeController(runtimeView, observability.NewRuntimeMetrics())
-	handler := router.New(adminController, runtimeController, router.AdminAuthConfig{}, nil)
+	handler := router.New(adminController, runtimeController, router.AuthConfig{}, nil)
 
 	namespaceBody := map[string]any{
 		"id":   "fallback-namespace",
@@ -498,7 +499,7 @@ func TestSDKDecisionEndpointReturnsResponseFallbackDecisions(t *testing.T) {
 
 	adminController := controller.NewAdminController(ruleSetView, namespaceView)
 	runtimeController := controller.NewRuntimeController(runtimeView, observability.NewRuntimeMetrics())
-	handler := router.New(adminController, runtimeController, router.AdminAuthConfig{}, nil)
+	handler := router.New(adminController, runtimeController, router.AuthConfig{}, nil)
 
 	namespaceResp := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/namespaces", map[string]any{
 		"id":   "sdk-response-fallback",
@@ -604,7 +605,7 @@ func TestSDKDecisionEndpointEndToEndDecisions(t *testing.T) {
 
 	adminController := controller.NewAdminController(ruleSetView, namespaceView)
 	runtimeController := controller.NewRuntimeController(runtimeView, observability.NewRuntimeMetrics())
-	handler := router.New(adminController, runtimeController, router.AdminAuthConfig{}, nil)
+	handler := router.New(adminController, runtimeController, router.AuthConfig{}, nil)
 
 	doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/rulesets", map[string]any{
 		"id":        "sdk-e2e",
@@ -706,7 +707,7 @@ func TestAdminListProtocols(t *testing.T) {
 
 	adminController := controller.NewAdminController(ruleSetView, namespaceView)
 	runtimeController := controller.NewRuntimeController(runtimeView, observability.NewRuntimeMetrics())
-	handler := router.New(adminController, runtimeController, router.AdminAuthConfig{}, nil)
+	handler := router.New(adminController, runtimeController, router.AuthConfig{}, nil)
 
 	resp := doJSON(t, handler, http.MethodGet, "/mockserver/api/v1/admin/protocols", nil, http.StatusOK)
 	body := readBody(t, resp)
@@ -730,7 +731,7 @@ func TestSDKDecisionEndpointCacheDecisionEndToEnd(t *testing.T) {
 
 	adminController := controller.NewAdminController(ruleSetView, namespaceView)
 	runtimeController := controller.NewRuntimeController(runtimeView, observability.NewRuntimeMetrics())
-	handler := router.New(adminController, runtimeController, router.AdminAuthConfig{}, nil)
+	handler := router.New(adminController, runtimeController, router.AuthConfig{}, nil)
 
 	doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/rulesets", map[string]any{
 		"id":        "cache-sdk",
@@ -801,7 +802,7 @@ func TestSDKDecisionEndpointSPEXDecisionEndToEnd(t *testing.T) {
 
 	adminController := controller.NewAdminController(ruleSetView, namespaceView)
 	runtimeController := controller.NewRuntimeController(runtimeView, observability.NewRuntimeMetrics())
-	handler := router.New(adminController, runtimeController, router.AdminAuthConfig{}, nil)
+	handler := router.New(adminController, runtimeController, router.AuthConfig{}, nil)
 
 	doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/rulesets", map[string]any{
 		"id":        "spex-sdk",
@@ -879,7 +880,7 @@ func TestNamespaceCreateDefaultsToForwardFallback(t *testing.T) {
 
 	adminController := controller.NewAdminController(ruleSetView, namespaceView)
 	runtimeController := controller.NewRuntimeController(runtimeView, observability.NewRuntimeMetrics())
-	handler := router.New(adminController, runtimeController, router.AdminAuthConfig{}, nil)
+	handler := router.New(adminController, runtimeController, router.AuthConfig{}, nil)
 
 	createResp := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/namespaces", map[string]any{
 		"id":          "pass-through",
@@ -943,7 +944,7 @@ func TestAdminBusinessErrorsUseSpecificStatusCodes(t *testing.T) {
 
 	adminController := controller.NewAdminController(ruleSetView, namespaceView)
 	runtimeController := controller.NewRuntimeController(runtimeView, observability.NewRuntimeMetrics())
-	handler := router.New(adminController, runtimeController, router.AdminAuthConfig{}, nil)
+	handler := router.New(adminController, runtimeController, router.AuthConfig{}, nil)
 
 	doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/namespaces", map[string]any{
 		"id":   "tenant-a",
@@ -1011,7 +1012,7 @@ func TestDefaultNamespaceRulesetMissForwardsOriginalRequest(t *testing.T) {
 
 	adminController := controller.NewAdminController(ruleSetView, namespaceView)
 	runtimeController := controller.NewRuntimeController(runtimeView, observability.NewRuntimeMetrics())
-	handler := router.New(adminController, runtimeController, router.AdminAuthConfig{}, nil)
+	handler := router.New(adminController, runtimeController, router.AuthConfig{}, nil)
 
 	namespaceResp := doJSON(t, handler, http.MethodGet, "/mockserver/api/v1/admin/namespaces/default", nil, http.StatusOK)
 	namespaceBody := readBody(t, namespaceResp)
@@ -1083,7 +1084,7 @@ func TestDefaultNamespaceRuleMissForwardsOriginalRequest(t *testing.T) {
 
 	adminController := controller.NewAdminController(ruleSetView, namespaceView)
 	runtimeController := controller.NewRuntimeController(runtimeView, observability.NewRuntimeMetrics())
-	handler := router.New(adminController, runtimeController, router.AdminAuthConfig{}, nil)
+	handler := router.New(adminController, runtimeController, router.AuthConfig{}, nil)
 
 	ruleSetBody := map[string]any{
 		"id":        "default-forward-rule-miss",
@@ -1167,7 +1168,7 @@ func TestNamespaceForwardFallbackUsesOriginalRequestTarget(t *testing.T) {
 
 	adminController := controller.NewAdminController(ruleSetView, namespaceView)
 	runtimeController := controller.NewRuntimeController(runtimeView, observability.NewRuntimeMetrics())
-	handler := router.New(adminController, runtimeController, router.AdminAuthConfig{}, nil)
+	handler := router.New(adminController, runtimeController, router.AuthConfig{}, nil)
 
 	namespaceResp := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/namespaces", map[string]any{
 		"id":       "forward-namespace",
@@ -1227,7 +1228,7 @@ func TestNamespaceForwardFallbackUsesOriginalRequestTarget(t *testing.T) {
 	assertBytesContain(t, readBody(t, ruleMissResp), `"forwarded":true`)
 }
 
-func TestAdminAuthMiddleware(t *testing.T) {
+func TestAdminJWTAuthMiddleware(t *testing.T) {
 	ruleSetRepository := newTestRuleSetRepository()
 	namespaceService := service.NewNamespaceService(ruleSetRepository)
 	ruleSetService := service.NewRuleSetService(ruleSetRepository, namespaceService)
@@ -1238,16 +1239,19 @@ func TestAdminAuthMiddleware(t *testing.T) {
 
 	adminController := controller.NewAdminController(ruleSetView, namespaceView)
 	runtimeController := controller.NewRuntimeController(runtimeView, observability.NewRuntimeMetrics())
-	handler := router.New(adminController, runtimeController, router.AdminAuthConfig{
-		AdminToken:   "admin-token",
-		ReadToken:    "read-token",
-		WriteToken:   "write-token",
-		PublishToken: "publish-token",
-	}, nil)
+	authConfig := router.AuthConfig{JWT: authlib.Config{JWTSecret: "test-secret", DebugLoginEnabled: true}}
+	token, err := authlib.GenerateToken(authConfig.JWT, "admin@example.com")
+	if err != nil {
+		t.Fatalf("GenerateToken() error = %v", err)
+	}
+	handler := router.New(adminController, runtimeController, authConfig, nil)
 
 	doJSON(t, handler, http.MethodGet, "/mockserver/api/v1/admin/rulesets", nil, http.StatusUnauthorized)
 	doJSONWithHeaders(t, handler, http.MethodGet, "/mockserver/api/v1/admin/rulesets", nil, map[string]string{
-		"Authorization": "Bearer read-token",
+		"X-Mockserver-Admin-Token": "legacy-token",
+	}, http.StatusUnauthorized)
+	doJSONWithHeaders(t, handler, http.MethodGet, "/mockserver/api/v1/admin/rulesets", nil, map[string]string{
+		"Authorization": "Bearer " + token,
 	}, http.StatusOK)
 
 	authRuleSet := map[string]any{
@@ -1275,20 +1279,14 @@ func TestAdminAuthMiddleware(t *testing.T) {
 	}
 
 	doJSONWithHeaders(t, handler, http.MethodPost, "/mockserver/api/v1/admin/rulesets", authRuleSet, map[string]string{
-		"Authorization": "Bearer read-token",
-	}, http.StatusForbidden)
-	doJSONWithHeaders(t, handler, http.MethodPost, "/mockserver/api/v1/admin/rulesets", authRuleSet, map[string]string{
-		"Authorization": "Bearer write-token",
+		"Authorization": "Bearer " + token,
 	}, http.StatusOK)
-	doJSONWithHeaders(t, handler, http.MethodPost, "/mockserver/api/v1/admin/rulesets/auth-case/publish", nil, map[string]string{
-		"Authorization": "Bearer write-token",
-	}, http.StatusForbidden)
 	publishResp := doJSONWithHeaders(t, handler, http.MethodPost, "/mockserver/api/v1/admin/rulesets/auth-case/publish", map[string]any{
 		"reason": "auth publish",
 	}, map[string]string{
-		"X-Mockserver-Admin-Token": "publish-token",
-		"X-Mockserver-Operator":    "admin@example.com",
-		"X-Trace-ID":               "trace-auth-publish",
+		"Authorization":         "Bearer " + token,
+		"X-Mockserver-Operator": "admin@example.com",
+		"X-Trace-ID":            "trace-auth-publish",
 	}, http.StatusOK)
 	publishBody := readBody(t, publishResp)
 	assertBytesContain(t, publishBody, `"audit"`)
@@ -1312,7 +1310,7 @@ func TestAdminDraftRuleManagementFlow(t *testing.T) {
 
 	adminController := controller.NewAdminController(ruleSetView, namespaceView)
 	runtimeController := controller.NewRuntimeController(runtimeView, observability.NewRuntimeMetrics())
-	handler := router.New(adminController, runtimeController, router.AdminAuthConfig{}, nil)
+	handler := router.New(adminController, runtimeController, router.AuthConfig{}, nil)
 
 	baseRuleSet := map[string]any{
 		"id":        "rule-management",
@@ -1402,7 +1400,7 @@ func TestAdminRollbackPublishedSnapshot(t *testing.T) {
 
 	adminController := controller.NewAdminController(ruleSetView, namespaceView)
 	runtimeController := controller.NewRuntimeController(runtimeView, observability.NewRuntimeMetrics())
-	handler := router.New(adminController, runtimeController, router.AdminAuthConfig{}, nil)
+	handler := router.New(adminController, runtimeController, router.AuthConfig{}, nil)
 
 	v1Body := map[string]any{
 		"id":        "rollback-case",

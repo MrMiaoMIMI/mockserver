@@ -1,28 +1,17 @@
 server:
   address: ":8080"
 
-bootstrap:
-  # Optional. Supports file, directory, or comma-separated paths.
-  ruleset_file: ""
-
 db:
-  driver: mysql
-  dsn: "root:123456@tcp(127.0.0.1:3306)/mockserver_db?charset=utf8mb4&parseTime=True&loc=Local"
-  init_schema: true
-  max_open_conns: 20
-  max_idle_conns: 5
-  conn_max_lifetime_seconds: 3600
-  debug: false
-
-admin:
-  # Leave empty when auth is not enabled.
-  token: ""
-  read_token: ""
-  write_token: ""
-  publish_token: ""
+  database_groups:
+    default:
+      host: "127.0.0.1"
+      port: 3306
+      user: "root"
+      password: "123456"
+      database_name: "mockserver_db"
+      debug: true
 
 auth:
   # Local debug secret. Override with MOCKSERVER_AUTH_JWT_SECRET in shared environments.
   jwt_secret: "mockserver-debug-secret"
   debug_login_enabled: true
-  token_ttl_seconds: 86400

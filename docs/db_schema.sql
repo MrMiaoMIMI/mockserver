@@ -1,9 +1,9 @@
 -- Mockserver MySQL schema.
--- The runtime bootstrap executes the table DDL against the database selected by
--- db.dsn. For manual setup, create and use the guide-compliant database first.
+-- Run this manually before starting the service if the database and tables do
+-- not exist yet.
 
--- Open comments if needed to rebuild database
-DROP DATABASE mockserver_db;
+-- Uncomment if needed to rebuild database.
+-- DROP DATABASE IF EXISTS mockserver_db;
 
 CREATE DATABASE IF NOT EXISTS mockserver_db
     DEFAULT CHARACTER SET utf8mb4

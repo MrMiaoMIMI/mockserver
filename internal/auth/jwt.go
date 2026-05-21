@@ -14,7 +14,6 @@ const (
 type Config struct {
 	JWTSecret         string
 	DebugLoginEnabled bool
-	TokenTTLSeconds   int
 }
 
 type Claims struct {
@@ -24,7 +23,6 @@ type Claims struct {
 
 var (
 	ErrInvalidToken = errors.New("invalid token")
-	ErrExpiredToken = errors.New("token has expired")
 	ErrMissingEmail = errors.New("token email is required")
 )
 
@@ -59,9 +57,6 @@ func ValidateToken(cfg Config, tokenString string) (*Claims, error) {
 		return []byte(cfg.JWTSecret), nil
 	})
 	if err != nil {
-		if errors.Is(err, jwt.ErrTokenExpired) {
-			return nil, ErrExpiredToken
-		}
 		return nil, ErrInvalidToken
 	}
 	claims, ok := token.Claims.(*Claims)

@@ -57,7 +57,7 @@ func TestOperatorMiddlewareSetsDBOperator(t *testing.T) {
 }
 
 func TestJWTAuthMiddlewareSetsEmailAsDefaultOperator(t *testing.T) {
-	config := AdminAuthConfig{JWT: authlib.Config{JWTSecret: "test-secret", DebugLoginEnabled: true, TokenTTLSeconds: 3600}}
+	config := AuthConfig{JWT: authlib.Config{JWTSecret: "test-secret", DebugLoginEnabled: true}}
 	token, err := authlib.GenerateToken(config.JWT, "jwt-user@example.com")
 	if err != nil {
 		t.Fatalf("GenerateToken() error = %v", err)
@@ -92,7 +92,7 @@ func TestJWTAuthMiddlewareSetsEmailAsDefaultOperator(t *testing.T) {
 }
 
 func TestJWTAuthMiddlewarePreservesExplicitOperatorHeader(t *testing.T) {
-	config := AdminAuthConfig{JWT: authlib.Config{JWTSecret: "test-secret", DebugLoginEnabled: true, TokenTTLSeconds: 3600}}
+	config := AuthConfig{JWT: authlib.Config{JWTSecret: "test-secret", DebugLoginEnabled: true}}
 	token, err := authlib.GenerateToken(config.JWT, "jwt-user@example.com")
 	if err != nil {
 		t.Fatalf("GenerateToken() error = %v", err)
@@ -122,7 +122,7 @@ func TestJWTAuthMiddlewarePreservesExplicitOperatorHeader(t *testing.T) {
 }
 
 func TestJWTAuthMiddlewareRejectsMissingToken(t *testing.T) {
-	config := AdminAuthConfig{JWT: authlib.Config{JWTSecret: "test-secret", DebugLoginEnabled: true, TokenTTLSeconds: 3600}}
+	config := AuthConfig{JWT: authlib.Config{JWTSecret: "test-secret", DebugLoginEnabled: true}}
 	engine := gin.New()
 	engine.Use(jwtAuthMiddleware(config))
 	engine.GET("/mockserver/api/v1/admin/rulesets", func(c *gin.Context) {
@@ -143,6 +143,25 @@ func TestJWTAuthMiddlewareRejectsMissingToken(t *testing.T) {
 	}
 	if body["message"] != "jwt token is required" {
 		t.Fatalf("unexpected response body: %v", body)
+	}
+}
+
+func TestJWTAuthMiddlewareRejectsLegacyAdminTokenHeader(t *testing.T) {
+	config := AuthConfig{JWT: authlib.Config{JWTSecret: "test-secret", DebugLoginEnabled: true}}
+	engine := gin.New()
+	engine.Use(jwtAuthMiddleware(config))
+	engine.GET("/mockserver/api/v1/admin/rulesets", func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/mockserver/api/v1/admin/rulesets", nil)
+	req.Header.Set("X-Mockserver-Admin-Token", "legacy-token")
+	recorder := httptest.NewRecorder()
+
+	engine.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("unexpected status: %d", recorder.Code)
 	}
 }
 

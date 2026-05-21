@@ -4,31 +4,29 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/MrMiaoMIMI/goshared/db/dbspi"
 )
 
 func TestLoadReadsServerYAMLAndEnvOverrides(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "server.yml")
 	content := `server:
   address: ":19090"
-bootstrap:
-  ruleset_file: "./examples"
 db:
-  driver: mysql
-  dsn: "user:pass@tcp(127.0.0.1:3306)/mockserver_db?charset=utf8mb4&parseTime=True&loc=Local"
-  init_schema: false
-  max_open_conns: 30
-  max_idle_conns: 7
-  conn_max_lifetime_seconds: 1800
-  debug: false
-admin:
-  token: "all"
-  read_token: "read"
-  write_token: "write"
-  publish_token: "publish"
+  database_groups:
+    default:
+      host: "127.0.0.1"
+      port: 3306
+      user: "user"
+      password: "pass"
+      database_name: "mockserver_db"
+      max_open_conns: 30
+      max_idle_conns: 7
+      conn_max_lifetime_seconds: 1800
+      debug: false
 auth:
   jwt_secret: "jwt-secret"
   debug_login_enabled: false
-  token_ttl_seconds: 3600
 `
 	if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
@@ -36,6 +34,8 @@ auth:
 
 	t.Setenv("MOCKSERVER_CONFIG_FILE", configPath)
 	t.Setenv("MOCKSERVER_ADDR", ":18080")
+	t.Setenv("MOCKSERVER_DB_HOST", "mysql.local")
+	t.Setenv("MOCKSERVER_DB_PORT", "3307")
 	t.Setenv("MOCKSERVER_DB_DEBUG", "true")
 
 	cfg, err := Load()
@@ -48,22 +48,20 @@ auth:
 	if cfg.Address != ":18080" {
 		t.Fatalf("unexpected address: %s", cfg.Address)
 	}
-	if cfg.RuleSetFile != "./examples" {
-		t.Fatalf("unexpected ruleset file: %s", cfg.RuleSetFile)
+	defaultGroup := cfg.DB.DatabaseGroups[dbspi.DefaultDatabaseGroupKey]
+	if defaultGroup.Host != "mysql.local" || defaultGroup.Port != 3307 {
+		t.Fatalf("unexpected db host/port: %#v", defaultGroup)
 	}
-	if cfg.DBInitSchema {
-		t.Fatalf("expected db init schema to be false")
+	if defaultGroup.User != "user" || defaultGroup.Password != "pass" || defaultGroup.DatabaseName != "mockserver_db" {
+		t.Fatalf("unexpected db identity config: %#v", defaultGroup)
 	}
-	if !cfg.DBDebug {
+	if !defaultGroup.Debug {
 		t.Fatalf("expected db debug env override to be true")
 	}
-	if cfg.DBMaxOpenConns != 30 || cfg.DBMaxIdleConns != 7 || cfg.DBConnMaxLifetimeSeconds != 1800 {
+	if defaultGroup.MaxOpenConns != 30 || defaultGroup.MaxIdleConns != 7 || defaultGroup.ConnMaxLifetimeSeconds != 1800 {
 		t.Fatalf("unexpected db pool config: %#v", cfg)
 	}
-	if cfg.AdminToken != "all" || cfg.AdminReadToken != "read" || cfg.AdminWriteToken != "write" || cfg.AdminPublishToken != "publish" {
-		t.Fatalf("unexpected admin tokens: %#v", cfg)
-	}
-	if cfg.AuthJWTSecret != "jwt-secret" || cfg.AuthDebugLoginEnabled || cfg.AuthTokenTTLSeconds != 3600 {
+	if cfg.AuthJWTSecret != "jwt-secret" || cfg.AuthDebugLoginEnabled {
 		t.Fatalf("unexpected auth config: %#v", cfg)
 	}
 }

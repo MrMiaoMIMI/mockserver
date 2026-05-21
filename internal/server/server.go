@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"strings"
 
 	"github.com/MrMiaoMIMI/goshared/logger"
 	"github.com/gin-gonic/gin"
@@ -21,7 +20,7 @@ import (
 	"github.com/MrMiaoMIMI/mockserver/internal/view"
 )
 
-func run(ctx context.Context, cfg config.Config) error {
+func Run(ctx context.Context, cfg config.Config) error {
 	logger.Init(logger.DefaultConfig())
 	fxApp := newFxApp(ctx, cfg, fx.Invoke(registerHTTPServer))
 	if err := fxApp.Err(); err != nil {
@@ -63,20 +62,12 @@ type initializerParams struct {
 	fx.In
 
 	Context          context.Context
-	Config           config.Config
-	RuleSetService   service.RuleSetService
 	NamespaceService service.NamespaceService
 }
 
 func initializeRuleSetData(p initializerParams) error {
 	if _, err := p.NamespaceService.EnsureDefaultNamespace(p.Context); err != nil {
 		return fmt.Errorf("bootstrap default namespace failed: %w", err)
-	}
-	if err := service.LoadRuleSetFiles(p.Context, p.RuleSetService, p.Config.RuleSetFile); err != nil {
-		return fmt.Errorf("bootstrap ruleset failed: %w", err)
-	}
-	if strings.TrimSpace(p.Config.RuleSetFile) != "" {
-		logger.Info(p.Context, "Bootstrapped ruleset source", logger.String("ruleset_file", p.Config.RuleSetFile))
 	}
 	return nil
 }
