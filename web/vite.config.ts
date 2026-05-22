@@ -12,7 +12,24 @@ function normalizeApiPrefix(value?: string) {
   return withLeadingSlash.replace(/\/+$/, '')
 }
 
-const apiPrefix = normalizeApiPrefix(process.env.VITE_API_PREFIX)
+function apiPrefixFromBaseURL(value?: string) {
+  const baseURL = (value || '').trim()
+  if (!baseURL) {
+    return ''
+  }
+  if (baseURL.startsWith('/')) {
+    return normalizeApiPrefix(baseURL)
+  }
+  try {
+    return normalizeApiPrefix(new URL(baseURL).pathname)
+  } catch {
+    return ''
+  }
+}
+
+const apiPrefix = normalizeApiPrefix(
+  process.env.VITE_API_PREFIX || apiPrefixFromBaseURL(process.env.VITE_API_BASE_URL)
+)
 const proxyBasePath = `${apiPrefix}/mockserver`
 
 export default defineConfig({

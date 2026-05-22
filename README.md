@@ -97,7 +97,7 @@ MOCKSERVER_DB_DEBUG=true \
 go run ./cmd/server
 ```
 
-`server.api_prefix` 只表示部署路径前缀，会拼接在现有 `/mockserver/...` 路由之前；例如配置为 `/tenant-a` 后，debug 登录接口会变成 `/tenant-a/mockserver/api/v1/auth/debug/login`。前端可通过 `VITE_API_PREFIX=/tenant-a` 或在页面加载前设置 `window.__MOCKSERVER_API_PREFIX__ = "/tenant-a"` 使用同一个前缀。
+`server.api_prefix` 只表示部署路径前缀，会拼接在现有 `/mockserver/...` 路由之前；例如配置为 `/tenant-a` 后，debug 登录接口会变成 `/tenant-a/mockserver/api/v1/auth/debug/login`。前端可通过 `VITE_API_PREFIX=/tenant-a` 使用同一个前缀；如果使用 `VITE_API_BASE_URL=/tenant-a`，开发代理也会代理 `/tenant-a/mockserver`。静态部署时也可以在页面加载前设置 `window.__MOCKSERVER_API_PREFIX__ = "/tenant-a"`。
 
 后端对象装配使用 `go.uber.org/fx v1.24.0`，各后端 package 暴露自己的 `Module`，由 `cmd/server` 入口统一组合；DB 访问层使用 `github.com/MrMiaoMIMI/goshared v0.0.13` 的 `dbspi.Manager` + `dbhelper.NewSoftDeleteTableStore`，并通过 common-field autofill 维护 `creator`、`updater`、`ctime`、`mtime`。当前 Go 基线为 `1.23.0`。
 

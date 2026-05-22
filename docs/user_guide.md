@@ -96,6 +96,8 @@ MOCKSERVER_API_PREFIX=/tenant-a go run ./cmd/server
 VITE_API_PREFIX=/tenant-a npm run dev
 ```
 
+如果已经通过 `VITE_API_BASE_URL=/tenant-a` 把 Axios base URL 指到同一个路径前缀，前端开发代理也会代理 `/tenant-a/mockserver` 到后端；两种变量选择一种即可，不要同时配置同一个前缀。
+
 静态部署时，也可以在页面加载前注入：
 
 ```html

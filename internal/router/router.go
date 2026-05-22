@@ -41,7 +41,7 @@ func NewWithTraffic(adminController *controller.AdminController, runtimeControll
 }
 
 func NewWithConfig(adminController *controller.AdminController, runtimeController *controller.RuntimeController, authConfig AuthConfig, routeConfig RouteConfig, metricsController *controller.MetricsController, trafficController *controller.TrafficController) *gin.Engine {
-	gin.SetMode(gin.ReleaseMode)
+	// gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	engine.RedirectTrailingSlash = false
 	engine.Use(traceMiddleware(), operatorMiddleware(), accessLogMiddleware(), recoveryMiddleware())
