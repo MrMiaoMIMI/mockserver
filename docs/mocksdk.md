@@ -22,7 +22,8 @@ Environment variables have higher priority than explicit SDK options.
 
 | Variable | Meaning |
 | --- | --- |
-| `MOCKSERVER_HOST` | Base URL of MockServer, for example `http://127.0.0.1:8080`. Overrides `Config.MockServerURL`. |
+| `MOCKSERVER_HOST` | Base URL of MockServer, for example `http://127.0.0.1:8080`. It may include the deployment prefix, for example `http://127.0.0.1:8080/tenant-a`. Overrides `Config.MockServerURL`. |
+| `MOCKSERVER_API_PREFIX` | Optional MockServer deployment path prefix, for example `/tenant-a`. Overrides `Config.APIPrefix`. The SDK appends it before `/mockserver/api/v1/sdk/decision` unless `MOCKSERVER_HOST` already ends with the same prefix. |
 | `MOCKSERVER_NAMESPACE_ID` | Namespace used by adapter helpers when the caller does not pass a namespace. Overrides `Config.Namespace`. |
 | `MOCKSERVER_TIMEOUT_MS` | Optional decision-call timeout in milliseconds. Overrides `Config.Timeout` when set to a positive integer. |
 
@@ -34,6 +35,16 @@ The SDK calls:
 
 ```text
 POST /mockserver/api/v1/sdk/decision
+```
+
+When the MockServer backend is configured with `server.api_prefix: /tenant-a`
+or `MOCKSERVER_API_PREFIX=/tenant-a`, configure the SDK with either
+`MockServerURL: "http://127.0.0.1:8080/tenant-a"` or
+`MockServerURL: "http://127.0.0.1:8080", APIPrefix: "/tenant-a"`. The final
+request becomes:
+
+```text
+POST /tenant-a/mockserver/api/v1/sdk/decision
 ```
 
 This endpoint evaluates published rulesets only. Draft rules do not affect SDK decisions until they are published.
@@ -84,6 +95,7 @@ The SDK decision endpoint does not forward upstream traffic. It only returns the
 ```go
 client, err := mocksdk.NewClient(mocksdk.Config{
     MockServerURL: "http://127.0.0.1:8080",
+    APIPrefix:     "/tenant-a",
     Namespace:     "default",
 })
 if err != nil {
