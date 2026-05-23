@@ -48,10 +48,27 @@
             <el-option label="Last 7d" value="7d" />
             <el-option label="All" value="all" />
           </el-select>
-          <el-select v-model="filters.protocol" clearable filterable placeholder="Protocol" @change="resetAndLoad">
-            <el-option v-for="protocol in protocolOptions" :key="protocol" :label="protocol" :value="protocol" />
+          <el-select
+            v-model="filters.protocol"
+            clearable
+            filterable
+            placeholder="Protocol"
+            @change="resetAndLoad"
+          >
+            <el-option
+              v-for="protocol in protocolOptions"
+              :key="protocol"
+              :label="protocol"
+              :value="protocol"
+            />
           </el-select>
-          <el-select v-model="filters.namespace" clearable filterable placeholder="Namespace" @change="resetAndLoad">
+          <el-select
+            v-model="filters.namespace"
+            clearable
+            filterable
+            placeholder="Namespace"
+            @change="resetAndLoad"
+          >
             <el-option
               v-for="namespace in namespaceOptions"
               :key="namespace"
@@ -59,9 +76,19 @@
               :value="namespace"
             />
           </el-select>
-          <FilterSegment v-model="filters.outcome" :options="outcomeOptions" @update:model-value="resetAndLoad" />
+          <FilterSegment
+            v-model="filters.outcome"
+            :options="outcomeOptions"
+            @update:model-value="resetAndLoad"
+          />
           <div class="field-filter">
-            <el-select v-model="filters.fieldPath" clearable filterable placeholder="Indexed field" @change="resetAndLoad">
+            <el-select
+              v-model="filters.fieldPath"
+              clearable
+              filterable
+              placeholder="Indexed field"
+              @change="resetAndLoad"
+            >
               <el-option
                 v-for="option in fieldOptions"
                 :key="option.value"
@@ -69,7 +96,12 @@
                 :value="option.value"
               />
             </el-select>
-            <el-input v-model="filters.fieldValue" clearable placeholder="Exact value" @keyup.enter="resetAndLoad" />
+            <el-input
+              v-model="filters.fieldValue"
+              clearable
+              placeholder="Exact value"
+              @keyup.enter="resetAndLoad"
+            />
             <el-button :icon="Search" @click="resetAndLoad">Apply</el-button>
           </div>
         </div>
@@ -81,9 +113,8 @@
           height="100%"
           row-key="id"
           :row-class-name="rowClassName"
-          @row-click="openEvent"
         >
-          <el-table-column label="Time" min-width="150">
+          <el-table-column label="Time" min-width="138">
             <template #default="{ row }">
               <div class="time-cell">
                 <strong>{{ formatTime(row.event_time) }}</strong>
@@ -91,32 +122,32 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column label="Protocol" width="112">
+          <el-table-column label="Protocol" width="92">
             <template #default="{ row }">
               <StateChip :label="row.protocol_name || '-'" tone="primary" />
             </template>
           </el-table-column>
-          <el-table-column label="Namespace" min-width="150" show-overflow-tooltip>
+          <el-table-column label="Namespace" min-width="120" show-overflow-tooltip>
             <template #default="{ row }">
               <code>{{ row.namespace_id || 'default' }}</code>
             </template>
           </el-table-column>
-          <el-table-column label="Operation" min-width="140" show-overflow-tooltip>
+          <el-table-column label="Operation" min-width="118" show-overflow-tooltip>
             <template #default="{ row }">
               <code>{{ row.operation_name || '-' }}</code>
             </template>
           </el-table-column>
-          <el-table-column label="Outcome" width="132">
+          <el-table-column label="Outcome" width="108">
             <template #default="{ row }">
               <StateChip :label="row.outcome" :tone="outcomeTone(row.outcome)" />
             </template>
           </el-table-column>
-          <el-table-column label="Decision" width="120">
+          <el-table-column label="Decision" width="100">
             <template #default="{ row }">
               <code>{{ row.decision_kind || '-' }}</code>
             </template>
           </el-table-column>
-          <el-table-column label="Rule" min-width="230" show-overflow-tooltip>
+          <el-table-column label="Rule" min-width="210" show-overflow-tooltip>
             <template #default="{ row }">
               <div class="rule-cell">
                 <code>{{ row.ruleset_id || '-' }}</code>
@@ -124,12 +155,22 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column label="Trace" min-width="190" show-overflow-tooltip>
+          <el-table-column label="Trace" min-width="160" show-overflow-tooltip>
             <template #default="{ row }">
-              <button v-if="row.trace_id" class="trace-button" type="button" @click.stop="copyTrace(row.trace_id)">
+              <button
+                v-if="row.trace_id"
+                class="trace-button"
+                type="button"
+                @click.stop="copyTrace(row.trace_id)"
+              >
                 {{ shortText(row.trace_id, 22) }}
               </button>
               <span v-else>-</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="Action" width="96" fixed="right" align="right">
+            <template #default="{ row }">
+              <el-button size="small" :icon="View" @click.stop="openEvent(row)">Details</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -155,6 +196,7 @@
       :title="selectedEvent ? `Traffic #${selectedEvent.id}` : 'Traffic detail'"
       size="min(760px, calc(100vw - 24px))"
       append-to-body
+      class="traffic-detail-drawer"
     >
       <div v-loading="detailLoading" class="traffic-drawer">
         <template v-if="selectedEvent">
@@ -162,17 +204,46 @@
             <div>
               <StateChip :label="selectedEvent.protocol_name || '-'" tone="primary" />
               <strong>{{ selectedEvent.namespace_id || 'default' }}</strong>
-              <small>{{ formatTime(selectedEvent.event_time) }} / {{ formatDuration(selectedEvent.duration_ms) }}</small>
+              <small
+                >{{ formatTime(selectedEvent.event_time) }} /
+                {{ formatDuration(selectedEvent.duration_ms) }}</small
+              >
             </div>
             <StateChip :label="selectedEvent.outcome" :tone="outcomeTone(selectedEvent.outcome)" />
           </header>
 
-          <KeyValueGrid :items="detailFacts(selectedEvent)" />
+          <section class="detail-facts" aria-label="Traffic detail fields">
+            <div
+              v-for="fact in detailFacts(selectedEvent)"
+              :key="fact.label"
+              :class="['detail-fact', `is-${fact.tone || 'neutral'}`, { 'is-wide': fact.wide }]"
+            >
+              <span>{{ fact.label }}</span>
+              <button
+                v-if="fact.copyable"
+                class="copyable-value"
+                type="button"
+                :title="`Copy ${fact.label}`"
+                @click.stop="copyValue(fact.label, fact.value)"
+              >
+                <code v-if="fact.code">{{ fact.value }}</code>
+                <strong v-else>{{ fact.value }}</strong>
+                <el-icon><CopyDocument /></el-icon>
+              </button>
+              <code v-else-if="fact.code">{{ fact.value }}</code>
+              <strong v-else>{{ fact.value }}</strong>
+            </div>
+          </section>
 
-          <section v-if="selectedSelectionDiagnostics.hasDiagnostics" class="drawer-section selection-diagnostics">
+          <section
+            v-if="selectedSelectionDiagnostics.hasDiagnostics"
+            class="drawer-section selection-diagnostics"
+          >
             <header>
               <span>selection diagnostics</span>
-              <strong>{{ selectedSelectionDiagnostics.rulesetCandidates.length }} candidates</strong>
+              <strong
+                >{{ selectedSelectionDiagnostics.rulesetCandidates.length }} candidates</strong
+              >
             </header>
             <div class="selection-summary">
               <div>
@@ -188,20 +259,29 @@
                 <code>{{ selectedSelectionDiagnostics.winnerRuleId || '-' }}</code>
               </div>
             </div>
-            <div v-if="selectedSelectionDiagnostics.rulesetCandidates.length" class="candidate-list">
+            <div
+              v-if="selectedSelectionDiagnostics.rulesetCandidates.length"
+              class="candidate-list"
+            >
               <div
                 v-for="candidate in selectedSelectionDiagnostics.rulesetCandidates"
                 :key="`${candidate.rulesetId}:${candidate.snapshotId}`"
                 class="candidate-row"
                 :class="{ 'is-selected': candidate.selected }"
               >
-                <StateChip :label="candidate.selected ? 'winner' : 'candidate'" :tone="candidate.selected ? 'ok' : 'neutral'" />
+                <StateChip
+                  :label="candidate.selected ? 'winner' : 'candidate'"
+                  :tone="candidate.selected ? 'ok' : 'neutral'"
+                />
                 <code>{{ candidate.rulesetId }}</code>
                 <small>specificity {{ candidate.selectorSpecificity }}</small>
                 <span>{{ candidate.message || '-' }}</span>
               </div>
             </div>
-            <div v-if="selectedSelectionDiagnostics.candidateRuleIds.length" class="rule-candidates">
+            <div
+              v-if="selectedSelectionDiagnostics.candidateRuleIds.length"
+              class="rule-candidates"
+            >
               <span>Candidate rules</span>
               <code>{{ selectedSelectionDiagnostics.candidateRuleIds.join(', ') }}</code>
             </div>
@@ -213,28 +293,76 @@
               <strong>{{ selectedEvent.indexes?.length || 0 }}</strong>
             </header>
             <div v-if="selectedEvent.indexes?.length" class="index-list">
-              <button
+              <div
                 v-for="index in selectedEvent.indexes"
                 :key="`${index.field_path}:${index.field_value_hash}`"
-                type="button"
-                @click="applyIndexFilter(index.field_path, index.field_value_text || index.field_value_preview)"
+                class="index-row"
               >
                 <span>{{ index.field_path }}</span>
-                <code>{{ index.field_value_preview }}</code>
-              </button>
+                <button
+                  class="copyable-index-value"
+                  type="button"
+                  :title="indexValue(index)"
+                  @click.stop="copyValue('Indexed field value', indexValue(index))"
+                >
+                  <code>{{ index.field_value_preview }}</code>
+                  <el-icon><CopyDocument /></el-icon>
+                </button>
+                <el-button
+                  size="small"
+                  :icon="Search"
+                  @click.stop="applyIndexFilter(index.field_path, indexValue(index))"
+                >
+                  Filter
+                </el-button>
+              </div>
             </div>
             <el-empty v-else description="No indexed fields" />
           </section>
 
           <el-tabs v-model="detailTab" class="json-tabs">
             <el-tab-pane label="Event" name="event">
-              <ResultInspector :raw-json="jsonString(selectedEvent.event || {})" :show-raw="false" />
+              <JsonEditor
+                :model-value="jsonString(selectedEvent.event || {})"
+                readonly
+                title="Event JSON"
+                :min-height="360"
+                :show-format="false"
+              />
             </el-tab-pane>
             <el-tab-pane label="Decision" name="decision">
-              <ResultInspector :raw-json="jsonString(selectedEvent.decision || {})" :show-raw="false" />
+              <div class="tab-note">
+                Actual runtime decision returned to SDK for this traffic record.
+              </div>
+              <ResultInspector :raw-json="jsonString(selectedEvent.decision || {})" />
             </el-tab-pane>
             <el-tab-pane label="Explain" name="explain">
-              <ResultInspector :raw-json="jsonString(selectedEvent.explain || {})" :show-raw="false" />
+              <div class="tab-note">
+                Selection diagnostics captured with the record. This explains the chosen ruleset and
+                rule; it is not a second runtime decision.
+              </div>
+              <section class="explain-summary-panel">
+                <header>
+                  <span>selection summary</span>
+                  <StateChip
+                    :label="explainConsistencyLabel(selectedEvent)"
+                    :tone="explainConsistencyTone(selectedEvent)"
+                  />
+                </header>
+                <div class="explain-summary-grid">
+                  <div v-for="item in explainSummaryItems(selectedEvent)" :key="item.label">
+                    <span>{{ item.label }}</span>
+                    <code>{{ item.value }}</code>
+                  </div>
+                </div>
+              </section>
+              <JsonEditor
+                :model-value="jsonString(selectedEvent.explain || {})"
+                readonly
+                title="Explain JSON"
+                :min-height="300"
+                :show-format="false"
+              />
             </el-tab-pane>
             <el-tab-pane label="Replay" name="replay">
               <ResultInspector :raw-json="replayJson" />
@@ -251,10 +379,18 @@
             >
               Replay
             </el-button>
-            <el-button :disabled="!selectedEvent.ruleset_id" :icon="Right" @click="openRuleset(selectedEvent)">
+            <el-button
+              :disabled="!selectedEvent.ruleset_id"
+              :icon="Right"
+              @click="openRuleset(selectedEvent)"
+            >
               Open rules
             </el-button>
-            <el-button v-if="selectedEvent.trace_id" :icon="CopyDocument" @click="copyTrace(selectedEvent.trace_id)">
+            <el-button
+              v-if="selectedEvent.trace_id"
+              :icon="CopyDocument"
+              @click="copyTrace(selectedEvent.trace_id)"
+            >
               Copy trace
             </el-button>
           </footer>
@@ -268,15 +404,15 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { CopyDocument, Refresh, Right, Search, VideoPlay } from '@element-plus/icons-vue'
+import { CopyDocument, Refresh, Right, Search, VideoPlay, View } from '@element-plus/icons-vue'
 import FilterSegment, { type FilterSegmentOption } from '@/components/common/FilterSegment.vue'
-import KeyValueGrid from '@/components/common/KeyValueGrid.vue'
+import JsonEditor from '@/components/common/JsonEditor.vue'
 import MetricCard from '@/components/common/MetricCard.vue'
 import PageContainer from '@/components/common/PageContainer.vue'
 import StateChip from '@/components/common/StateChip.vue'
 import ResultInspector from '@/components/rulesets/ResultInspector.vue'
 import { useMockserverStore } from '@/store'
-import type { TrafficEvent } from '@/types'
+import type { TrafficEvent, TrafficEventIndex } from '@/types'
 import { buildTrafficSelectionDiagnostics } from '@/utils/trafficSelectionDiagnostics'
 
 type TimeRange = '1h' | '24h' | '7d' | 'all'
@@ -285,6 +421,15 @@ type ChipTone = 'neutral' | 'ok' | 'warn' | 'danger' | 'accent' | 'primary'
 interface Entry {
   key: string
   value: number
+}
+
+interface DetailFact {
+  label: string
+  value: string | number
+  code?: boolean
+  tone?: ChipTone
+  copyable?: boolean
+  wide?: boolean
 }
 
 const router = useRouter()
@@ -323,7 +468,9 @@ const outcomeOptions: FilterSegmentOption[] = [
 const total = computed(() => store.trafficTotal)
 const stats = computed(() => store.trafficStats)
 const events = computed(() => store.trafficEvents)
-const selectedSelectionDiagnostics = computed(() => buildTrafficSelectionDiagnostics(selectedEvent.value))
+const selectedSelectionDiagnostics = computed(() =>
+  buildTrafficSelectionDiagnostics(selectedEvent.value)
+)
 const protocolOptions = computed(() => Object.keys(stats.value?.by_protocol || {}).sort())
 const namespaceOptions = computed(() => Object.keys(stats.value?.by_namespace || {}).sort())
 const protocolEntries = computed(() => rankedEntries(stats.value?.by_protocol || {}))
@@ -477,6 +624,7 @@ function applyIndexFilter(path: string, value: string) {
   filters.fieldPath = path
   filters.fieldValue = value
   detailVisible.value = false
+  ElMessage.success('Indexed field filter applied')
   resetAndLoad()
 }
 
@@ -484,29 +632,129 @@ function rowClassName({ row }: { row: TrafficEvent }) {
   return selectedEvent.value?.id === row.id ? 'is-selected-traffic' : ''
 }
 
-function detailFacts(event: TrafficEvent) {
+function detailFacts(event: TrafficEvent): DetailFact[] {
   return [
-    { label: 'Event ID', value: event.event_id, code: true },
-    { label: 'Trace', value: event.trace_id || '-', code: true },
+    { label: 'Event ID', value: event.event_id, code: true, copyable: true, wide: true },
+    {
+      label: 'Trace',
+      value: event.trace_id || '-',
+      code: true,
+      copyable: Boolean(event.trace_id),
+      wide: true,
+    },
     { label: 'Protocol', value: event.protocol_name || '-' },
-    { label: 'Namespace', value: event.namespace_id || 'default', code: true },
-    { label: 'Operation', value: event.operation_name || '-' },
+    { label: 'Namespace', value: event.namespace_id || 'default', code: true, copyable: true },
+    {
+      label: 'Operation',
+      value: event.operation_name || '-',
+      copyable: Boolean(event.operation_name),
+    },
     { label: 'Outcome', value: event.outcome, tone: outcomeTone(event.outcome) },
     { label: 'Decision', value: event.decision_kind || '-' },
-    { label: 'Ruleset', value: event.ruleset_id || '-', code: true },
-    { label: 'Rule', value: event.rule_id || '-', code: true },
+    {
+      label: 'Ruleset',
+      value: event.ruleset_id || '-',
+      code: true,
+      copyable: Boolean(event.ruleset_id),
+      wide: true,
+    },
+    {
+      label: 'Rule',
+      value: event.rule_id || '-',
+      code: true,
+      copyable: Boolean(event.rule_id),
+      wide: true,
+    },
     { label: 'Fallback', value: event.fallback_reason || '-' },
-    { label: 'Error', value: event.error_message || '-' },
+    {
+      label: 'Error',
+      value: event.error_message || '-',
+      tone: event.error_message ? 'danger' : 'neutral',
+      wide: true,
+    },
   ]
 }
 
 async function copyTrace(traceId: string) {
+  await copyValue('Trace ID', traceId)
+}
+
+async function copyValue(label: string, value: unknown) {
+  const text = valueText(value)
+  if (!text || text === '-') return
   try {
-    await navigator.clipboard.writeText(traceId)
-    ElMessage.success('Trace ID copied')
+    await writeClipboardText(text)
+    ElMessage.success(`${label} copied`)
   } catch {
     ElMessage.error('Copy failed')
   }
+}
+
+async function writeClipboardText(text: string) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return
+    } catch {
+      // Fall back to the legacy path when browser clipboard permissions are restricted.
+    }
+  }
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', 'true')
+  textarea.style.position = 'fixed'
+  textarea.style.top = '-9999px'
+  document.body.appendChild(textarea)
+  textarea.select()
+  const copied = document.execCommand('copy')
+  document.body.removeChild(textarea)
+  if (!copied) {
+    throw new Error('Copy failed')
+  }
+}
+
+function valueText(value: unknown) {
+  if (value === undefined || value === null) return ''
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  return JSON.stringify(value, null, 2)
+}
+
+function indexValue(index: TrafficEventIndex) {
+  return index.field_value_text || index.field_value_preview || ''
+}
+
+function explainSummaryItems(event: TrafficEvent): DetailFact[] {
+  const diagnostics = buildTrafficSelectionDiagnostics(event)
+  return [
+    { label: 'Decision outcome', value: event.outcome || '-', tone: outcomeTone(event.outcome) },
+    { label: 'Decision ruleset', value: event.ruleset_id || '-', code: true },
+    { label: 'Decision rule', value: event.rule_id || '-', code: true },
+    { label: 'Winner ruleset', value: diagnostics.winnerRuleSetId || '-', code: true },
+    { label: 'Winner snapshot', value: diagnostics.winnerSnapshotId || '-', code: true },
+    { label: 'Winner rule', value: diagnostics.winnerRuleId || '-', code: true },
+    { label: 'Ruleset candidates', value: diagnostics.rulesetCandidates.length },
+    { label: 'Candidate rules', value: diagnostics.candidateRuleIds.join(', ') || '-', code: true },
+  ]
+}
+
+function explainConsistencyLabel(event: TrafficEvent) {
+  const diagnostics = buildTrafficSelectionDiagnostics(event)
+  if (!diagnostics.hasDiagnostics) return 'no diagnostics'
+  const rulesetOK =
+    !event.ruleset_id ||
+    !diagnostics.winnerRuleSetId ||
+    event.ruleset_id === diagnostics.winnerRuleSetId
+  const ruleOK =
+    !event.rule_id || !diagnostics.winnerRuleId || event.rule_id === diagnostics.winnerRuleId
+  return rulesetOK && ruleOK ? 'aligned' : 'differs'
+}
+
+function explainConsistencyTone(event: TrafficEvent): ChipTone {
+  const label = explainConsistencyLabel(event)
+  if (label === 'aligned') return 'ok'
+  if (label === 'differs') return 'warn'
+  return 'neutral'
 }
 
 function timeRangeSeconds(range: TimeRange) {
@@ -543,9 +791,7 @@ function indexedFieldOptions(protocol: string) {
     { label: 'event.request.operation', value: 'event.request.operation' },
     { label: 'event.request.key', value: 'event.request.key' },
   ]
-  const spex = [
-    { label: 'event.request.cmd', value: 'event.request.cmd' },
-  ]
+  const spex = [{ label: 'event.request.cmd', value: 'event.request.cmd' }]
   if (protocol === 'cache') {
     return [...cache, ...base]
   }
@@ -713,7 +959,7 @@ onMounted(loadData)
 }
 
 .traffic-table :deep(.el-table__row) {
-  cursor: pointer;
+  cursor: default;
 }
 
 .traffic-table :deep(.is-selected-traffic td.el-table__cell) {
@@ -775,10 +1021,16 @@ code {
 }
 
 .traffic-drawer {
-  min-height: 240px;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   gap: var(--ms-space-4);
+}
+
+:global(.traffic-detail-drawer .el-drawer__body) {
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
 }
 
 .drawer-heading {
@@ -805,6 +1057,95 @@ code {
   small {
     color: var(--ms-text-tertiary);
     font-size: var(--ms-text-sm);
+  }
+}
+
+.detail-facts {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ms-space-2);
+}
+
+.detail-fact {
+  min-width: 0;
+  padding: var(--ms-space-2);
+  border: 1px solid var(--ms-border-light);
+  border-radius: var(--ms-radius-md);
+  background: var(--ms-panel-bg-soft);
+
+  &.is-wide {
+    grid-column: 1 / -1;
+  }
+
+  > span {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--ms-text-tertiary);
+    font-size: var(--ms-text-sm);
+    font-weight: var(--ms-font-semibold);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  strong,
+  code {
+    display: block;
+    min-width: 0;
+    margin-top: 2px;
+    color: var(--ms-text-primary);
+    font-size: var(--ms-text-base);
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+}
+
+.detail-fact.is-ok strong,
+.detail-fact.is-ok code {
+  color: var(--ms-green-600);
+}
+
+.detail-fact.is-warn strong,
+.detail-fact.is-warn code {
+  color: var(--ms-amber-600);
+}
+
+.detail-fact.is-danger strong,
+.detail-fact.is-danger code {
+  color: var(--ms-red-600);
+}
+
+.copyable-value {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--ms-space-2);
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: copy;
+
+  .el-icon {
+    margin-top: 2px;
+    color: var(--ms-text-tertiary);
+    opacity: 0.55;
+    transition: opacity var(--ms-transition-fast);
+  }
+
+  &:hover .el-icon,
+  &:focus-visible .el-icon {
+    opacity: 1;
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(37, 99, 235, 0.24);
+    outline-offset: 3px;
   }
 }
 
@@ -837,19 +1178,18 @@ code {
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--ms-space-2);
+}
 
-  button {
-    min-width: 0;
-    display: grid;
-    grid-template-columns: minmax(170px, 0.45fr) minmax(0, 1fr);
-    gap: var(--ms-space-2);
-    padding: var(--ms-space-2);
-    border: 1px solid var(--ms-border-light);
-    border-radius: var(--ms-radius-md);
-    background: var(--ms-panel-bg);
-    text-align: left;
-    cursor: pointer;
-  }
+.index-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(190px, 0.42fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--ms-space-2);
+  padding: var(--ms-space-2);
+  border: 1px solid var(--ms-border-light);
+  border-radius: var(--ms-radius-md);
+  background: var(--ms-panel-bg);
 
   span,
   code {
@@ -862,6 +1202,32 @@ code {
   span {
     color: var(--ms-text-tertiary);
     font-size: var(--ms-text-sm);
+  }
+}
+
+.copyable-index-value {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--ms-space-2);
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: copy;
+
+  .el-icon {
+    color: var(--ms-text-tertiary);
+    opacity: 0.55;
+    transition: opacity var(--ms-transition-fast);
+  }
+
+  &:hover .el-icon,
+  &:focus-visible .el-icon {
+    opacity: 1;
   }
 }
 
@@ -949,13 +1315,116 @@ code {
 
 .json-tabs {
   min-width: 0;
-  min-height: 360px;
+  height: min(62vh, 640px);
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+}
+
+.json-tabs :deep(.el-tabs__header) {
+  flex: 0 0 auto;
+}
+
+.json-tabs :deep(.el-tabs__content) {
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.json-tabs :deep(.el-tab-pane) {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding-right: var(--ms-space-1);
+}
+
+.json-tabs :deep(.json-editor),
+.json-tabs :deep(.result-inspector) {
+  height: 100%;
+  min-height: 0;
+}
+
+.tab-note {
+  margin-bottom: var(--ms-space-3);
+  padding: var(--ms-space-2) var(--ms-space-3);
+  border: 1px solid var(--ms-border-light);
+  border-radius: var(--ms-radius-md);
+  color: var(--ms-text-secondary);
+  background: var(--ms-panel-bg-soft);
+  font-size: var(--ms-text-sm);
+  line-height: 1.5;
+}
+
+.explain-summary-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ms-space-3);
+  margin-bottom: var(--ms-space-3);
+  padding: var(--ms-space-3);
+  border: 1px solid var(--ms-border-light);
+  border-radius: var(--ms-radius-lg);
+  background: var(--ms-panel-bg);
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ms-space-3);
+  }
+
+  header span {
+    color: var(--ms-text-tertiary);
+    font-family: var(--ms-font-display);
+    font-size: var(--ms-text-sm);
+    font-weight: var(--ms-font-bold);
+    text-transform: uppercase;
+  }
+}
+
+.explain-summary-grid {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ms-space-2);
+
+  div {
+    min-width: 0;
+    padding: var(--ms-space-2);
+    border-radius: var(--ms-radius-md);
+    background: var(--ms-control-bg);
+  }
+
+  span,
+  code {
+    display: block;
+    min-width: 0;
+  }
+
+  span {
+    color: var(--ms-text-tertiary);
+    font-size: var(--ms-text-sm);
+    font-weight: var(--ms-font-semibold);
+  }
+
+  code {
+    margin-top: 2px;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
 }
 
 .drawer-actions {
+  position: sticky;
+  bottom: calc(var(--ms-space-4) * -1);
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
   gap: var(--ms-space-2);
+  margin: var(--ms-space-2) calc(var(--ms-space-4) * -1) calc(var(--ms-space-4) * -1);
+  padding: var(--ms-space-3) var(--ms-space-4);
+  border-top: 1px solid var(--ms-border-light);
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(10px);
 }
 
 @media (max-width: 1180px) {

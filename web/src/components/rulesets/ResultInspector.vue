@@ -6,7 +6,9 @@
       <section v-if="validation" class="result-panel">
         <header>
           <span>validation</span>
-          <strong :class="{ ok: validation.valid }">{{ validation.valid ? 'pass' : 'blocked' }}</strong>
+          <strong :class="{ ok: validation.valid }">{{
+            validation.valid ? 'pass' : 'blocked'
+          }}</strong>
         </header>
         <div v-if="validation.issues?.length" class="issue-list">
           <div
@@ -141,6 +143,7 @@
         readonly
         class="raw-result"
         title="Raw JSON"
+        :show-format="false"
       />
     </template>
   </div>
@@ -176,12 +179,16 @@ const isValidationPayload = (
 ): value is { valid?: boolean; issues?: any[]; warnings?: any[] } => {
   return Boolean(
     value &&
-      typeof value === 'object' &&
-      ('valid' in value || Array.isArray((value as { issues?: unknown[] }).issues)),
+    typeof value === 'object' &&
+    ('valid' in value || Array.isArray((value as { issues?: unknown[] }).issues))
   )
 }
 
-const simulation = computed(() => payload.value?.simulation || (payload.value?.trace ? payload.value : null))
+const simulation = computed(() => {
+  if (payload.value?.simulation) return payload.value.simulation
+  if (payload.value?.trace && typeof payload.value?.matched === 'boolean') return payload.value
+  return null
+})
 const validation = computed(() => {
   if (isValidationPayload(payload.value?.validation)) {
     return payload.value.validation
