@@ -35,9 +35,9 @@ const router = createRouter({
           meta: { title: 'Rules', hidden: true },
         },
         {
-          path: '/dashboard',
-          name: 'Dashboard',
-          component: () => import('@/views/Dashboard.vue'),
+          path: '/traffic',
+          name: 'Traffic',
+          component: () => import('@/views/TrafficLog.vue'),
           meta: { title: 'Traffic' },
         },
       ],

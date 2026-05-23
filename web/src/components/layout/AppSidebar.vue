@@ -26,7 +26,9 @@
           <span v-if="!collapse" class="nav-label">{{ item.label }}</span>
         </transition>
         <transition name="brand-copy">
-          <span v-if="!collapse && item.count !== undefined" class="nav-count">{{ item.count }}</span>
+          <span v-if="!collapse && item.count !== undefined" class="nav-count">{{
+            item.count
+          }}</span>
         </transition>
       </RouterLink>
     </nav>
@@ -76,11 +78,11 @@ const navItems = computed(() => [
     active: route.path.startsWith('/namespaces'),
   },
   {
-    path: '/dashboard',
+    path: '/traffic',
     label: 'Traffic',
     icon: markRaw(TrendCharts),
     count: store.trafficTotal,
-    active: route.path.startsWith('/dashboard'),
+    active: route.path.startsWith('/traffic'),
   },
 ])
 </script>
@@ -92,8 +94,7 @@ const navItems = computed(() => [
   flex-direction: column;
   color: var(--ms-sidebar-text);
   background:
-    linear-gradient(180deg, rgba(37, 99, 235, 0.12), transparent 260px),
-    var(--ms-sidebar-bg);
+    linear-gradient(180deg, rgba(37, 99, 235, 0.12), transparent 260px), var(--ms-sidebar-bg);
 }
 
 .sidebar-brand {
@@ -281,7 +282,9 @@ const navItems = computed(() => [
 
 .brand-copy-enter-active,
 .brand-copy-leave-active {
-  transition: opacity var(--ms-transition-fast), transform var(--ms-transition-fast);
+  transition:
+    opacity var(--ms-transition-fast),
+    transform var(--ms-transition-fast);
 }
 
 .brand-copy-enter-from,

@@ -54,7 +54,7 @@ const auth = useAuthStore()
 const sectionLabel = computed(() => {
   if (route.path.startsWith('/rulesets')) return 'rule control'
   if (route.path.startsWith('/namespaces')) return 'namespace'
-  if (route.path.startsWith('/dashboard')) return 'traffic'
+  if (route.path.startsWith('/traffic')) return 'traffic'
   return 'mockserver'
 })
 
