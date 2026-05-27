@@ -40,6 +40,17 @@ type TrafficRepository interface {
 	ListTrafficEvents(ctx context.Context, query bo.TrafficQuery) (bo.TrafficEventList, error)
 }
 
+type ScenarioRepository interface {
+	CreateScenario(ctx context.Context, scenario bo.Scenario) (bo.Scenario, error)
+	GetScenario(ctx context.Context, id string) (bo.Scenario, bool, error)
+	ListScenarios(ctx context.Context, query bo.ScenarioQuery) ([]bo.Scenario, error)
+	UpdateScenario(ctx context.Context, scenario bo.Scenario, expectedVersion int) (bo.Scenario, error)
+	DeleteScenario(ctx context.Context, id string) error
+	UpsertScenarioRule(ctx context.Context, rule bo.ScenarioRule) (bo.ScenarioRule, error)
+	ListScenarioRules(ctx context.Context, query bo.ScenarioRuleQuery) ([]bo.ScenarioRule, error)
+	DeleteScenarioRule(ctx context.Context, scenarioID, ruleID string) error
+}
+
 type ruleSetTableDAO interface {
 	UpsertDraft(ctx context.Context, draft modeldo.RuleSetDraft, expectedVersion int) error
 	GetDraft(ctx context.Context, id string) (modeldo.RuleSetDraft, bool, error)
@@ -66,9 +77,23 @@ type trafficTableDAO interface {
 	TrafficStats(ctx context.Context, query bo.TrafficQuery, eventIDs []uint64) (bo.TrafficStats, error)
 }
 
+type scenarioTableDAO interface {
+	CreateScenario(ctx context.Context, scenario modeldo.Scenario) (modeldo.Scenario, error)
+	GetScenario(ctx context.Context, id string) (modeldo.Scenario, bool, error)
+	ListScenarios(ctx context.Context, query bo.ScenarioQuery) ([]modeldo.Scenario, error)
+	UpdateScenario(ctx context.Context, scenario modeldo.Scenario, expectedVersion int) error
+	SoftDeleteScenario(ctx context.Context, id string) error
+	UpsertScenarioRule(ctx context.Context, rule modeldo.ScenarioRule, expectedVersion int) error
+	GetScenarioRule(ctx context.Context, scenarioID, ruleID string) (modeldo.ScenarioRule, bool, error)
+	ListScenarioRules(ctx context.Context, query bo.ScenarioRuleQuery) ([]modeldo.ScenarioRule, error)
+	SoftDeleteScenarioRule(ctx context.Context, scenarioID, ruleID string) error
+	SoftDeleteScenarioRules(ctx context.Context, scenarioID string) error
+}
+
 type DB interface {
 	GetRuleSetRepository() RuleSetRepository
 	GetNamespaceRepository() NamespaceRepository
 	GetTrafficRepository() TrafficRepository
+	GetScenarioRepository() ScenarioRepository
 	GetManager() dbspi.Manager
 }

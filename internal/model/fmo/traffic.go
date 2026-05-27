@@ -9,6 +9,7 @@ type TrafficEventFields struct {
 	CommonFmo
 	EventCode      dbspi.Field[string]
 	TraceID        dbspi.Field[string]
+	ScenarioCode   dbspi.Field[string]
 	TrafficSource  dbspi.Field[string]
 	ProtocolName   dbspi.Field[string]
 	NamespaceID    dbspi.Field[uint64]
@@ -36,6 +37,7 @@ func NewTrafficEventFields() TrafficEventFields {
 		CommonFmo:      NewCommonFmo(),
 		EventCode:      dbhelper.NewField[string]("event_code"),
 		TraceID:        dbhelper.NewField[string]("trace_id"),
+		ScenarioCode:   dbhelper.NewField[string]("scenario_code"),
 		TrafficSource:  dbhelper.NewField[string]("traffic_source"),
 		ProtocolName:   dbhelper.NewField[string]("protocol_name"),
 		NamespaceID:    dbhelper.NewField[uint64]("namespace_id"),

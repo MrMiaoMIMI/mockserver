@@ -2,10 +2,14 @@ import { http } from '@/utils/request'
 import { apiPath } from '@/utils/apiPrefix'
 import type {
   DebugLoginRequest,
+  CreateScenarioRequest,
+  HTTPQuickRuleRequest,
   ListPublishedRuleSetsResponse,
   ListNamespacesResponse,
   ListProtocolsResponse,
   ListRuleSetsResponse,
+  ListScenarioRulesResponse,
+  ListScenariosResponse,
   ListTrafficEventsResponse,
   LoginResponse,
   NamespaceConfig,
@@ -15,18 +19,25 @@ import type {
   RollbackPreviewResponse,
   RollbackRuleSetResponse,
   Rule,
+  Scenario,
+  ScenarioRule,
   RuleSet,
   RuntimeMetrics,
+  SimulateScenarioRequest,
+  SimulateScenarioResponse,
   SimulateRuleSetRequest,
   SimulateRuleSetResponse,
   TrafficEvent,
   TrafficQueryParams,
+  UpdateScenarioRequest,
+  UpsertScenarioRuleRequest,
   UserInfo,
   ValidateRuleSetResponse,
 } from '@/types'
 
 const adminBase = apiPath('/mockserver/api/v1/admin')
 const authBase = apiPath('/mockserver/api/v1/auth')
+const agentBase = apiPath('/mockserver/api/v1/agent')
 
 export const mockserverApi = {
   debugLogin(data: DebugLoginRequest): Promise<LoginResponse> {
@@ -126,5 +137,52 @@ export const mockserverApi = {
   },
   getTrafficEvent(id: number): Promise<TrafficEvent> {
     return http.get(`${adminBase}/traffic/events/${encodeURIComponent(String(id))}`)
+  },
+  listScenarios(params: {
+    status?: string
+    include_expired?: boolean
+    limit?: number
+    offset?: number
+  } = {}): Promise<ListScenariosResponse> {
+    return http.get(`${agentBase}/scenarios`, { params })
+  },
+  createScenario(data: CreateScenarioRequest = {}): Promise<Scenario> {
+    return http.post(`${agentBase}/scenarios`, data)
+  },
+  getScenario(id: string): Promise<Scenario> {
+    return http.get(`${agentBase}/scenarios/${encodeURIComponent(id)}`)
+  },
+  updateScenario(id: string, data: UpdateScenarioRequest): Promise<Scenario> {
+    return http.patch(`${agentBase}/scenarios/${encodeURIComponent(id)}`, data)
+  },
+  deleteScenario(id: string): Promise<{ deleted: boolean }> {
+    return http.delete(`${agentBase}/scenarios/${encodeURIComponent(id)}`)
+  },
+  listScenarioRules(id: string): Promise<ListScenarioRulesResponse> {
+    return http.get(`${agentBase}/scenarios/${encodeURIComponent(id)}/rules`)
+  },
+  upsertHTTPQuickRule(id: string, data: HTTPQuickRuleRequest): Promise<ScenarioRule> {
+    return http.post(`${agentBase}/scenarios/${encodeURIComponent(id)}/rules/quick`, data)
+  },
+  upsertScenarioRule(
+    id: string,
+    ruleId: string,
+    data: UpsertScenarioRuleRequest
+  ): Promise<ScenarioRule> {
+    return http.put(
+      `${agentBase}/scenarios/${encodeURIComponent(id)}/rules/${encodeURIComponent(ruleId)}`,
+      data
+    )
+  },
+  deleteScenarioRule(id: string, ruleId: string): Promise<{ deleted: boolean }> {
+    return http.delete(
+      `${agentBase}/scenarios/${encodeURIComponent(id)}/rules/${encodeURIComponent(ruleId)}`
+    )
+  },
+  simulateScenario(id: string, data: SimulateScenarioRequest): Promise<SimulateScenarioResponse> {
+    return http.post(`${agentBase}/scenarios/${encodeURIComponent(id)}/simulate`, data)
+  },
+  listScenarioTraffic(id: string, params: TrafficQueryParams = {}): Promise<ListTrafficEventsResponse> {
+    return http.get(`${agentBase}/scenarios/${encodeURIComponent(id)}/traffic`, { params })
   },
 }

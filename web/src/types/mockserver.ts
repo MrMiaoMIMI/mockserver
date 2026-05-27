@@ -169,6 +169,7 @@ export interface MockEvent {
   request: EventRequest
   meta?: {
     trace_id?: string
+    scenario_id?: string
   }
 }
 
@@ -383,6 +384,7 @@ export interface TrafficEvent {
   id: number
   event_id: string
   trace_id?: string
+  scenario_id?: string
   traffic_source: string
   protocol_name: string
   namespace_id: string
@@ -423,6 +425,7 @@ export interface TrafficQueryParams {
   end_time?: number
   event_id?: string
   trace_id?: string
+  scenario_id?: string
   protocol_name?: string
   namespace_id?: string
   operation_name?: string
@@ -433,4 +436,82 @@ export interface TrafficQueryParams {
   fallback_reason?: string
   field_path?: string
   field_value?: string
+}
+
+export interface Scenario {
+  id: string
+  name?: string
+  description?: string
+  status: string
+  expire_time: number
+  rule_count?: number
+  version: number
+}
+
+export type ListScenariosResponse = ListResponse<Scenario>
+
+export interface CreateScenarioRequest {
+  scenario_id?: string
+  name?: string
+  description?: string
+  ttl_seconds?: number
+}
+
+export interface UpdateScenarioRequest {
+  name?: string
+  description?: string
+  ttl_seconds?: number
+  expire_time?: number
+}
+
+export interface HTTPQuickRuleRequest {
+  rule_id?: string
+  name?: string
+  namespace?: string
+  enabled?: boolean
+  priority?: number
+  match: {
+    method?: string
+    host?: string
+    path?: string
+    query?: Record<string, unknown>
+    headers?: Record<string, unknown>
+    body?: Record<string, unknown>
+  }
+  respond: {
+    status?: number
+    headers?: Record<string, string[]>
+    body?: unknown
+  }
+}
+
+export interface UpsertScenarioRuleRequest {
+  protocol: string
+  rule: Rule
+}
+
+export interface ScenarioRule {
+  scenario_id: string
+  rule_id: string
+  name?: string
+  protocol: string
+  enabled: boolean
+  priority: number
+  expire_time: number
+  version: number
+  rule: Rule
+}
+
+export type ListScenarioRulesResponse = ListResponse<ScenarioRule>
+
+export interface SimulateScenarioRequest {
+  event: MockEvent
+  explain_only?: boolean
+  explain_max_depth?: number
+  explain_compact?: boolean
+  explain_summary?: boolean
+}
+
+export interface SimulateScenarioResponse {
+  result: SimulationResult
 }

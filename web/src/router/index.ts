@@ -29,6 +29,12 @@ const router = createRouter({
           meta: { title: 'Namespace' },
         },
         {
+          path: '/scenarios',
+          name: 'Scenarios',
+          component: () => import('@/views/scenarios/ScenarioList.vue'),
+          meta: { title: 'Scenarios' },
+        },
+        {
           path: '/rulesets/:id/rules',
           name: 'RuleSetRules',
           component: () => import('@/views/rulesets/RuleSetRules.vue'),

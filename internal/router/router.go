@@ -41,6 +41,14 @@ func NewWithTraffic(adminController *controller.AdminController, runtimeControll
 }
 
 func NewWithConfig(adminController *controller.AdminController, runtimeController *controller.RuntimeController, authConfig AuthConfig, routeConfig RouteConfig, metricsController *controller.MetricsController, trafficController *controller.TrafficController) *gin.Engine {
+	return NewWithConfigAndAgent(adminController, runtimeController, authConfig, routeConfig, metricsController, trafficController, nil)
+}
+
+func NewWithConfigAndAgent(adminController *controller.AdminController, runtimeController *controller.RuntimeController, authConfig AuthConfig, routeConfig RouteConfig, metricsController *controller.MetricsController, trafficController *controller.TrafficController, agentController *controller.AgentController) *gin.Engine {
+	return NewWithConfigAndAgentMCP(adminController, runtimeController, authConfig, routeConfig, metricsController, trafficController, agentController, nil)
+}
+
+func NewWithConfigAndAgentMCP(adminController *controller.AdminController, runtimeController *controller.RuntimeController, authConfig AuthConfig, routeConfig RouteConfig, metricsController *controller.MetricsController, trafficController *controller.TrafficController, agentController *controller.AgentController, agentMCPController *controller.AgentMCPController) *gin.Engine {
 	// gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	engine.RedirectTrailingSlash = false
@@ -85,6 +93,24 @@ func NewWithConfig(adminController *controller.AdminController, runtimeControlle
 	if trafficController != nil {
 		admin.GET("/traffic/events", trafficController.ListEvents)
 		admin.GET("/traffic/events/:traffic_event_id", trafficController.GetEvent)
+	}
+	if agentController != nil {
+		agent := root.Group("/mockserver/api/v1/agent")
+		agent.Use(jwtAuthMiddleware(authConfig))
+		agent.POST("/scenarios", agentController.CreateScenario)
+		agent.GET("/scenarios", agentController.ListScenarios)
+		agent.GET("/scenarios/:scenario_id", agentController.GetScenario)
+		agent.PATCH("/scenarios/:scenario_id", agentController.UpdateScenario)
+		agent.GET("/scenarios/:scenario_id/rules", agentController.ListScenarioRules)
+		agent.POST("/scenarios/:scenario_id/rules/quick", agentController.UpsertHTTPQuickRule)
+		agent.PUT("/scenarios/:scenario_id/rules/:rule_id", agentController.UpsertScenarioRule)
+		agent.DELETE("/scenarios/:scenario_id/rules/:rule_id", agentController.DeleteScenarioRule)
+		agent.POST("/scenarios/:scenario_id/simulate", agentController.SimulateScenario)
+		agent.GET("/scenarios/:scenario_id/traffic", agentController.ListScenarioTraffic)
+		agent.DELETE("/scenarios/:scenario_id", agentController.DeleteScenario)
+		if agentMCPController != nil {
+			agent.Any("/mcp", agentMCPController.Handle)
+		}
 	}
 	root.POST("/mockserver/api/v1/sdk/decision", runtimeController.DecidePublished)
 	root.Any("/mockserver/runtime/:namespace/http", runtimeController.HandleHTTP)

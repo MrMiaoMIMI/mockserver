@@ -55,7 +55,7 @@ func TestTrafficServiceRecordSDKDecisionBuildsMinimalQueryableIndexes(t *testing
 				"authorization": {"Bearer secret"},
 			},
 		},
-		Meta: bo.EventMeta{TraceID: "trace-001"},
+		Meta: bo.EventMeta{TraceID: "trace-001", ScenarioID: "scn_traffic_case1"},
 	}
 	decision := bo.RuntimeDecision{
 		Kind:    "response",
@@ -95,6 +95,9 @@ func TestTrafficServiceRecordSDKDecisionBuildsMinimalQueryableIndexes(t *testing
 	}
 	if repository.event.TrafficSource != bo.TrafficSourceSDKDecision {
 		t.Fatalf("unexpected traffic source: %s", repository.event.TrafficSource)
+	}
+	if repository.event.ScenarioID != "scn_traffic_case1" {
+		t.Fatalf("unexpected scenario id: %s", repository.event.ScenarioID)
 	}
 	if repository.event.ProtocolName != "http" || repository.event.NamespaceID != "shop" {
 		t.Fatalf("unexpected protocol namespace: %+v", repository.event)

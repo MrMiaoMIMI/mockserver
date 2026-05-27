@@ -18,7 +18,8 @@ type ForwardDecision struct {
 }
 
 type DecisionMeta struct {
-	TraceID string `json:"trace_id,omitempty"`
+	TraceID    string `json:"trace_id,omitempty"`
+	ScenarioID string `json:"scenario_id,omitempty"`
 }
 
 type DecisionDiagnostics struct {

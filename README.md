@@ -17,11 +17,13 @@
 - 唯一 `X-Trace-ID`
 - runtime 命中日志和内存 metrics
 - SDK decision traffic 落库和前端 Traffic Inspector
+- Agent Scenario Overlay，用于 AI 测试快速构造短生命周期 mock 场景
 
 面向使用者的快速上手说明见：
 
 - [用户使用说明书](docs/user_guide.md)
 - [Mock SDK Quickstart](docs/mocksdk.md)
+- [Agent Scenario Overlay](docs/agent_scenarios.md)
 
 当前版本先把架构闭环做通，已经接入部分 V2 能力。仍未包含：
 
@@ -47,6 +49,7 @@ internal/model/response        管理接口响应模型
 mockprotocol                   协议字段与 selector 规格
 docs/user_guide.md             用户使用说明书
 docs/mocksdk.md                外部 Mock SDK 快速接入说明
+docs/agent_scenarios.md        AI Agent 场景 mock 使用说明
 examples/ruleset.json          示例规则
 examples/mockserver.postman_collection.json  Postman 调试集合
 ```

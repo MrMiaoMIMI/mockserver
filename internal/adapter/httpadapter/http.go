@@ -76,7 +76,8 @@ func NormalizeHTTPRequest(r *http.Request, namespace string) (bo.Event, error) {
 		Namespace: namespace,
 		Request:   request,
 		Meta: bo.EventMeta{
-			TraceID: r.Header.Get("X-Trace-ID"),
+			TraceID:    r.Header.Get("X-Trace-ID"),
+			ScenarioID: strings.TrimSpace(r.Header.Get("X-Mockserver-Scenario-ID")),
 		},
 	}, nil
 }

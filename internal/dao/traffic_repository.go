@@ -199,6 +199,7 @@ func encodeTrafficEventRecord(event bo.TrafficEvent) modeldo.TrafficEvent {
 	return modeldo.TrafficEvent{
 		EventCode:      event.EventID,
 		TraceID:        event.TraceID,
+		ScenarioCode:   event.ScenarioID,
 		TrafficSource:  event.TrafficSource,
 		ProtocolName:   event.ProtocolName,
 		NamespaceID:    event.NamespaceDBID,
@@ -235,6 +236,7 @@ func decodeTrafficEventRecord(record modeldo.TrafficEvent) bo.TrafficEvent {
 		ID:             record.Id,
 		EventID:        record.EventCode,
 		TraceID:        record.TraceID,
+		ScenarioID:     record.ScenarioCode,
 		TrafficSource:  record.TrafficSource,
 		ProtocolName:   record.ProtocolName,
 		NamespaceDBID:  record.NamespaceID,

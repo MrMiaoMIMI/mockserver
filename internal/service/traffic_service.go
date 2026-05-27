@@ -57,6 +57,7 @@ func (s *trafficService) RecordSDKDecision(ctx context.Context, event bo.Event, 
 	traffic := bo.TrafficEvent{
 		EventID:        newTrafficEventID(now),
 		TraceID:        firstNonBlank(event.Meta.TraceID, decision.Meta.TraceID),
+		ScenarioID:     firstNonBlank(event.Meta.ScenarioID, decision.Meta.ScenarioID),
 		TrafficSource:  bo.TrafficSourceSDKDecision,
 		ProtocolName:   strings.TrimSpace(event.Protocol),
 		NamespaceID:    strings.TrimSpace(event.Namespace),

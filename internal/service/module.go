@@ -6,7 +6,8 @@ var Module = fx.Module("service",
 	fx.Provide(
 		NewRuleSetService,
 		NewNamespaceService,
-		NewRuntimeService,
+		NewScenarioService,
+		NewRuntimeServiceWithScenarios,
 		NewTrafficService,
 	),
 )

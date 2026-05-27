@@ -3,22 +3,31 @@ import { defineStore } from 'pinia'
 import { ElMessage } from 'element-plus'
 import { mockserverApi } from '@/api'
 import type {
+  CreateScenarioRequest,
+  HTTPQuickRuleRequest,
   ListPublishedRuleSetsResponse,
   ListNamespacesResponse,
   ListProtocolsResponse,
   ListRuleSetsResponse,
+  ListScenarioRulesResponse,
+  ListScenariosResponse,
   ListTrafficEventsResponse,
   NamespaceConfig,
   ProtocolSpec,
   PublishedRuleSetSnapshot,
   Rule,
+  Scenario,
+  ScenarioRule,
   RuleSet,
   RuntimeMetrics,
+  SimulateScenarioRequest,
   SimulateRuleSetRequest,
   SimulationResult,
   TrafficEvent,
   TrafficQueryParams,
   TrafficStats,
+  UpdateScenarioRequest,
+  UpsertScenarioRuleRequest,
   ValidateRuleSetResponse,
 } from '@/types'
 
@@ -35,6 +44,12 @@ export const useMockserverStore = defineStore('mockserver', () => {
   const trafficEvents = ref<TrafficEvent[]>([])
   const trafficStats = ref<TrafficStats | null>(null)
   const trafficTotal = ref(0)
+  const scenarios = ref<Scenario[]>([])
+  const currentScenario = ref<Scenario | null>(null)
+  const scenarioRules = ref<ScenarioRule[]>([])
+  const scenarioTrafficEvents = ref<TrafficEvent[]>([])
+  const scenarioTrafficStats = ref<TrafficStats | null>(null)
+  const scenarioTrafficTotal = ref(0)
   const loading = ref(false)
   const saving = ref(false)
 
@@ -53,6 +68,12 @@ export const useMockserverStore = defineStore('mockserver', () => {
   const protocolMap = computed(() => {
     const result = new Map<string, ProtocolSpec>()
     protocols.value.forEach((item) => result.set(item.name, item))
+    return result
+  })
+
+  const scenarioMap = computed(() => {
+    const result = new Map<string, Scenario>()
+    scenarios.value.forEach((item) => result.set(item.id, item))
     return result
   })
 
@@ -261,6 +282,117 @@ export const useMockserverStore = defineStore('mockserver', () => {
     return mockserverApi.getTrafficEvent(id)
   }
 
+  async function fetchScenarios(params: Parameters<typeof mockserverApi.listScenarios>[0] = {}) {
+    loading.value = true
+    try {
+      const response: ListScenariosResponse = await mockserverApi.listScenarios(params)
+      scenarios.value = response.items
+      return response
+    } finally {
+      loading.value = false
+    }
+  }
+
+  function updateScenarioCache(item: Scenario) {
+    currentScenario.value = item
+    const index = scenarios.value.findIndex((scenario) => scenario.id === item.id)
+    if (index >= 0) {
+      scenarios.value[index] = item
+    } else {
+      scenarios.value.unshift(item)
+    }
+  }
+
+  async function createScenario(data: CreateScenarioRequest) {
+    saving.value = true
+    try {
+      const item = await mockserverApi.createScenario(data)
+      updateScenarioCache(item)
+      ElMessage.success('Scenario created')
+      return item
+    } finally {
+      saving.value = false
+    }
+  }
+
+  async function fetchScenario(id: string) {
+    const item = await mockserverApi.getScenario(id)
+    updateScenarioCache(item)
+    return item
+  }
+
+  async function updateScenario(id: string, data: UpdateScenarioRequest) {
+    saving.value = true
+    try {
+      const item = await mockserverApi.updateScenario(id, data)
+      updateScenarioCache(item)
+      ElMessage.success('Scenario updated')
+      return item
+    } finally {
+      saving.value = false
+    }
+  }
+
+  async function deleteScenario(id: string) {
+    await mockserverApi.deleteScenario(id)
+    scenarios.value = scenarios.value.filter((scenario) => scenario.id !== id)
+    if (currentScenario.value?.id === id) {
+      currentScenario.value = null
+      scenarioRules.value = []
+      scenarioTrafficEvents.value = []
+      scenarioTrafficStats.value = null
+      scenarioTrafficTotal.value = 0
+    }
+    ElMessage.success('Scenario deleted')
+  }
+
+  async function fetchScenarioRules(id: string) {
+    const response: ListScenarioRulesResponse = await mockserverApi.listScenarioRules(id)
+    scenarioRules.value = response.items
+    const cached = scenarioMap.value.get(id)
+    if (cached) {
+      updateScenarioCache({ ...cached, rule_count: response.total })
+    }
+    return response
+  }
+
+  async function upsertHTTPQuickRule(id: string, data: HTTPQuickRuleRequest) {
+    const item = await mockserverApi.upsertHTTPQuickRule(id, data)
+    await fetchScenarioRules(id)
+    ElMessage.success('Scenario rule saved')
+    return item
+  }
+
+  async function upsertScenarioRule(id: string, ruleId: string, data: UpsertScenarioRuleRequest) {
+    const item = await mockserverApi.upsertScenarioRule(id, ruleId, data)
+    await fetchScenarioRules(id)
+    ElMessage.success('Scenario rule saved')
+    return item
+  }
+
+  async function deleteScenarioRule(id: string, ruleId: string) {
+    await mockserverApi.deleteScenarioRule(id, ruleId)
+    await fetchScenarioRules(id)
+    ElMessage.success('Scenario rule deleted')
+  }
+
+  async function simulateScenario(id: string, request: SimulateScenarioRequest) {
+    const response = await mockserverApi.simulateScenario(id, request)
+    simulation.value = response.result
+    return response.result
+  }
+
+  async function fetchScenarioTraffic(id: string, query: TrafficQueryParams = {}) {
+    const response = await mockserverApi.listScenarioTraffic(id, {
+      limit: 25,
+      ...query,
+    })
+    scenarioTrafficEvents.value = response.items
+    scenarioTrafficStats.value = response.stats
+    scenarioTrafficTotal.value = response.total
+    return response
+  }
+
   function setCurrentDraft(ruleSet: RuleSet | null) {
     currentDraft.value = ruleSet
     validation.value = null
@@ -280,11 +412,18 @@ export const useMockserverStore = defineStore('mockserver', () => {
     trafficEvents,
     trafficStats,
     trafficTotal,
+    scenarios,
+    currentScenario,
+    scenarioRules,
+    scenarioTrafficEvents,
+    scenarioTrafficStats,
+    scenarioTrafficTotal,
     loading,
     saving,
     draftMap,
     namespaceMap,
     protocolMap,
+    scenarioMap,
     fetchDrafts,
     fetchNamespaces,
     fetchProtocols,
@@ -307,6 +446,17 @@ export const useMockserverStore = defineStore('mockserver', () => {
     fetchTrafficEvents,
     fetchTrafficSummary,
     fetchTrafficEvent,
+    fetchScenarios,
+    createScenario,
+    fetchScenario,
+    updateScenario,
+    deleteScenario,
+    fetchScenarioRules,
+    upsertHTTPQuickRule,
+    upsertScenarioRule,
+    deleteScenarioRule,
+    simulateScenario,
+    fetchScenarioTraffic,
     setCurrentDraft,
   }
 })

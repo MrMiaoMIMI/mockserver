@@ -29,6 +29,24 @@ Environment variables have higher priority than explicit SDK options.
 
 If neither `MOCKSERVER_NAMESPACE_ID` nor `Config.Namespace` is set, the SDK uses `default`.
 
+## Scenario Context
+
+Short-lived agent scenarios are passed through request context instead of
+process-wide environment variables:
+
+```go
+ctx = mocksdk.WithScenarioID(ctx, "scn_checkout_timeout")
+```
+
+The SDK validates scenario ids before sending the decision request. Valid ids
+start with `scn_`, are 8 to 128 characters long, and only contain letters,
+digits, underscores, and hyphens.
+
+If an event already contains `event.Meta.ScenarioID`, that explicit value wins
+over the context value. This lets mockinject decide how to propagate the
+scenario id from each test request without constraining the whole business
+process to one scenario.
+
 ## Decision Endpoint
 
 The SDK calls:
@@ -47,7 +65,12 @@ request becomes:
 POST /tenant-a/mockserver/api/v1/sdk/decision
 ```
 
-This endpoint evaluates published rulesets only. Draft rules do not affect SDK decisions until they are published.
+By default this endpoint evaluates published rulesets. When the event carries
+`meta.scenario_id`, MockServer first evaluates active scenario overlay rules for
+that scenario. While `meta.scenario_id` is present, a missing, inactive, expired,
+or unmatched scenario resolves through the event namespace fallback policy and
+does not fall through to published rulesets. Draft rules do not affect SDK
+decisions until they are published.
 Rulesets must declare at least one selector condition, so unrelated SDK traffic that does not enter a declared ruleset boundary becomes `ruleset_miss`.
 
 The endpoint returns MockServer's standard response envelope. The payload is `data.decision`.
@@ -74,6 +97,7 @@ Important fields:
 - `response.protocol`: protocol of the response payload.
 - `response.payload`: protocol-native response payload. The SDK stores it as one raw JSON payload and protocol adapters decode it into typed payloads. HTTP adapters decode `status`, `headers`, and `body`; SPEX adapters decode `code` and raw JSON `resp`; cache adapters decode `hit` and `value`.
 - `meta.trace_id`: trace ID propagated from the original request event.
+- `meta.scenario_id`: scenario id used for the decision when the request carried one.
 
 ### Forward Decision
 

@@ -43,6 +43,7 @@ func (c *TrafficController) ListEvents(ctx *gin.Context) {
 		EndTime:        uint64Query(ctx, "end_time", 0),
 		EventID:        strings.TrimSpace(ctx.Query("event_id")),
 		TraceID:        strings.TrimSpace(ctx.Query("trace_id")),
+		ScenarioID:     strings.TrimSpace(ctx.Query("scenario_id")),
 		ProtocolName:   strings.TrimSpace(ctx.Query("protocol_name")),
 		NamespaceID:    strings.TrimSpace(ctx.Query("namespace_id")),
 		OperationName:  strings.TrimSpace(ctx.Query("operation_name")),

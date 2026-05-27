@@ -8,5 +8,7 @@ var Module = fx.Module("controller",
 		NewRuntimeControllerWithTraffic,
 		NewMetricsController,
 		NewTrafficController,
+		NewAgentController,
+		NewAgentMCPController,
 	),
 )

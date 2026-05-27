@@ -3,7 +3,10 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
+
+	"github.com/MrMiaoMIMI/goshared/util/servererr"
 
 	"github.com/MrMiaoMIMI/mockserver/internal/dao"
 	"github.com/MrMiaoMIMI/mockserver/internal/engine"
@@ -15,6 +18,7 @@ type runtimeService struct {
 	ruleSets            dao.RuleSetRepository
 	namespaceRepository dao.NamespaceRepository
 	namespaceService    NamespaceService
+	scenarios           ScenarioService
 	cache               publishedRuntimeCache
 }
 
@@ -34,7 +38,32 @@ func NewRuntimeService(ruleSetRepository dao.RuleSetRepository, namespaceReposit
 	}
 }
 
+func NewRuntimeServiceWithScenarios(ruleSetRepository dao.RuleSetRepository, namespaceRepository dao.NamespaceRepository, namespaceService NamespaceService, scenarioService ScenarioService) RuntimeService {
+	service := NewRuntimeService(ruleSetRepository, namespaceRepository, namespaceService).(*runtimeService)
+	service.scenarios = scenarioService
+	return service
+}
+
 func (s *runtimeService) MatchPublished(ctx context.Context, event bo.Event) (bo.SimulationResult, error) {
+	if result, ok, err := s.matchScenarioOverlay(ctx, event); err != nil {
+		return bo.SimulationResult{}, err
+	} else if ok {
+		if result.Matched {
+			return result, nil
+		}
+		reason, action, err := s.resolveNamespaceFallback(ctx, event, result)
+		if err != nil {
+			return bo.SimulationResult{}, err
+		}
+		response, err := executeHTTPRuntimeNamespaceFallback(ctx, action, event)
+		if err != nil {
+			return bo.SimulationResult{}, err
+		}
+		result.Fallback = true
+		result.Trace.FallbackReason = reason
+		result.Response = response
+		return result, nil
+	}
 	result, err := s.matchPublished(ctx, event)
 	if err != nil {
 		return bo.SimulationResult{}, err
@@ -58,55 +87,20 @@ func (s *runtimeService) MatchPublished(ctx context.Context, event bo.Event) (bo
 }
 
 func (s *runtimeService) DecidePublished(ctx context.Context, event bo.Event) (bo.RuntimeDecision, error) {
+	if result, ok, err := s.matchScenarioOverlay(ctx, event); err != nil {
+		return bo.RuntimeDecision{}, err
+	} else if ok {
+		if result.Matched {
+			return responseDecisionFromSimulation(event, result), nil
+		}
+		return s.decisionFromNamespaceFallback(ctx, event, result)
+	}
 	result, err := s.matchPublished(ctx, event)
 	if err != nil {
 		return bo.RuntimeDecision{}, err
 	}
 	if !result.Matched {
-		reason, action, err := s.resolveNamespaceFallback(ctx, event, result)
-		if err != nil {
-			return bo.RuntimeDecision{}, err
-		}
-		result.Trace.FallbackReason = reason
-		switch action.Type {
-		case eo.ActionTypeForward:
-			if action.Forward == nil {
-				return bo.RuntimeDecision{}, fmt.Errorf("published forward decision requires forward fallback payload")
-			}
-			return bo.RuntimeDecision{
-				Kind:     eo.DecisionKindForward,
-				Matched:  false,
-				Fallback: true,
-				Protocol: event.Protocol,
-				Trace:    result.Trace,
-				Forward: &bo.ForwardDecision{
-					TimeoutMS: effectiveForwardTimeoutMS(*action.Forward),
-				},
-				Meta: bo.DecisionMeta{
-					TraceID: event.Meta.TraceID,
-				},
-				Diagnostics: decisionDiagnosticsFromSimulation(result),
-			}, nil
-		case eo.ActionTypeRespond:
-			response, err := namespaceStaticResponse(event.Protocol, action)
-			if err != nil {
-				return bo.RuntimeDecision{}, err
-			}
-			return bo.RuntimeDecision{
-				Kind:     eo.DecisionKindResponse,
-				Matched:  false,
-				Fallback: true,
-				Protocol: event.Protocol,
-				Trace:    result.Trace,
-				Response: &response,
-				Meta: bo.DecisionMeta{
-					TraceID: event.Meta.TraceID,
-				},
-				Diagnostics: decisionDiagnosticsFromSimulation(result),
-			}, nil
-		default:
-			return bo.RuntimeDecision{}, fmt.Errorf("unsupported namespace fallback action type %q", action.Type)
-		}
+		return s.decisionFromNamespaceFallback(ctx, event, result)
 	}
 	return bo.RuntimeDecision{
 		Kind:     eo.DecisionKindResponse,
@@ -118,10 +112,104 @@ func (s *runtimeService) DecidePublished(ctx context.Context, event bo.Event) (b
 			Payload:  clonePayload(result.Response.Payload),
 		},
 		Meta: bo.DecisionMeta{
-			TraceID: event.Meta.TraceID,
+			TraceID:    event.Meta.TraceID,
+			ScenarioID: event.Meta.ScenarioID,
 		},
 		Diagnostics: decisionDiagnosticsFromSimulation(result),
 	}, nil
+}
+
+func (s *runtimeService) matchScenarioOverlay(ctx context.Context, event bo.Event) (bo.SimulationResult, bool, error) {
+	if s.scenarios == nil || strings.TrimSpace(event.Meta.ScenarioID) == "" {
+		return bo.SimulationResult{}, false, nil
+	}
+	result, err := s.scenarios.SimulateScenario(ctx, strings.TrimSpace(event.Meta.ScenarioID), event, false, 0, false, false)
+	if err != nil {
+		if isScenarioOverlayUnavailable(err) {
+			return bo.SimulationResult{}, true, nil
+		}
+		return bo.SimulationResult{}, false, err
+	}
+	return result, true, nil
+}
+
+func (s *runtimeService) decisionFromNamespaceFallback(ctx context.Context, event bo.Event, result bo.SimulationResult) (bo.RuntimeDecision, error) {
+	reason, action, err := s.resolveNamespaceFallback(ctx, event, result)
+	if err != nil {
+		return bo.RuntimeDecision{}, err
+	}
+	result.Trace.FallbackReason = reason
+	switch action.Type {
+	case eo.ActionTypeForward:
+		if action.Forward == nil {
+			return bo.RuntimeDecision{}, fmt.Errorf("published forward decision requires forward fallback payload")
+		}
+		return bo.RuntimeDecision{
+			Kind:     eo.DecisionKindForward,
+			Matched:  false,
+			Fallback: true,
+			Protocol: event.Protocol,
+			Trace:    result.Trace,
+			Forward: &bo.ForwardDecision{
+				TimeoutMS: effectiveForwardTimeoutMS(*action.Forward),
+			},
+			Meta: bo.DecisionMeta{
+				TraceID:    event.Meta.TraceID,
+				ScenarioID: event.Meta.ScenarioID,
+			},
+			Diagnostics: decisionDiagnosticsFromSimulation(result),
+		}, nil
+	case eo.ActionTypeRespond:
+		response, err := namespaceStaticResponse(event.Protocol, action)
+		if err != nil {
+			return bo.RuntimeDecision{}, err
+		}
+		return bo.RuntimeDecision{
+			Kind:     eo.DecisionKindResponse,
+			Matched:  false,
+			Fallback: true,
+			Protocol: event.Protocol,
+			Trace:    result.Trace,
+			Response: &response,
+			Meta: bo.DecisionMeta{
+				TraceID:    event.Meta.TraceID,
+				ScenarioID: event.Meta.ScenarioID,
+			},
+			Diagnostics: decisionDiagnosticsFromSimulation(result),
+		}, nil
+	default:
+		return bo.RuntimeDecision{}, fmt.Errorf("unsupported namespace fallback action type %q", action.Type)
+	}
+}
+
+func isScenarioOverlayUnavailable(err error) bool {
+	code := servererr.CodeOf(err)
+	if code == servererr.ErrNotFound {
+		return true
+	}
+	if code != servererr.ErrBadRequest {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "expired") || strings.Contains(message, "not active")
+}
+
+func responseDecisionFromSimulation(event bo.Event, result bo.SimulationResult) bo.RuntimeDecision {
+	return bo.RuntimeDecision{
+		Kind:     eo.DecisionKindResponse,
+		Matched:  true,
+		Protocol: event.Protocol,
+		Trace:    result.Trace,
+		Response: &bo.ProtocolResponse{
+			Protocol: result.Response.Protocol,
+			Payload:  clonePayload(result.Response.Payload),
+		},
+		Meta: bo.DecisionMeta{
+			TraceID:    event.Meta.TraceID,
+			ScenarioID: event.Meta.ScenarioID,
+		},
+		Diagnostics: decisionDiagnosticsFromSimulation(result),
+	}
 }
 
 func decisionDiagnosticsFromSimulation(result bo.SimulationResult) *bo.DecisionDiagnostics {

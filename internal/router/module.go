@@ -35,14 +35,16 @@ func newRouteConfig(cfg config.Config) RouteConfig {
 type engineParams struct {
 	fx.In
 
-	AdminController   *controller.AdminController
-	RuntimeController *controller.RuntimeController
-	MetricsController *controller.MetricsController
-	TrafficController *controller.TrafficController
-	AuthConfig        AuthConfig
-	RouteConfig       RouteConfig
+	AdminController    *controller.AdminController
+	RuntimeController  *controller.RuntimeController
+	MetricsController  *controller.MetricsController
+	TrafficController  *controller.TrafficController
+	AgentController    *controller.AgentController
+	AgentMCPController *controller.AgentMCPController
+	AuthConfig         AuthConfig
+	RouteConfig        RouteConfig
 }
 
 func newEngine(p engineParams) *gin.Engine {
-	return NewWithConfig(p.AdminController, p.RuntimeController, p.AuthConfig, p.RouteConfig, p.MetricsController, p.TrafficController)
+	return NewWithConfigAndAgentMCP(p.AdminController, p.RuntimeController, p.AuthConfig, p.RouteConfig, p.MetricsController, p.TrafficController, p.AgentController, p.AgentMCPController)
 }

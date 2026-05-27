@@ -278,6 +278,9 @@ func (d *gosharedTrafficTableDAO) buildEventQuery(query bo.TrafficQuery, eventID
 	if query.TraceID != "" {
 		conditions = append(conditions, d.eventFields.TraceID.Eq(&query.TraceID))
 	}
+	if query.ScenarioID != "" {
+		conditions = append(conditions, d.eventFields.ScenarioCode.Eq(&query.ScenarioID))
+	}
 	if query.TrafficSource != "" {
 		conditions = append(conditions, d.eventFields.TrafficSource.Eq(&query.TrafficSource))
 	}
@@ -357,6 +360,7 @@ func (d *gosharedTrafficTableDAO) buildEventWhereSQL(query bo.TrafficQuery, even
 	}
 	appendEqCondition("event_code", query.EventID, query.EventID != "")
 	appendEqCondition("trace_id", query.TraceID, query.TraceID != "")
+	appendEqCondition("scenario_code", query.ScenarioID, query.ScenarioID != "")
 	appendEqCondition("traffic_source", query.TrafficSource, query.TrafficSource != "")
 	appendEqCondition("protocol_name", query.ProtocolName, query.ProtocolName != "")
 	if query.NamespaceDBID > 0 && query.NamespaceID != "" {

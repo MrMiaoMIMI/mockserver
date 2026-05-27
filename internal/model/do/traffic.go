@@ -4,6 +4,7 @@ type TrafficEvent struct {
 	CommonDo
 	EventCode      string `gorm:"column:event_code"`
 	TraceID        string `gorm:"column:trace_id"`
+	ScenarioCode   string `gorm:"column:scenario_code"`
 	TrafficSource  string `gorm:"column:traffic_source"`
 	ProtocolName   string `gorm:"column:protocol_name"`
 	NamespaceID    uint64 `gorm:"column:namespace_id"`

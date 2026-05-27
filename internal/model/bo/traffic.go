@@ -13,6 +13,7 @@ type TrafficEvent struct {
 	ID             uint64              `json:"id"`
 	EventID        string              `json:"event_id"`
 	TraceID        string              `json:"trace_id,omitempty"`
+	ScenarioID     string              `json:"scenario_id,omitempty"`
 	TrafficSource  string              `json:"traffic_source"`
 	ProtocolName   string              `json:"protocol_name"`
 	NamespaceDBID  uint64              `json:"-"`
@@ -60,6 +61,7 @@ type TrafficQuery struct {
 	EndTime        uint64
 	EventID        string
 	TraceID        string
+	ScenarioID     string
 	TrafficSource  string
 	ProtocolName   string
 	NamespaceID    string

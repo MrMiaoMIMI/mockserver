@@ -11,9 +11,10 @@ type Event struct {
 type EventRequest map[string]any
 
 type EventMeta struct {
-	TraceID string         `json:"trace_id,omitempty"`
-	Source  string         `json:"source,omitempty"`
-	Extra   map[string]any `json:"extra,omitempty"`
+	TraceID    string         `json:"trace_id,omitempty"`
+	Source     string         `json:"source,omitempty"`
+	ScenarioID string         `json:"scenario_id,omitempty"`
+	Extra      map[string]any `json:"extra,omitempty"`
 }
 
 func NewEventRequest(values map[string]any) EventRequest {

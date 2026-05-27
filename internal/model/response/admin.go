@@ -89,6 +89,7 @@ type TrafficEventResponse struct {
 	ID             uint64                      `json:"id"`
 	EventID        string                      `json:"event_id"`
 	TraceID        string                      `json:"trace_id,omitempty"`
+	ScenarioID     string                      `json:"scenario_id,omitempty"`
 	TrafficSource  string                      `json:"traffic_source"`
 	ProtocolName   string                      `json:"protocol_name"`
 	NamespaceID    string                      `json:"namespace_id"`
@@ -151,6 +152,7 @@ func newTrafficEventResponse(item bo.TrafficEvent, includePayload bool, includeI
 		ID:             item.ID,
 		EventID:        item.EventID,
 		TraceID:        item.TraceID,
+		ScenarioID:     item.ScenarioID,
 		TrafficSource:  item.TrafficSource,
 		ProtocolName:   item.ProtocolName,
 		NamespaceID:    item.NamespaceID,

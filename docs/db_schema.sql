@@ -78,10 +78,55 @@ CREATE TABLE IF NOT EXISTS mockserver_namespace_tab (
     UNIQUE KEY idx_namespace_name (namespace_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Mockserver namespace table';
 
+CREATE TABLE IF NOT EXISTS mockserver_scenario_tab (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Auto increment primary key',
+    scenario_code VARCHAR(128) NOT NULL COMMENT 'Scenario business code',
+    scenario_name VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'Scenario display name',
+    status VARCHAR(32) NOT NULL DEFAULT '' COMMENT 'Scenario status',
+    expire_time BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Expire time in UNIX milliseconds',
+    version INT UNSIGNED NOT NULL DEFAULT 1 COMMENT 'Scenario version',
+    scenario_json LONGTEXT NOT NULL COMMENT 'Serialized scenario JSON',
+    creator VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Creator',
+    updater VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Updater',
+    ctime BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Create time in UNIX milliseconds',
+    mtime BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Update time in UNIX milliseconds',
+    deleted TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Soft delete flag',
+    PRIMARY KEY (id),
+    UNIQUE KEY idx_scenario_code (scenario_code),
+    KEY idx_status_expire_time (status, expire_time),
+    KEY idx_expire_time (expire_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Mockserver scenario table';
+
+CREATE TABLE IF NOT EXISTS mockserver_scenario_rule_tab (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Auto increment primary key',
+    scenario_id BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Scenario primary key',
+    scenario_code VARCHAR(128) NOT NULL COMMENT 'Scenario business code',
+    rule_code VARCHAR(64) NOT NULL COMMENT 'Scenario rule business code',
+    rule_name VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'Scenario rule display name',
+    protocol_name VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'Protocol name',
+    namespace_code VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'Namespace business code',
+    enabled TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT 'Whether rule is enabled',
+    priority INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Rule priority',
+    expire_time BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Expire time in UNIX milliseconds',
+    version INT UNSIGNED NOT NULL DEFAULT 1 COMMENT 'Rule version',
+    rule_json LONGTEXT NOT NULL COMMENT 'Serialized rule JSON',
+    creator VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Creator',
+    updater VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Updater',
+    ctime BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Create time in UNIX milliseconds',
+    mtime BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Update time in UNIX milliseconds',
+    deleted TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Soft delete flag',
+    PRIMARY KEY (id),
+    UNIQUE KEY idx_scenario_rule_code (scenario_code, rule_code),
+    KEY idx_scenario_protocol_namespace (scenario_code, protocol_name, namespace_code, enabled, expire_time),
+    KEY idx_scenario_id (scenario_id),
+    KEY idx_expire_time (expire_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Mockserver scenario rule table';
+
 CREATE TABLE IF NOT EXISTS mockserver_traffic_event_tab (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Auto increment primary key',
     event_code VARCHAR(48) NOT NULL COMMENT 'Traffic event business code',
     trace_id VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'SDK trace id',
+    scenario_code VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'Scenario business code',
     traffic_source VARCHAR(32) NOT NULL DEFAULT '' COMMENT 'Traffic source',
     protocol_name VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'Protocol name',
     namespace_id BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Namespace primary key',
@@ -110,6 +155,7 @@ CREATE TABLE IF NOT EXISTS mockserver_traffic_event_tab (
     PRIMARY KEY (id),
     UNIQUE KEY idx_event_code (event_code),
     KEY idx_traffic_source_event_time_id (traffic_source, event_time, id),
+    KEY idx_scenario_event_time_id (scenario_code, event_time, id),
     KEY idx_namespace_id_protocol_event_time (namespace_id, protocol_name, event_time),
     KEY idx_trace_id (trace_id),
     KEY idx_outcome_event_time (outcome, event_time),

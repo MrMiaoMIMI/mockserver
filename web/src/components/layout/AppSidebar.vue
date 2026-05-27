@@ -50,7 +50,7 @@
 <script setup lang="ts">
 import { computed, markRaw } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import { Box, Connection, Tickets, TrendCharts } from '@element-plus/icons-vue'
+import { Aim, Box, Connection, Tickets, TrendCharts } from '@element-plus/icons-vue'
 import { useMockserverStore } from '@/store'
 import { apiPath } from '@/utils/apiPrefix'
 
@@ -76,6 +76,13 @@ const navItems = computed(() => [
     icon: markRaw(Box),
     count: store.namespaces.length,
     active: route.path.startsWith('/namespaces'),
+  },
+  {
+    path: '/scenarios',
+    label: 'Scenarios',
+    icon: markRaw(Aim),
+    count: store.scenarios.length,
+    active: route.path.startsWith('/scenarios'),
   },
   {
     path: '/traffic',

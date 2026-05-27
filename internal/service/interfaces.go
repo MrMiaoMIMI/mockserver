@@ -38,6 +38,20 @@ type RuntimeService interface {
 	DecidePublished(ctx context.Context, event bo.Event) (bo.RuntimeDecision, error)
 }
 
+type ScenarioService interface {
+	CreateScenario(ctx context.Context, scenario bo.Scenario) (bo.Scenario, error)
+	GetScenario(ctx context.Context, id string) (bo.Scenario, error)
+	ListScenarios(ctx context.Context, query bo.ScenarioQuery) ([]bo.Scenario, error)
+	UpdateScenario(ctx context.Context, id string, update bo.ScenarioUpdate) (bo.Scenario, error)
+	DeleteScenario(ctx context.Context, id string) error
+	UpsertScenarioRule(ctx context.Context, rule bo.ScenarioRule) (bo.ScenarioRule, error)
+	UpsertHTTPQuickRule(ctx context.Context, scenarioID string, quick bo.HTTPQuickRule) (bo.ScenarioRule, error)
+	ListScenarioRules(ctx context.Context, scenarioID string) ([]bo.ScenarioRule, error)
+	DeleteScenarioRule(ctx context.Context, scenarioID, ruleID string) error
+	ListActiveScenarioRules(ctx context.Context, scenarioID, protocol, namespace string) ([]bo.ScenarioRule, error)
+	SimulateScenario(ctx context.Context, scenarioID string, event bo.Event, explainOnly bool, explainMaxDepth int, explainCompact bool, explainSummary bool) (bo.SimulationResult, error)
+}
+
 type TrafficService interface {
 	RecordSDKDecision(ctx context.Context, event bo.Event, decision bo.RuntimeDecision, decisionErr error, durationMS uint32) (bo.TrafficEvent, error)
 	GetTrafficEvent(ctx context.Context, id uint64) (bo.TrafficEvent, error)

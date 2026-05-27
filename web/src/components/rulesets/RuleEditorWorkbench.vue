@@ -77,7 +77,7 @@
 
       <div class="section-switch" role="tablist" aria-label="Rule editor sections">
         <button
-          v-for="section in sections"
+          v-for="section in visibleSections"
           :key="section.name"
           type="button"
           :class="{ active: activeSection === section.name, invalid: sectionHasError(section.name) }"
@@ -391,7 +391,7 @@
           </p>
         </section>
 
-        <section v-show="activeSection === 'preview'" class="editor-section">
+        <section v-if="previewEnabled" v-show="activeSection === 'preview'" class="editor-section">
           <div class="section-heading">
             <span>preview</span>
             <strong>Simulate unsaved draft</strong>
@@ -425,7 +425,9 @@
       <footer class="editor-footer">
         <el-button @click="resetForm">Reset</el-button>
         <el-button @click="$emit('cancel')">Cancel</el-button>
-        <el-button :loading="previewLoading" @click="openPreviewAndRun">Preview</el-button>
+        <el-button v-if="previewEnabled" :loading="previewLoading" @click="openPreviewAndRun">
+          Preview
+        </el-button>
         <el-button type="primary" :loading="saving" @click="submitRule">Save rule</el-button>
       </footer>
     </div>
@@ -471,6 +473,10 @@ const props = defineProps<{
   mode: RuleEditorMode
   seedRule?: Rule | null
   seedLabel?: string
+  saveRule?: (rule: Rule, mode: RuleEditorMode, lockedRuleId?: string) => Promise<RuleSet>
+  enablePreview?: boolean
+  enableAdvanced?: boolean
+  allowedActionTypes?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -490,7 +496,6 @@ const previewResultJson = ref('')
 const previewError = ref('')
 const sampleAssistExpanded = ref(false)
 
-const actionProfiles = ACTION_AUTHORING_PROFILES
 const sections: Array<{ name: EditorSection; label: string }> = [
   { name: 'identity', label: 'Identity' },
   { name: 'condition', label: 'Condition' },
@@ -498,6 +503,23 @@ const sections: Array<{ name: EditorSection; label: string }> = [
   { name: 'advanced', label: 'Raw' },
   { name: 'preview', label: 'Preview' },
 ]
+const previewEnabled = computed(() => props.enablePreview !== false)
+const advancedEnabled = computed(() => props.enableAdvanced !== false)
+const actionProfiles = computed(() => {
+  const allowed = props.allowedActionTypes?.length
+    ? new Set(props.allowedActionTypes)
+    : null
+  return allowed
+    ? ACTION_AUTHORING_PROFILES.filter((profile) => allowed.has(profile.type))
+    : ACTION_AUTHORING_PROFILES
+})
+const visibleSections = computed(() =>
+  sections.filter((section) => {
+    if (section.name === 'preview') return previewEnabled.value
+    if (section.name === 'advanced') return advancedEnabled.value
+    return true
+  })
+)
 
 const actionTitle = computed(() => {
   if (form.actionType === 'sequence') return 'Ordered response sequence'
@@ -587,6 +609,26 @@ watch(
 )
 
 watch(
+  () => visibleSections.value.map((section) => section.name).join('\u0000'),
+  () => {
+    if (!visibleSections.value.some((section) => section.name === activeSection.value)) {
+      activeSection.value = visibleSections.value[0]?.name || 'identity'
+    }
+  },
+  { immediate: true }
+)
+
+watch(
+  () => actionProfiles.value.map((profile) => profile.type).join('\u0000'),
+  () => {
+    if (actionProfiles.value.length && !actionProfiles.value.some((profile) => profile.type === form.actionType)) {
+      form.actionType = actionProfiles.value[0].type
+    }
+  },
+  { immediate: true }
+)
+
+watch(
   () => authoringView.value.eventJson,
   (eventJson) => {
     if (!eventJson) return
@@ -649,8 +691,9 @@ async function submitRule() {
 
   saving.value = true
   try {
-    const updated =
-      props.mode === 'edit' && props.rule
+    const updated = props.saveRule
+      ? await props.saveRule(result.rule, props.mode, props.rule?.id)
+      : props.mode === 'edit' && props.rule
         ? await store.updateRule(props.ruleSet.id, props.rule.id, result.rule)
         : await store.addRule(props.ruleSet.id, result.rule)
     emit('updated', updated, result.rule.id)
@@ -713,11 +756,13 @@ function refreshPreviewEvent() {
 }
 
 async function openPreviewAndRun() {
+  if (!previewEnabled.value) return
   activeSection.value = 'preview'
   await runAuthoringPreview()
 }
 
 async function runAuthoringPreview() {
+  if (!previewEnabled.value) return
   if (!props.ruleSet) return
   const view = authoringView.value
   if (handleBuildErrors(view.errors) || !view.draftOverride) return
