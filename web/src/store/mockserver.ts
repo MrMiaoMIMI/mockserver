@@ -105,10 +105,10 @@ export const useMockserverStore = defineStore('mockserver', () => {
     return response
   }
 
-  async function saveNamespace(data: NamespaceConfig) {
+  async function saveNamespace(data: NamespaceConfig, update = false) {
     saving.value = true
     try {
-      const item = await mockserverApi.saveNamespace(data)
+      const item = await mockserverApi.saveNamespace(data, update)
       const index = namespaces.value.findIndex((namespace) => namespace.id === item.id)
       if (index >= 0) {
         namespaces.value[index] = item

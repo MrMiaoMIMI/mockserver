@@ -58,8 +58,8 @@ export const mockserverApi = {
   getNamespace(id: string): Promise<NamespaceConfig> {
     return http.get(`${adminBase}/namespaces/${encodeURIComponent(id)}`)
   },
-  saveNamespace(data: NamespaceConfig): Promise<NamespaceConfig> {
-    if (data.id) {
+  saveNamespace(data: NamespaceConfig, update = false): Promise<NamespaceConfig> {
+    if (update) {
       return http.put(`${adminBase}/namespaces/${encodeURIComponent(data.id)}`, data)
     }
     return http.post(`${adminBase}/namespaces`, data)

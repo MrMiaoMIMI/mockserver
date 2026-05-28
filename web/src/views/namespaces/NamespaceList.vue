@@ -498,7 +498,7 @@ async function submit() {
     policies: policiesFromForm(),
     version: editingNamespace.value ? form.version : undefined,
   }
-  await store.saveNamespace(payload)
+  await store.saveNamespace(payload, Boolean(editingNamespace.value))
   dialogVisible.value = false
   await loadAll()
 }
