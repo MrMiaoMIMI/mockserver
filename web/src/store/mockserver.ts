@@ -61,7 +61,7 @@ export const useMockserverStore = defineStore('mockserver', () => {
 
   const namespaceMap = computed(() => {
     const result = new Map<string, NamespaceConfig>()
-    namespaces.value.forEach((item) => result.set(item.id, item))
+    namespaces.value.forEach((item) => result.set(item.name, item))
     return result
   })
 
@@ -109,7 +109,7 @@ export const useMockserverStore = defineStore('mockserver', () => {
     saving.value = true
     try {
       const item = await mockserverApi.saveNamespace(data, update)
-      const index = namespaces.value.findIndex((namespace) => namespace.id === item.id)
+      const index = namespaces.value.findIndex((namespace) => namespace.name === item.name)
       if (index >= 0) {
         namespaces.value[index] = item
       } else {

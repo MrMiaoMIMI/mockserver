@@ -105,8 +105,7 @@ const published: PublishedRuleSetSnapshot[] = [
 
 const namespaces: NamespaceConfig[] = [
   {
-    id: 'default',
-    name: 'Default',
+    name: 'default',
     policies: {
       http: {
         ruleset_miss_action: { type: 'forward', forward: { timeout_ms: 5000 } },
@@ -115,8 +114,7 @@ const namespaces: NamespaceConfig[] = [
     },
   },
   {
-    id: 'payments',
-    name: 'Payments',
+    name: 'payments',
     description: 'Payment mocks',
     policies: {
       http: {
@@ -184,7 +182,7 @@ describe('namespace entry view models', () => {
     })
     const shownRows = buildNamespaceEntryRows(namespaces, [draftCurrent, draftChanged, draftSpex, draftOnly], filters)
 
-    expect(shownRows.map((row) => row.namespace.id)).toEqual(['payments'])
+    expect(shownRows.map((row) => row.namespace.name)).toEqual(['payments'])
     expect(shownRows[0].protocols).toEqual(['http', 'spex'])
     expect(shownRows[0].usage).toMatchObject({
       rulesetCount: 2,
@@ -207,7 +205,7 @@ describe('namespace entry view models', () => {
 
     const rows = buildNamespaceEntryRows(namespaces, [draftCurrent, draftChanged, draftSpex, draftOnly], filters)
 
-    expect(rows.map((row) => row.namespace.id)).toEqual(['payments'])
+    expect(rows.map((row) => row.namespace.name)).toEqual(['payments'])
     const spexPolicy = rows[0].policies.find((policy) => policy.protocol === 'spex')
     expect(spexPolicy?.rulesetMiss).toMatchObject({
       type: 'respond',
@@ -229,7 +227,7 @@ describe('namespace entry view models', () => {
       defaultNamespaceEntryFilters()
     )
 
-    const defaultNamespace = rows.find((row) => row.namespace.id === 'default')
+    const defaultNamespace = rows.find((row) => row.namespace.name === 'default')
 
     expect(defaultNamespace?.usage).toMatchObject({
       rulesetCount: 2,

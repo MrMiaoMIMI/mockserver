@@ -25,7 +25,7 @@ type ScenarioRule struct {
 	RuleCode      string `gorm:"column:rule_code"`
 	RuleName      string `gorm:"column:rule_name"`
 	ProtocolName  string `gorm:"column:protocol_name"`
-	NamespaceCode string `gorm:"column:namespace_code"`
+	NamespaceName string `gorm:"column:namespace_name"`
 	Enabled       bool   `gorm:"column:enabled"`
 	Priority      int    `gorm:"column:priority"`
 	ExpireTime    uint64 `gorm:"column:expire_time"`

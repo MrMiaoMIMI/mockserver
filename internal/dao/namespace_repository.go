@@ -18,7 +18,7 @@ func newNamespaceRepository(tableDAO namespaceTableDAO) NamespaceRepository {
 }
 
 func (r *namespaceRepository) UpsertNamespace(ctx context.Context, namespace bo.Namespace) (bo.Namespace, error) {
-	current, exists, err := r.tableDAO.GetNamespace(ctx, namespace.ID)
+	current, exists, err := r.tableDAO.GetNamespace(ctx, namespace.Name)
 	if err != nil {
 		return bo.Namespace{}, err
 	}
@@ -35,17 +35,16 @@ func (r *namespaceRepository) UpsertNamespace(ctx context.Context, namespace bo.
 
 	raw, err := json.Marshal(namespace)
 	if err != nil {
-		return bo.Namespace{}, fmt.Errorf("marshal namespace %s: %w", namespace.ID, err)
+		return bo.Namespace{}, fmt.Errorf("marshal namespace %s: %w", namespace.Name, err)
 	}
 	if err := r.tableDAO.UpsertNamespace(ctx, modeldo.NamespaceConfig{
-		NamespaceCode: namespace.ID,
 		NamespaceName: namespace.Name,
 		Version:       namespace.Version,
 		NamespaceJSON: string(raw),
 	}, expectedVersion); err != nil {
 		return bo.Namespace{}, err
 	}
-	if record, ok, err := r.tableDAO.GetNamespace(ctx, namespace.ID); err != nil {
+	if record, ok, err := r.tableDAO.GetNamespace(ctx, namespace.Name); err != nil {
 		return bo.Namespace{}, err
 	} else if ok {
 		namespace.DBID = record.Id
@@ -63,9 +62,6 @@ func (r *namespaceRepository) GetNamespace(ctx context.Context, id string) (bo.N
 		return bo.Namespace{}, false, err
 	}
 	namespace.DBID = record.Id
-	if namespace.ID == "" {
-		namespace.ID = record.NamespaceCode
-	}
 	if namespace.Name == "" {
 		namespace.Name = record.NamespaceName
 	}
@@ -87,9 +83,6 @@ func (r *namespaceRepository) ListNamespaces(ctx context.Context) ([]bo.Namespac
 			return nil, err
 		}
 		namespace.DBID = record.Id
-		if namespace.ID == "" {
-			namespace.ID = record.NamespaceCode
-		}
 		if namespace.Name == "" {
 			namespace.Name = record.NamespaceName
 		}

@@ -17,8 +17,7 @@ func TestNamespaceServiceEnforcesUniqueNameAndVersion(t *testing.T) {
 	namespaceService := NewNamespaceService(repository)
 
 	saved, err := namespaceService.UpsertNamespace(ctx, bo.Namespace{
-		ID:   "tenant-a",
-		Name: "Tenant A",
+		Name: "tenant-a",
 	})
 	if err != nil {
 		t.Fatalf("UpsertNamespace(create) error = %v", err)
@@ -28,15 +27,13 @@ func TestNamespaceServiceEnforcesUniqueNameAndVersion(t *testing.T) {
 	}
 
 	if _, err := namespaceService.UpsertNamespace(ctx, bo.Namespace{
-		ID:   "tenant-b",
-		Name: " tenant   a ",
+		Name: "tenant-a",
 	}); servererr.CodeOf(err) != servererr.ErrConflict {
 		t.Fatalf("expected duplicate namespace name conflict, got %v", err)
 	}
 
 	updated, err := namespaceService.UpsertNamespace(ctx, bo.Namespace{
-		ID:      saved.ID,
-		Name:    "Tenant A",
+		Name:    saved.Name,
 		Version: saved.Version,
 	})
 	if err != nil {
@@ -47,8 +44,7 @@ func TestNamespaceServiceEnforcesUniqueNameAndVersion(t *testing.T) {
 	}
 
 	if _, err := namespaceService.UpsertNamespace(ctx, bo.Namespace{
-		ID:      saved.ID,
-		Name:    "Tenant A stale",
+		Name:    saved.Name,
 		Version: saved.Version,
 	}); servererr.CodeOf(err) != servererr.ErrConflict {
 		t.Fatalf("expected stale namespace version conflict, got %v", err)
@@ -68,7 +64,7 @@ func TestRuleSetServiceEnforcesUniqueNamesAndPublishSelectorConflicts(t *testing
 	if _, err := ruleSetService.UpsertDraft(ctx, serviceHTTPRuleSet("orders-b", " orders ", "/api/other")); servererr.CodeOf(err) != servererr.ErrConflict {
 		t.Fatalf("expected duplicate ruleset name conflict, got %v", err)
 	}
-	if _, err := namespaceService.UpsertNamespace(ctx, bo.Namespace{ID: "tenant-b", Name: "Tenant B"}); err != nil {
+	if _, err := namespaceService.UpsertNamespace(ctx, bo.Namespace{Name: "tenant-b"}); err != nil {
 		t.Fatalf("UpsertNamespace(tenant-b) error = %v", err)
 	}
 	scopedDuplicateName := serviceHTTPRuleSet("orders-c", " orders ", "/api/tenant-b")

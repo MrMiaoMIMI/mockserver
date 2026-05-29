@@ -429,8 +429,7 @@ func TestNamespaceFallbackResponseFlow(t *testing.T) {
 	handler := router.New(adminController, runtimeController, router.AuthConfig{}, nil)
 
 	namespaceBody := map[string]any{
-		"id":   "fallback-namespace",
-		"name": "fallback namespace",
+		"name": "fallback-namespace",
 		"policies": httpNamespacePolicies(
 			httpStaticActionPayload(418, map[string]any{"fallback": "ruleset"}),
 			httpStaticActionPayload(409, map[string]any{"fallback": "rule"}),
@@ -439,18 +438,18 @@ func TestNamespaceFallbackResponseFlow(t *testing.T) {
 	namespaceResp := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/namespaces", namespaceBody, http.StatusOK)
 	var namespaceEnvelope struct {
 		Data struct {
-			ID string `json:"id"`
+			Name string `json:"name"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(readBody(t, namespaceResp), &namespaceEnvelope); err != nil {
 		t.Fatalf("decode namespace response: %v", err)
 	}
-	namespaceID := namespaceEnvelope.Data.ID
-	if namespaceID != "fallback-namespace" {
-		t.Fatalf("unexpected namespace id: %s", namespaceID)
+	namespaceName := namespaceEnvelope.Data.Name
+	if namespaceName != "fallback-namespace" {
+		t.Fatalf("unexpected namespace name: %s", namespaceName)
 	}
 
-	rulesetMissResp := doJSON(t, handler, http.MethodGet, "/mockserver/runtime/"+namespaceID+"/http/no-ruleset", nil, http.StatusTeapot)
+	rulesetMissResp := doJSON(t, handler, http.MethodGet, "/mockserver/runtime/"+namespaceName+"/http/no-ruleset", nil, http.StatusTeapot)
 	if got := rulesetMissResp.Header.Get("X-Mockserver-Fallback"); got != "ruleset_miss" {
 		t.Fatalf("unexpected ruleset fallback header: %q", got)
 	}
@@ -461,7 +460,7 @@ func TestNamespaceFallbackResponseFlow(t *testing.T) {
 		"name":      "fallback ruleset",
 		"enabled":   true,
 		"protocol":  "http",
-		"namespace": namespaceID,
+		"namespace": namespaceName,
 		"selector":  httpPathSelectorBody("/api/"),
 		"rules": []map[string]any{
 			{
@@ -481,7 +480,7 @@ func TestNamespaceFallbackResponseFlow(t *testing.T) {
 	doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/rulesets", ruleSetBody, http.StatusOK)
 	doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/rulesets/fallback-ruleset/publish", nil, http.StatusOK)
 
-	ruleMissResp := doJSON(t, handler, http.MethodGet, "/mockserver/runtime/"+namespaceID+"/http/api/miss", nil, http.StatusConflict)
+	ruleMissResp := doJSON(t, handler, http.MethodGet, "/mockserver/runtime/"+namespaceName+"/http/api/miss", nil, http.StatusConflict)
 	if got := ruleMissResp.Header.Get("X-Mockserver-Fallback"); got != "rule_miss" {
 		t.Fatalf("unexpected rule fallback header: %q", got)
 	}
@@ -502,8 +501,7 @@ func TestSDKDecisionEndpointReturnsResponseFallbackDecisions(t *testing.T) {
 	handler := router.New(adminController, runtimeController, router.AuthConfig{}, nil)
 
 	namespaceResp := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/namespaces", map[string]any{
-		"id":   "sdk-response-fallback",
-		"name": "sdk response fallback",
+		"name": "sdk-response-fallback",
 		"policies": httpNamespacePolicies(
 			httpStaticActionPayloadWithHeaders(418, map[string]any{"x-sdk-fallback": []string{"ruleset"}}, map[string]any{"fallback": "ruleset"}),
 			httpStaticActionPayloadWithHeaders(409, map[string]any{"x-sdk-fallback": []string{"rule"}}, map[string]any{"fallback": "rule"}),
@@ -511,13 +509,13 @@ func TestSDKDecisionEndpointReturnsResponseFallbackDecisions(t *testing.T) {
 	}, http.StatusOK)
 	var namespaceEnvelope struct {
 		Data struct {
-			ID string `json:"id"`
+			Name string `json:"name"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(readBody(t, namespaceResp), &namespaceEnvelope); err != nil {
 		t.Fatalf("decode namespace response: %v", err)
 	}
-	namespaceID := namespaceEnvelope.Data.ID
+	namespaceID := namespaceEnvelope.Data.Name
 
 	rulesetMissDecision := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/sdk/decision", map[string]any{
 		"event": map[string]any{
@@ -632,8 +630,7 @@ func TestSDKDecisionEndpointEndToEndDecisions(t *testing.T) {
 	doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/rulesets/sdk-e2e/publish", nil, http.StatusOK)
 
 	namespaceResp := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/namespaces", map[string]any{
-		"id":   "sdk-e2e-response-fallback",
-		"name": "sdk e2e response fallback",
+		"name": "sdk-e2e-response-fallback",
 		"policies": httpNamespacePolicies(
 			httpStaticActionPayload(451, map[string]any{"decision": "response-fallback"}),
 			httpStaticActionPayload(452, map[string]any{"decision": "rule-response-fallback"}),
@@ -641,7 +638,7 @@ func TestSDKDecisionEndpointEndToEndDecisions(t *testing.T) {
 	}, http.StatusOK)
 	var namespaceEnvelope struct {
 		Data struct {
-			ID string `json:"id"`
+			Name string `json:"name"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(readBody(t, namespaceResp), &namespaceEnvelope); err != nil {
@@ -682,7 +679,7 @@ func TestSDKDecisionEndpointEndToEndDecisions(t *testing.T) {
 	responseFallbackDecision := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/sdk/decision", map[string]any{
 		"event": map[string]any{
 			"protocol":  "http",
-			"namespace": namespaceEnvelope.Data.ID,
+			"namespace": namespaceEnvelope.Data.Name,
 			"request": map[string]any{
 				"method": "GET",
 				"path":   "/no-ruleset",
@@ -883,42 +880,41 @@ func TestNamespaceCreateDefaultsToForwardFallback(t *testing.T) {
 	handler := router.New(adminController, runtimeController, router.AuthConfig{}, nil)
 
 	createResp := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/namespaces", map[string]any{
-		"id":          "pass-through",
-		"name":        "pass through",
+		"name":        "pass-through",
 		"description": "created without explicit fallback",
 	}, http.StatusOK)
 	createBody := readBody(t, createResp)
-	assertBytesContain(t, createBody, `"name":"pass through"`)
+	assertBytesContain(t, createBody, `"name":"pass-through"`)
 	assertBytesContain(t, createBody, `"policies"`)
 	assertBytesContain(t, createBody, `"http"`)
 	assertBytesContain(t, createBody, `"ruleset_miss_action":{"type":"forward","forward":{"timeout_ms":5000}}`)
 
 	var envelope struct {
 		Data struct {
-			ID      string `json:"id"`
+			Name    string `json:"name"`
 			Version int    `json:"version"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(createBody, &envelope); err != nil {
 		t.Fatalf("decode namespace create response: %v", err)
 	}
-	if envelope.Data.ID != "pass-through" {
-		t.Fatalf("unexpected namespace id: %s", envelope.Data.ID)
+	if envelope.Data.Name != "pass-through" {
+		t.Fatalf("unexpected namespace name: %s", envelope.Data.Name)
 	}
 
-	getResp := doJSON(t, handler, http.MethodGet, "/mockserver/api/v1/admin/namespaces/"+envelope.Data.ID, nil, http.StatusOK)
+	getResp := doJSON(t, handler, http.MethodGet, "/mockserver/api/v1/admin/namespaces/"+envelope.Data.Name, nil, http.StatusOK)
 	getBody := readBody(t, getResp)
 	assertBytesContain(t, getBody, `"policies"`)
 	assertBytesContain(t, getBody, `"ruleset_miss_action":{"type":"forward","forward":{"timeout_ms":5000}}`)
 
 	listResp := doJSON(t, handler, http.MethodGet, "/mockserver/api/v1/admin/namespaces", nil, http.StatusOK)
 	listBody := readBody(t, listResp)
-	assertBytesContain(t, listBody, `"id":"`+envelope.Data.ID+`"`)
+	assertBytesContain(t, listBody, `"name":"`+envelope.Data.Name+`"`)
 	assertBytesContain(t, listBody, `"policies"`)
 	assertBytesContain(t, listBody, `"rule_miss_action":{"type":"forward","forward":{"timeout_ms":5000}}`)
 
-	updateResp := doJSON(t, handler, http.MethodPut, "/mockserver/api/v1/admin/namespaces/"+envelope.Data.ID, map[string]any{
-		"name":        "strict namespace",
+	updateResp := doJSON(t, handler, http.MethodPut, "/mockserver/api/v1/admin/namespaces/"+envelope.Data.Name, map[string]any{
+		"name":        envelope.Data.Name,
 		"description": "explicit response fallback",
 		"version":     envelope.Data.Version,
 		"policies": httpNamespacePolicies(
@@ -947,12 +943,10 @@ func TestAdminBusinessErrorsUseSpecificStatusCodes(t *testing.T) {
 	handler := router.New(adminController, runtimeController, router.AuthConfig{}, nil)
 
 	doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/namespaces", map[string]any{
-		"id":   "tenant-a",
-		"name": "Tenant A",
+		"name": "tenant-a",
 	}, http.StatusOK)
 	conflictResp := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/namespaces", map[string]any{
-		"id":   "tenant-b",
-		"name": "tenant a",
+		"name": "tenant-a",
 	}, http.StatusConflict)
 	assertBytesContain(t, readBody(t, conflictResp), `"code":40900000`)
 
@@ -1016,7 +1010,7 @@ func TestDefaultNamespaceRulesetMissForwardsOriginalRequest(t *testing.T) {
 
 	namespaceResp := doJSON(t, handler, http.MethodGet, "/mockserver/api/v1/admin/namespaces/default", nil, http.StatusOK)
 	namespaceBody := readBody(t, namespaceResp)
-	assertBytesContain(t, namespaceBody, `"id":"default"`)
+	assertBytesContain(t, namespaceBody, `"name":"default"`)
 	assertBytesContain(t, namespaceBody, `"policies"`)
 	assertBytesContain(t, namespaceBody, `"ruleset_miss_action":{"type":"forward","forward":{"timeout_ms":5000}}`)
 
@@ -1171,19 +1165,18 @@ func TestNamespaceForwardFallbackUsesOriginalRequestTarget(t *testing.T) {
 	handler := router.New(adminController, runtimeController, router.AuthConfig{}, nil)
 
 	namespaceResp := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/namespaces", map[string]any{
-		"id":       "forward-namespace",
-		"name":     "forward namespace",
+		"name":     "forward-namespace",
 		"policies": httpNamespacePolicies(forwardActionPayload(3000), forwardActionPayload(3000)),
 	}, http.StatusOK)
 	var namespaceEnvelope struct {
 		Data struct {
-			ID string `json:"id"`
+			Name string `json:"name"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(readBody(t, namespaceResp), &namespaceEnvelope); err != nil {
 		t.Fatalf("decode namespace response: %v", err)
 	}
-	namespaceID := namespaceEnvelope.Data.ID
+	namespaceID := namespaceEnvelope.Data.Name
 
 	ruleSetBody := map[string]any{
 		"id":        "forward-ruleset",

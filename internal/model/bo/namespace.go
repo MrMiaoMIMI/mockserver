@@ -2,8 +2,7 @@ package bo
 
 type Namespace struct {
 	DBID        uint64                     `json:"-"`
-	ID          string                     `json:"id"`
-	Name        string                     `json:"name,omitempty"`
+	Name        string                     `json:"name"`
 	Description string                     `json:"description,omitempty"`
 	Policies    map[string]NamespacePolicy `json:"policies"`
 	Version     int                        `json:"version"`
@@ -29,7 +28,6 @@ func DefaultNamespaceForwardAction() Action {
 
 func DefaultNamespace(id string) Namespace {
 	return Namespace{
-		ID:      id,
 		Name:    id,
 		Version: 1,
 		Policies: map[string]NamespacePolicy{

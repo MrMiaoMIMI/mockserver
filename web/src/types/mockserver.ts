@@ -107,8 +107,7 @@ export interface NamespacePolicy {
 }
 
 export interface NamespaceConfig {
-  id: string
-  name?: string
+  name: string
   description?: string
   policies: Record<string, NamespacePolicy>
   version?: number

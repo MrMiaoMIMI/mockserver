@@ -102,11 +102,11 @@
           <span>Actions</span>
         </div>
 
-        <article v-for="row in filteredRows" :key="row.namespace.id" class="namespace-row">
+        <article v-for="row in filteredRows" :key="row.namespace.name" class="namespace-row">
           <div class="namespace-cell identity-cell">
             <div class="namespace-title">
               <strong :title="row.displayName">{{ row.displayName }}</strong>
-              <code :title="row.namespace.id">{{ row.namespace.id }}</code>
+              <code :title="row.namespace.name">{{ row.namespace.name }}</code>
             </div>
             <p v-if="row.namespace.description" class="namespace-description">
               {{ row.namespace.description }}
@@ -215,35 +215,13 @@
               <span>Namespace-level fields shared by every protocol policy.</span>
             </header>
             <div class="form-grid">
-              <el-form-item label="Name">
-                <el-input v-model="form.name" placeholder="order service" />
+              <el-form-item label="Namespace name">
+                <el-input v-model="form.name" :disabled="Boolean(editingNamespace)" placeholder="order-service" />
               </el-form-item>
               <el-form-item label="Description">
                 <el-input v-model="form.description" placeholder="optional" />
               </el-form-item>
-              <el-form-item v-if="editingNamespace" label="Namespace key">
-                <el-input
-                  :model-value="form.id"
-                  disabled
-                />
-              </el-form-item>
             </div>
-            <details v-if="!editingNamespace" class="namespace-advanced">
-              <summary>Advanced</summary>
-              <el-form-item label="Namespace key">
-                <el-input
-                  :model-value="form.id"
-                  placeholder="generated from name"
-                  @update:model-value="handleNamespaceKeyInput"
-                >
-                  <template #append>
-                    <el-tooltip content="Use generated key" placement="top">
-                      <el-button :icon="Refresh" @click="useGeneratedNamespaceKey" />
-                    </el-tooltip>
-                  </template>
-                </el-input>
-              </el-form-item>
-            </details>
           </section>
 
           <section class="policy-section">
@@ -365,7 +343,6 @@ import {
 } from '@/utils/entryLists'
 
 interface NamespaceForm {
-  id: string
   name: string
   description: string
   version?: number
@@ -392,7 +369,6 @@ const usageOptions: Array<{ label: string; value: NamespaceUsageFilter }> = [
   { label: 'Unused', value: 'unused' },
 ]
 const sortOptions: Array<{ label: string; value: NamespaceSortKey }> = [
-  { label: 'ID', value: 'id' },
   { label: 'Name', value: 'name' },
   { label: 'Protocols', value: 'protocols' },
   { label: 'Usage', value: 'usage' },
@@ -400,11 +376,9 @@ const sortOptions: Array<{ label: string; value: NamespaceSortKey }> = [
 const filters = reactive(defaultNamespaceEntryFilters())
 const dialogVisible = ref(false)
 const editingNamespace = ref<NamespaceConfig | null>(null)
-const namespaceKeyOverridden = ref(false)
 const maxNamespaceKeyLength = 64
 
 const form = reactive<NamespaceForm>({
-  id: '',
   name: '',
   description: '',
   version: undefined,
@@ -449,7 +423,7 @@ const protocolFilterOptions = computed<Array<{ label: string; value: NamespacePr
 const activePolicy = computed(() => ensurePolicyForm(form.activeProtocol))
 const activeProtocolSpec = computed(() => protocolSpecFor(activeProtocolKey()))
 const activePolicyUsage = computed(() => {
-  const namespaceID = editingNamespace.value?.id || namespaceKey()
+  const namespaceID = namespaceName()
   const protocol = activeProtocolKey()
   const related = store.drafts.filter(
     (ruleSet) => ruleSet.namespace === namespaceID && ruleSet.protocol.toLowerCase() === protocol
@@ -492,8 +466,7 @@ async function submit() {
     return
   }
   const payload: NamespaceConfig = {
-    id: namespaceKey(),
-    name: form.name.trim(),
+    name: namespaceName(),
     description: form.description.trim(),
     policies: policiesFromForm(),
     version: editingNamespace.value ? form.version : undefined,
@@ -504,8 +477,6 @@ async function submit() {
 }
 
 function resetForm(namespace: NamespaceConfig | null, protocol?: string) {
-  namespaceKeyOverridden.value = false
-  form.id = namespace?.id || ''
   form.name = namespace?.name || ''
   form.description = namespace?.description || ''
   form.version = namespace?.version
@@ -543,32 +514,21 @@ function onPolicyTabChange() {
 
 function validateForm() {
   const issues: string[] = []
-  const name = normalizedName(form.name)
+  const name = namespaceName()
   if (!name) {
     issues.push('Name is required')
   }
-  const id = namespaceKey()
-  if (!id) {
-    issues.push('Namespace key is required')
+  if (name.length > maxNamespaceKeyLength) {
+    issues.push(`Namespace name must be at most ${maxNamespaceKeyLength} characters`)
   }
-  if (id.length > maxNamespaceKeyLength) {
-    issues.push(`Namespace key must be at most ${maxNamespaceKeyLength} characters`)
+  if (name && !/^[a-z0-9_-]+$/.test(name)) {
+    issues.push('Namespace name can only contain lowercase letters, numbers, underscores, and hyphens')
   }
-  if (id && !/^[a-zA-Z0-9_-]+$/.test(id)) {
-    issues.push('Namespace key can only contain letters, numbers, underscores, and hyphens')
-  }
-  if (!editingNamespace.value && store.namespaceMap.has(id)) {
-    issues.push(`Namespace key ${id} already exists`)
+  if (!editingNamespace.value && store.namespaceMap.has(name)) {
+    issues.push(`Namespace name ${name} already exists`)
   }
   if (editingNamespace.value && !form.version) {
     issues.push('Namespace version is required; refresh the namespace list and try again')
-  }
-  const duplicateName = store.namespaces.find((namespace) => {
-    if (editingNamespace.value?.id === namespace.id) return false
-    return normalizedName(namespace.name || namespace.id) === name
-  })
-  if (duplicateName) {
-    issues.push(`Namespace name is already used by ${duplicateName.id}`)
   }
   for (const [protocol, policy] of Object.entries(form.policies)) {
     validateFallbackForm(policy.rulesetMiss, `${protocol} ruleset miss`, issues, protocolSpecFor(protocol))
@@ -577,58 +537,8 @@ function validateForm() {
   return issues
 }
 
-function normalizedName(value: string) {
-  return value.trim().replace(/\s+/g, ' ').toLowerCase()
-}
-
-function namespaceKey() {
-  return form.id.trim().toLowerCase()
-}
-
-function handleNamespaceKeyInput(value: string) {
-  namespaceKeyOverridden.value = true
-  form.id = normalizeNamespaceKeyInput(value)
-}
-
-function useGeneratedNamespaceKey() {
-  namespaceKeyOverridden.value = false
-  form.id = generatedNamespaceKey(form.name)
-}
-
-function generatedNamespaceKey(name: string) {
-  const base = slugNamespaceName(name)
-  return uniqueNamespaceKey(base)
-}
-
-function uniqueNamespaceKey(base: string) {
-  const normalizedBase = truncateNamespaceKey(base || 'namespace')
-  if (!store.namespaceMap.has(normalizedBase)) return normalizedBase
-  for (let index = 2; index < 1000; index += 1) {
-    const suffix = `-${index}`
-    const candidate = `${truncateNamespaceKey(normalizedBase, maxNamespaceKeyLength - suffix.length)}${suffix}`
-    if (!store.namespaceMap.has(candidate)) return candidate
-  }
-  const fallbackSuffix = `-${Date.now().toString(36).slice(-8)}`
-  return `${truncateNamespaceKey(normalizedBase, maxNamespaceKeyLength - fallbackSuffix.length)}${fallbackSuffix}`
-}
-
-function slugNamespaceName(name: string) {
-  const slug = name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, '-')
-    .replace(/-{2,}/g, '-')
-    .replace(/^[-_]+|[-_]+$/g, '')
-  return slug || (name.trim() ? 'namespace' : '')
-}
-
-function truncateNamespaceKey(value: string, maxLength = maxNamespaceKeyLength) {
-  const truncated = value.slice(0, Math.max(1, maxLength)).replace(/[-_]+$/g, '')
-  return truncated || 'namespace'
-}
-
-function normalizeNamespaceKeyInput(value: string) {
-  return value.trim().toLowerCase().replace(/\s+/g, '-')
+function namespaceName() {
+  return form.name.trim().toLowerCase()
 }
 
 function validateFallbackForm(
@@ -761,13 +671,6 @@ watch(
   { immediate: true }
 )
 
-watch(
-  () => [form.name, store.namespaces.length] as const,
-  () => {
-    if (editingNamespace.value || namespaceKeyOverridden.value) return
-    form.id = generatedNamespaceKey(form.name)
-  }
-)
 </script>
 
 <style lang="scss" scoped>

@@ -13,7 +13,7 @@ type TrafficEventFields struct {
 	TrafficSource  dbspi.Field[string]
 	ProtocolName   dbspi.Field[string]
 	NamespaceID    dbspi.Field[uint64]
-	NamespaceCode  dbspi.Field[string]
+	NamespaceName  dbspi.Field[string]
 	OperationName  dbspi.Field[string]
 	Outcome        dbspi.Field[string]
 	DecisionKind   dbspi.Field[string]
@@ -41,7 +41,7 @@ func NewTrafficEventFields() TrafficEventFields {
 		TrafficSource:  dbhelper.NewField[string]("traffic_source"),
 		ProtocolName:   dbhelper.NewField[string]("protocol_name"),
 		NamespaceID:    dbhelper.NewField[uint64]("namespace_id"),
-		NamespaceCode:  dbhelper.NewField[string]("namespace_code"),
+		NamespaceName:  dbhelper.NewField[string]("namespace_name"),
 		OperationName:  dbhelper.NewField[string]("operation_name"),
 		Outcome:        dbhelper.NewField[string]("outcome"),
 		DecisionKind:   dbhelper.NewField[string]("decision_kind"),

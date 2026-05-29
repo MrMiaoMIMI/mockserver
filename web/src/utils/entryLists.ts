@@ -51,7 +51,7 @@ export interface RulesetEntryMetrics {
 export type NamespaceFallbackFilter = 'all' | 'forward' | 'respond'
 export type NamespaceUsageFilter = 'all' | 'used' | 'unused'
 export type NamespaceProtocolFilter = 'all' | string
-export type NamespaceSortKey = 'id' | 'name' | 'protocols' | 'usage'
+export type NamespaceSortKey = 'name' | 'protocols' | 'usage'
 
 export interface NamespaceEntryFilters {
   query: string
@@ -123,7 +123,7 @@ export function defaultNamespaceEntryFilters(): NamespaceEntryFilters {
     rulesetMissType: 'all',
     ruleMissType: 'all',
     usage: 'all',
-    sort: 'id',
+    sort: 'name',
   }
 }
 
@@ -216,20 +216,19 @@ export function buildNamespaceEntryRow(namespace: NamespaceConfig, ruleSets: Rul
       policy,
       rulesetMiss: fallbackSummary(policy.ruleset_miss_action),
       ruleMiss: fallbackSummary(policy.rule_miss_action),
-      usage: namespaceUsage(namespace.id, normalizedProtocol, ruleSets),
+      usage: namespaceUsage(namespace.name, normalizedProtocol, ruleSets),
     }
   })
-  const usage = namespaceUsage(namespace.id, '', ruleSets)
+  const usage = namespaceUsage(namespace.name, '', ruleSets)
   const protocols = policies.map((policy) => policy.protocol)
   const primaryPolicy = policies[0] || {
     protocol: 'http',
     policy: defaultNamespacePolicy(),
     rulesetMiss: fallbackSummary(defaultNamespacePolicy().ruleset_miss_action),
     ruleMiss: fallbackSummary(defaultNamespacePolicy().rule_miss_action),
-    usage: namespaceUsage(namespace.id, 'http', ruleSets),
+    usage: namespaceUsage(namespace.name, 'http', ruleSets),
   }
   const searchableText = [
-    namespace.id,
     namespace.name,
     namespace.description,
     ...protocols,
@@ -252,7 +251,7 @@ export function buildNamespaceEntryRow(namespace: NamespaceConfig, ruleSets: Rul
 
   return {
     namespace,
-    displayName: namespace.name || namespace.id,
+    displayName: namespace.name,
     policies,
     protocols,
     usage,
@@ -282,11 +281,11 @@ export function buildNamespaceEntryMetrics(
   allRows: NamespaceEntryRow[],
   shownRows: NamespaceEntryRow[]
 ): NamespaceEntryMetrics {
-  const shownNamespaceIds = new Set(shownRows.map((row) => row.namespace.id))
+  const shownNamespaceNames = new Set(shownRows.map((row) => row.namespace.name))
   const metrics = allRows.reduce<NamespaceEntryMetrics>(
     (metrics, row) => {
       metrics.total += 1
-      if (shownNamespaceIds.has(row.namespace.id)) metrics.shown += 1
+      if (shownNamespaceNames.has(row.namespace.name)) metrics.shown += 1
       if (row.policies.some((policy) => policy.rulesetMiss.type === 'forward' || policy.ruleMiss.type === 'forward')) {
         metrics.forward += 1
       }
@@ -299,7 +298,7 @@ export function buildNamespaceEntryMetrics(
     },
     { total: 0, shown: 0, namespaces: 0, forward: 0, response: 0, used: 0, unused: 0 }
   )
-  metrics.namespaces = shownNamespaceIds.size
+  metrics.namespaces = shownNamespaceNames.size
   return metrics
 }
 
@@ -384,7 +383,7 @@ function compareRulesetEntryRows(left: RulesetEntryRow, right: RulesetEntryRow, 
 }
 
 function compareNamespaceEntryRows(left: NamespaceEntryRow, right: NamespaceEntryRow, sort: NamespaceSortKey) {
-  const defaultOrder = compareText(left.namespace.id, right.namespace.id)
+  const defaultOrder = compareText(left.namespace.name, right.namespace.name)
   if (sort === 'name') return compareText(left.displayName, right.displayName) || defaultOrder
   if (sort === 'protocols') return right.protocols.length - left.protocols.length || defaultOrder
   if (sort === 'usage') return right.usage.rulesetCount - left.usage.rulesetCount || defaultOrder

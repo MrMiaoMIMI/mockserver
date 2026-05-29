@@ -30,7 +30,7 @@ type rulesetService struct {
 
 const (
 	maxRuleSetCodeLength   = 96
-	maxNamespaceCodeLength = 64
+	maxNamespaceNameLength = 64
 	maxRuleCodeLength      = 64
 )
 
@@ -163,6 +163,9 @@ func (s *rulesetService) AddDraftRule(ctx context.Context, id string, rule bo.Ru
 	}
 	if !ok {
 		return bo.RuleSet{}, notFoundErrorf("ruleset %s not found", id)
+	}
+	if rule.ID == "" {
+		rule.ID = s.newRuleID(ruleSet)
 	}
 	if _, ok := findRuleIndex(ruleSet.Rules, rule.ID); ok {
 		return bo.RuleSet{}, conflictErrorf("rule %s already exists in ruleset %s", rule.ID, id)
@@ -526,18 +529,14 @@ func snapshotAuditOperator(audit *bo.AuditInfo) string {
 }
 
 func normalizeNamespace(namespace bo.Namespace) (bo.Namespace, error) {
-	namespace.ID = normalizeNamespaceID(namespace.ID)
-	if namespace.ID == "" {
-		return bo.Namespace{}, validationErrorf("namespace id is required")
-	}
-	if !isValidNamespaceID(namespace.ID) {
-		return bo.Namespace{}, validationErrorf("namespace id can only contain letters, numbers, underscores and hyphens")
-	}
-	namespace.Name = strings.TrimSpace(namespace.Name)
-	namespace.Description = strings.TrimSpace(namespace.Description)
+	namespace.Name = normalizeNamespaceID(namespace.Name)
 	if namespace.Name == "" {
-		namespace.Name = namespace.ID
+		return bo.Namespace{}, validationErrorf("namespace name is required")
 	}
+	if !isValidNamespaceID(namespace.Name) {
+		return bo.Namespace{}, validationErrorf("namespace name can only contain letters, numbers, underscores and hyphens")
+	}
+	namespace.Description = strings.TrimSpace(namespace.Description)
 	if namespace.Policies == nil {
 		namespace.Policies = map[string]bo.NamespacePolicy{}
 	}
@@ -590,7 +589,7 @@ func normalizeNamespaceID(id string) string {
 }
 
 func isValidNamespaceID(id string) bool {
-	if !isValidBusinessCode(id, maxNamespaceCodeLength) {
+	if !isValidBusinessCode(id, maxNamespaceNameLength) {
 		return false
 	}
 	return true
@@ -628,8 +627,8 @@ func normalizeAndValidateRuleSetIdentifiers(ruleSet bo.RuleSet) (bo.RuleSet, err
 	if !isValidBusinessCode(ruleSet.ID, maxRuleSetCodeLength) {
 		return bo.RuleSet{}, validationErrorf("ruleset id can only contain letters, numbers, underscores and hyphens, and must be at most %d characters", maxRuleSetCodeLength)
 	}
-	if !isValidBusinessCode(ruleSet.Namespace, maxNamespaceCodeLength) {
-		return bo.RuleSet{}, validationErrorf("namespace id can only contain letters, numbers, underscores and hyphens, and must be at most %d characters", maxNamespaceCodeLength)
+	if !isValidBusinessCode(ruleSet.Namespace, maxNamespaceNameLength) {
+		return bo.RuleSet{}, validationErrorf("namespace name can only contain letters, numbers, underscores and hyphens, and must be at most %d characters", maxNamespaceNameLength)
 	}
 	for i := range ruleSet.Rules {
 		ruleSet.Rules[i].ID = normalizeRuleID(ruleSet.Rules[i].ID)
@@ -962,21 +961,9 @@ func cloneHeaders(headers map[string][]string) map[string][]string {
 	return cloned
 }
 
-func (s *rulesetService) newRuleSetID(ctx context.Context, ruleSet bo.RuleSet) (string, error) {
-	base := slugifyRuleSetID(strings.Join([]string{ruleSet.Protocol, ruleSet.Namespace, ruleSet.Name}, "-"))
-	if base == "" {
-		base = "ruleset"
-	}
-	const suffixLength = 8
-	maxBaseLength := maxRuleSetCodeLength - suffixLength - 1
-	if len(base) > maxBaseLength {
-		base = strings.Trim(base[:maxBaseLength], "-")
-	}
-	if base == "" {
-		base = "ruleset"
-	}
+func (s *rulesetService) newRuleSetID(ctx context.Context, _ bo.RuleSet) (string, error) {
 	for i := 0; i < 20; i++ {
-		candidate := base + "-" + randomIDToken()
+		candidate := "rs_" + randomIDToken()
 		_, draftExists, err := s.ruleSets.GetDraft(ctx, candidate)
 		if err != nil {
 			return "", err
@@ -996,23 +983,18 @@ func (s *rulesetService) newRuleSetID(ctx context.Context, ruleSet bo.RuleSet) (
 	return "", fmt.Errorf("generate unique ruleset id failed")
 }
 
-func slugifyRuleSetID(value string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
-	var builder strings.Builder
-	lastDash := false
-	for _, item := range value {
-		isAlphaNumber := item >= 'a' && item <= 'z' || item >= '0' && item <= '9'
-		if isAlphaNumber {
-			builder.WriteRune(item)
-			lastDash = false
-			continue
-		}
-		if !lastDash && builder.Len() > 0 {
-			builder.WriteByte('-')
-			lastDash = true
+func (s *rulesetService) newRuleID(ruleSet bo.RuleSet) string {
+	existing := make(map[string]struct{}, len(ruleSet.Rules))
+	for _, rule := range ruleSet.Rules {
+		existing[rule.ID] = struct{}{}
+	}
+	for i := 0; i < 20; i++ {
+		candidate := "rule_" + randomIDToken()
+		if _, ok := existing[candidate]; !ok {
+			return candidate
 		}
 	}
-	return strings.Trim(builder.String(), "-")
+	return "rule_" + strings.ToLower(time.Now().UTC().Format("15040500"))
 }
 
 func randomIDToken() string {

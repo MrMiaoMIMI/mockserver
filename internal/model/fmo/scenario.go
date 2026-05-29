@@ -34,7 +34,7 @@ type ScenarioRuleFields struct {
 	RuleCode      dbspi.Field[string]
 	RuleName      dbspi.Field[string]
 	ProtocolName  dbspi.Field[string]
-	NamespaceCode dbspi.Field[string]
+	NamespaceName dbspi.Field[string]
 	Enabled       dbspi.Field[bool]
 	Priority      dbspi.Field[int]
 	ExpireTime    dbspi.Field[uint64]
@@ -50,7 +50,7 @@ func NewScenarioRuleFields() ScenarioRuleFields {
 		RuleCode:      dbhelper.NewField[string]("rule_code"),
 		RuleName:      dbhelper.NewField[string]("rule_name"),
 		ProtocolName:  dbhelper.NewField[string]("protocol_name"),
-		NamespaceCode: dbhelper.NewField[string]("namespace_code"),
+		NamespaceName: dbhelper.NewField[string]("namespace_name"),
 		Enabled:       dbhelper.NewField[bool]("enabled"),
 		Priority:      dbhelper.NewField[int]("priority"),
 		ExpireTime:    dbhelper.NewField[uint64]("expire_time"),

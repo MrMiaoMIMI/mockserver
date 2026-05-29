@@ -212,7 +212,7 @@ import {
   ruleDisplayName,
   ruleTechnicalLabel,
 } from '@/utils/ruleSummaries'
-import { generateRuleIdFromName } from '@/utils/ruleFormAdapter'
+import { generateRuleId } from '@/utils/ruleFormAdapter'
 
 const props = defineProps<{
   ruleSet: RuleSet | null
@@ -344,7 +344,7 @@ async function duplicateRule(rule: Rule) {
   setActiveRule(rule.id)
   const duplicated = cloneRule(rule)
   duplicated.name = `${ruleDisplayName(rule)} copy`
-  duplicated.id = generateRuleIdFromName(duplicated.name, props.ruleSet)
+  duplicated.id = generateRuleId(props.ruleSet)
   duplicated.priority = nextDuplicatePriority(rule.priority, props.ruleSet.rules)
   await withRuleOperation(rule, 'duplicate', async () => {
     const updated = await store.addRule(props.ruleSet!.id, duplicated)

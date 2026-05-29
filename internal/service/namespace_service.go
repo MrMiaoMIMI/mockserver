@@ -16,9 +16,9 @@ func NewNamespaceService(namespaceRepository dao.NamespaceRepository) NamespaceS
 }
 
 func (s *namespaceService) UpsertNamespace(ctx context.Context, namespace bo.Namespace) (bo.Namespace, error) {
-	namespace.ID = normalizeNamespaceID(namespace.ID)
-	if namespace.ID == "" {
-		return bo.Namespace{}, validationErrorf("namespace id is required")
+	namespace.Name = normalizeNamespaceID(namespace.Name)
+	if namespace.Name == "" {
+		return bo.Namespace{}, validationErrorf("namespace name is required")
 	}
 	normalized, err := normalizeNamespace(namespace)
 	if err != nil {
@@ -44,7 +44,7 @@ func (s *namespaceService) EnsureDefaultNamespace(ctx context.Context) (bo.Names
 func (s *namespaceService) GetNamespace(ctx context.Context, id string) (bo.Namespace, error) {
 	normalizedID := normalizeNamespaceID(id)
 	if normalizedID == "" {
-		return bo.Namespace{}, validationErrorf("namespace id is required")
+		return bo.Namespace{}, validationErrorf("namespace name is required")
 	}
 	namespace, ok, err := s.namespaces.GetNamespace(ctx, normalizedID)
 	if err != nil {
@@ -66,7 +66,7 @@ func (s *namespaceService) ListNamespaces(ctx context.Context) ([]bo.Namespace, 
 	}
 	hasDefault := false
 	for _, item := range items {
-		if item.ID == "default" {
+		if item.Name == "default" {
 			hasDefault = true
 			break
 		}
@@ -82,33 +82,19 @@ func (s *namespaceService) ListNamespaces(ctx context.Context) ([]bo.Namespace, 
 }
 
 func (s *namespaceService) validateNamespaceWrite(ctx context.Context, namespace bo.Namespace) error {
-	current, exists, err := s.namespaces.GetNamespace(ctx, namespace.ID)
+	current, exists, err := s.namespaces.GetNamespace(ctx, namespace.Name)
 	if err != nil {
 		return err
 	}
 	if exists {
 		if namespace.Version <= 0 {
-			return conflictErrorf("namespace %s already exists; version is required for updates", namespace.ID)
+			return conflictErrorf("namespace %s already exists; version is required for updates", namespace.Name)
 		}
 		if namespace.Version != current.Version {
-			return conflictErrorf("namespace %s version conflict: got %d, current %d", namespace.ID, namespace.Version, current.Version)
+			return conflictErrorf("namespace %s version conflict: got %d, current %d", namespace.Name, namespace.Version, current.Version)
 		}
 	} else if namespace.Version != 0 {
-		return conflictErrorf("namespace %s does not exist; create requests must omit version", namespace.ID)
-	}
-
-	items, err := s.namespaces.ListNamespaces(ctx)
-	if err != nil {
-		return err
-	}
-	nameKey := normalizedDisplayName(namespace.Name)
-	for _, item := range items {
-		if item.ID == namespace.ID {
-			continue
-		}
-		if normalizedDisplayName(item.Name) == nameKey {
-			return conflictErrorf("namespace name %q is already used by namespace %s", namespace.Name, item.ID)
-		}
+		return conflictErrorf("namespace %s does not exist; create requests must omit version", namespace.Name)
 	}
 	return nil
 }

@@ -154,13 +154,13 @@ func (s *testRuleSetRepository) UpsertNamespace(ctx context.Context, namespace b
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	current, exists := s.namespaces[namespace.ID]
+	current, exists := s.namespaces[namespace.Name]
 	if exists {
 		namespace.Version = current.Version + 1
 	} else {
 		namespace.Version = 1
 	}
-	s.namespaces[namespace.ID] = namespace
+	s.namespaces[namespace.Name] = namespace
 	return namespace, nil
 }
 
@@ -183,7 +183,7 @@ func (s *testRuleSetRepository) ListNamespaces(ctx context.Context) ([]bo.Namesp
 		items = append(items, item)
 	}
 	sort.Slice(items, func(i, j int) bool {
-		return items[i].ID < items[j].ID
+		return items[i].Name < items[j].Name
 	})
 	return items, nil
 }

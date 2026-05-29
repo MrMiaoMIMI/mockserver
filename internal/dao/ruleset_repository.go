@@ -47,7 +47,7 @@ func (r *ruleSetRepository) UpsertDraft(ctx context.Context, ruleSet bo.RuleSet)
 		RuleSetCode:   ruleSet.ID,
 		RuleSetName:   ruleSet.Name,
 		ProtocolName:  ruleSet.Protocol,
-		NamespaceCode: ruleSet.Namespace,
+		NamespaceName: ruleSet.Namespace,
 		Version:       ruleSet.Version,
 		RuleSetJSON:   string(raw),
 	}, expectedVersion); err != nil {
@@ -194,7 +194,7 @@ func decodeRuleSetRecord(record modeldo.RuleSetDraft) (bo.RuleSet, error) {
 		ruleSet.Protocol = record.ProtocolName
 	}
 	if ruleSet.Namespace == "" {
-		ruleSet.Namespace = record.NamespaceCode
+		ruleSet.Namespace = record.NamespaceName
 	}
 	return ruleSet, nil
 }

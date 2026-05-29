@@ -65,7 +65,7 @@ export interface BuildRuleResult {
 export function defaultRuleForm(ruleSet?: RuleSet | null, protocolSpec?: ProtocolSpec): RuleFormState {
   const protocol = ruleSet?.protocol || protocolSpec?.name || 'http'
   const rule: Rule = {
-    id: nextRuleId(ruleSet),
+    id: generateRuleId(ruleSet),
     name: '',
     enabled: true,
     priority: nextPriority(ruleSet),
@@ -151,14 +151,11 @@ export function newSequenceStepForm(index: number, protocolSpec?: ProtocolSpec):
   }
 }
 
-export function generateRuleIdFromName(
-  name: string,
+export function generateRuleId(
   ruleSet?: RuleSet | null,
   lockedRuleId = ''
 ) {
-  const slug = slugRuleName(name)
-  const fallback = nextRuleId(ruleSet)
-  return uniqueRuleId(slug || fallback, ruleSet, lockedRuleId)
+  return uniqueRuleId(`rule_${randomIDToken()}`, ruleSet, lockedRuleId)
 }
 
 function buildRuleFromForm(form: RuleFormState, errors: RuleFormError[], options: BuildRuleOptions): Rule | undefined {
@@ -498,23 +495,14 @@ function defaultConditionTree(protocol = 'http'): Condition {
   }
 }
 
-function nextRuleId(ruleSet?: RuleSet | null) {
-  const existing = new Set((ruleSet?.rules || []).map((rule) => rule.id))
-  for (let index = existing.size + 1; index < existing.size + 1000; index += 1) {
-    const candidate = `rule-${String(index).padStart(3, '0')}`
-    if (!existing.has(candidate)) return candidate
+function randomIDToken() {
+  const cryptoRef = globalThis.crypto
+  if (cryptoRef?.getRandomValues) {
+    const data = new Uint8Array(4)
+    cryptoRef.getRandomValues(data)
+    return Array.from(data, (item) => item.toString(16).padStart(2, '0')).join('')
   }
-  return `rule-${Date.now().toString().slice(-6)}`
-}
-
-function slugRuleName(name: string) {
-  return name
-    .trim()
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 48)
+  return Math.random().toString(16).slice(2, 10).padEnd(8, '0')
 }
 
 function uniqueRuleId(base: string, ruleSet?: RuleSet | null, lockedRuleId = '') {

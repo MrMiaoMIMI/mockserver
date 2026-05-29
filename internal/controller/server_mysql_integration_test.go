@@ -48,8 +48,7 @@ func TestAdminRuntimeFlowWithMySQLRepository(t *testing.T) {
 
 	handler := newMySQLBackedHandler(db.GetRuleSetRepository(), db.GetNamespaceRepository())
 	namespaceResp := doJSON(t, handler, http.MethodPost, "/mockserver/api/v1/admin/namespaces", map[string]any{
-		"id":   id + "-namespace",
-		"name": id,
+		"name": id + "-namespace",
 		"policies": httpNamespacePolicies(
 			httpStaticActionPayload(404, map[string]any{"message": "no mock ruleset matched"}),
 			httpStaticActionPayload(404, map[string]any{"message": "no mock rule matched"}),
@@ -57,15 +56,15 @@ func TestAdminRuntimeFlowWithMySQLRepository(t *testing.T) {
 	}, http.StatusOK)
 	var namespaceEnvelope struct {
 		Data struct {
-			ID string `json:"id"`
+			Name string `json:"name"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(readBody(t, namespaceResp), &namespaceEnvelope); err != nil {
 		t.Fatalf("decode namespace response: %v", err)
 	}
-	namespaceID = namespaceEnvelope.Data.ID
+	namespaceID = namespaceEnvelope.Data.Name
 	if namespaceID != id+"-namespace" {
-		t.Fatalf("unexpected namespace id: %s", namespaceID)
+		t.Fatalf("unexpected namespace name: %s", namespaceID)
 	}
 
 	upsertBody := map[string]any{
@@ -183,7 +182,7 @@ func cleanupMySQLRuleset(t *testing.T, ctx context.Context, manager dbspi.Manage
 	if err := sqlStore.Exec(ctx, "DELETE FROM mockserver_rule_set_draft_tab WHERE ruleset_code = ?", id); err != nil {
 		t.Fatalf("cleanup draft %s: %v", id, err)
 	}
-	if err := sqlStore.Exec(ctx, "DELETE FROM mockserver_namespace_tab WHERE namespace_code = ?", id); err != nil {
+	if err := sqlStore.Exec(ctx, "DELETE FROM mockserver_namespace_tab WHERE namespace_name = ?", id); err != nil {
 		t.Fatalf("cleanup namespace %s: %v", id, err)
 	}
 }

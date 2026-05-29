@@ -76,22 +76,21 @@ func TestNamespaceRepositoryUpsertAndList(t *testing.T) {
 	ctx := context.WithValue(context.Background(), fakeCtxKey("trace_id"), "trace-from-test")
 
 	saved, err := repository.UpsertNamespace(ctx, bo.Namespace{
-		ID:          "tenant-a",
-		Name:        "Tenant A",
+		Name:        "tenant-a",
 		Description: "integration tenant",
 	})
 	if err != nil {
 		t.Fatalf("UpsertNamespace() error = %v", err)
 	}
-	if saved.ID != "tenant-a" {
-		t.Fatalf("unexpected namespace id: %s", saved.ID)
+	if saved.Name != "tenant-a" {
+		t.Fatalf("unexpected namespace name: %s", saved.Name)
 	}
 
 	loaded, ok, err := repository.GetNamespace(ctx, "tenant-a")
 	if err != nil {
 		t.Fatalf("GetNamespace() error = %v", err)
 	}
-	if !ok || loaded.Name != "Tenant A" {
+	if !ok || loaded.Name != "tenant-a" {
 		t.Fatalf("unexpected loaded namespace: ok=%v namespace=%#v", ok, loaded)
 	}
 
@@ -226,7 +225,7 @@ func (d *fakeRuleSetTableDAO) ListPublishedSnapshots(ctx context.Context, id str
 
 func (d *fakeRuleSetTableDAO) UpsertNamespace(ctx context.Context, namespace modeldo.NamespaceConfig, expectedVersion int) error {
 	d.observeContext(ctx)
-	current, exists := d.namespaces[namespace.NamespaceCode]
+	current, exists := d.namespaces[namespace.NamespaceName]
 	if expectedVersion == 0 && exists {
 		return ErrConflict
 	}
@@ -238,7 +237,7 @@ func (d *fakeRuleSetTableDAO) UpsertNamespace(ctx context.Context, namespace mod
 	} else {
 		namespace.Id = d.nextPrimaryID()
 	}
-	d.namespaces[namespace.NamespaceCode] = namespace
+	d.namespaces[namespace.NamespaceName] = namespace
 	return nil
 }
 

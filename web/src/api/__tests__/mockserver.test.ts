@@ -18,7 +18,7 @@ describe('mockserverApi', () => {
     vi.clearAllMocks()
   })
 
-  it('creates a namespace with POST even when the payload has an id', async () => {
+  it('creates a namespace with POST', async () => {
     const { mockserverApi } = await import('@/api/mockserver')
     const namespace = namespacePayload('orders')
 
@@ -39,10 +39,9 @@ describe('mockserverApi', () => {
   })
 })
 
-function namespacePayload(id: string): NamespaceConfig {
+function namespacePayload(name: string): NamespaceConfig {
   return {
-    id,
-    name: id,
+    name,
     policies: {
       http: {
         ruleset_miss_action: {

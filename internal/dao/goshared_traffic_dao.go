@@ -123,7 +123,7 @@ func (d *gosharedTrafficTableDAO) TrafficStats(ctx context.Context, query bo.Tra
 	if err != nil {
 		return bo.TrafficStats{}, err
 	}
-	namespaces, err := d.groupTrafficEvents(ctx, query, eventIDs, "namespace_code")
+	namespaces, err := d.groupTrafficEvents(ctx, query, eventIDs, "namespace_name")
 	if err != nil {
 		return bo.TrafficStats{}, err
 	}
@@ -180,7 +180,7 @@ func (d *gosharedTrafficTableDAO) groupTrafficEventsFallback(ctx context.Context
 
 func trafficGroupColumn(column string) (string, bool) {
 	switch column {
-	case "outcome", "protocol_name", "namespace_code":
+	case "outcome", "protocol_name", "namespace_name":
 		return column, true
 	default:
 		return "", false
@@ -193,8 +193,8 @@ func trafficGroupKey(record modeldo.TrafficEvent, column string) string {
 		return record.Outcome
 	case "protocol_name":
 		return record.ProtocolName
-	case "namespace_code":
-		return record.NamespaceCode
+	case "namespace_name":
+		return record.NamespaceName
 	default:
 		return ""
 	}
@@ -290,12 +290,12 @@ func (d *gosharedTrafficTableDAO) buildEventQuery(query bo.TrafficQuery, eventID
 	if query.NamespaceDBID > 0 && query.NamespaceID != "" {
 		conditions = append(conditions, dbhelper.Or(
 			d.eventFields.NamespaceID.Eq(&query.NamespaceDBID),
-			d.eventFields.NamespaceCode.Eq(&query.NamespaceID),
+			d.eventFields.NamespaceName.Eq(&query.NamespaceID),
 		))
 	} else if query.NamespaceDBID > 0 {
 		conditions = append(conditions, d.eventFields.NamespaceID.Eq(&query.NamespaceDBID))
 	} else if query.NamespaceID != "" {
-		conditions = append(conditions, d.eventFields.NamespaceCode.Eq(&query.NamespaceID))
+		conditions = append(conditions, d.eventFields.NamespaceName.Eq(&query.NamespaceID))
 	}
 	if query.OperationName != "" {
 		conditions = append(conditions, d.eventFields.OperationName.Eq(&query.OperationName))
@@ -364,11 +364,11 @@ func (d *gosharedTrafficTableDAO) buildEventWhereSQL(query bo.TrafficQuery, even
 	appendEqCondition("traffic_source", query.TrafficSource, query.TrafficSource != "")
 	appendEqCondition("protocol_name", query.ProtocolName, query.ProtocolName != "")
 	if query.NamespaceDBID > 0 && query.NamespaceID != "" {
-		conditions = append(conditions, "(namespace_id = ? OR namespace_code = ?)")
+		conditions = append(conditions, "(namespace_id = ? OR namespace_name = ?)")
 		args = append(args, query.NamespaceDBID, query.NamespaceID)
 	} else {
 		appendEqCondition("namespace_id", query.NamespaceDBID, query.NamespaceDBID > 0)
-		appendEqCondition("namespace_code", query.NamespaceID, query.NamespaceID != "")
+		appendEqCondition("namespace_name", query.NamespaceID, query.NamespaceID != "")
 	}
 	appendEqCondition("operation_name", query.OperationName, query.OperationName != "")
 	appendEqCondition("outcome", query.Outcome, query.Outcome != "")

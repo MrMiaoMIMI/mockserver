@@ -280,7 +280,7 @@ func (c *AdminController) UpdateNamespace(ctx *gin.Context) {
 		writeBusinessError(ctx, err)
 		return
 	}
-	req.ID = namespaceID
+	req.Name = namespaceID
 	result, err := c.namespaceView.UpsertNamespace(ctx.Request.Context(), req)
 	if err != nil {
 		writeBusinessError(ctx, err)

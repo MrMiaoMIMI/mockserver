@@ -8,7 +8,7 @@ type TrafficEvent struct {
 	TrafficSource  string `gorm:"column:traffic_source"`
 	ProtocolName   string `gorm:"column:protocol_name"`
 	NamespaceID    uint64 `gorm:"column:namespace_id"`
-	NamespaceCode  string `gorm:"column:namespace_code"`
+	NamespaceName  string `gorm:"column:namespace_name"`
 	OperationName  string `gorm:"column:operation_name"`
 	Outcome        string `gorm:"column:outcome"`
 	DecisionKind   string `gorm:"column:decision_kind"`

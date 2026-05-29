@@ -13,8 +13,7 @@ type UpsertRuleSetRequest struct {
 }
 
 type UpsertNamespaceRequest struct {
-	ID          string                        `json:"id"`
-	Name        string                        `json:"name,omitempty"`
+	Name        string                        `json:"name"`
 	Description string                        `json:"description,omitempty"`
 	Policies    map[string]bo.NamespacePolicy `json:"policies"`
 	Version     int                           `json:"version,omitempty"`

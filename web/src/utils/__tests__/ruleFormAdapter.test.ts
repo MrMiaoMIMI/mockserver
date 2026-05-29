@@ -4,7 +4,7 @@ import {
   applyRawRuleJson,
   defaultRuleForm,
   formToRule,
-  generateRuleIdFromName,
+  generateRuleId,
   newSequenceStepForm,
   ruleToForm,
 } from '@/utils/ruleFormAdapter'
@@ -234,14 +234,12 @@ describe('rule form adapter', () => {
     expect(rawResult.errors.some((error) => error.message.includes('name'))).toBe(true)
   })
 
-  it('generates stable rule IDs from rule names and avoids duplicates', () => {
-    expect(generateRuleIdFromName('Debug API Response', ruleSet)).toBe('debug-api-response')
-    expect(generateRuleIdFromName('Existing Rule', ruleSet)).toBe('existing-rule-02')
-    expect(generateRuleIdFromName('', ruleSet)).toBe('rule-002')
+  it('generates stable-looking opaque rule IDs and avoids duplicates', () => {
+    expect(generateRuleId(ruleSet)).toMatch(/^rule_[a-f0-9]{8}(?:-\d{2})?$/)
   })
 
   it('does not treat the locked edit rule ID as a duplicate when generating IDs', () => {
-    expect(generateRuleIdFromName('Existing Rule', ruleSet, 'existing-rule')).toBe('existing-rule')
+    expect(generateRuleId(ruleSet, 'existing-rule')).toMatch(/^rule_[a-f0-9]{8}$/)
   })
 
   it('rejects invalid JSON literal condition values before building a rule payload', () => {

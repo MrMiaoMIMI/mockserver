@@ -38,8 +38,7 @@ func TestRuleSetRepositoryWithMySQL(t *testing.T) {
 	repository := db.GetRuleSetRepository()
 	namespaceRepository := db.GetNamespaceRepository()
 	if _, err := namespaceRepository.UpsertNamespace(ctx, bo.Namespace{
-		ID:          namespaceID,
-		Name:        "MySQL namespace",
+		Name:        namespaceID,
 		Description: "namespace repository integration test",
 	}); err != nil {
 		t.Fatalf("UpsertNamespace() error = %v", err)
@@ -48,7 +47,7 @@ func TestRuleSetRepositoryWithMySQL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetNamespace() error = %v", err)
 	}
-	if !ok || loadedNamespace.ID != namespaceID {
+	if !ok || loadedNamespace.Name != namespaceID {
 		t.Fatalf("unexpected namespace: ok=%v namespace=%#v", ok, loadedNamespace)
 	}
 
@@ -138,7 +137,7 @@ func cleanupMySQLNamespace(t *testing.T, ctx context.Context, manager dbspi.Mana
 	if !ok {
 		t.Fatalf("table store does not support raw SQL")
 	}
-	if err := sqlStore.Exec(ctx, "DELETE FROM mockserver_namespace_tab WHERE namespace_code = ?", id); err != nil {
+	if err := sqlStore.Exec(ctx, "DELETE FROM mockserver_namespace_tab WHERE namespace_name = ?", id); err != nil {
 		t.Fatalf("cleanup namespace %s: %v", id, err)
 	}
 }

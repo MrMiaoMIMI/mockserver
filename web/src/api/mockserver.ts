@@ -55,12 +55,12 @@ export const mockserverApi = {
   listNamespaces(): Promise<ListNamespacesResponse> {
     return http.get(`${adminBase}/namespaces`)
   },
-  getNamespace(id: string): Promise<NamespaceConfig> {
-    return http.get(`${adminBase}/namespaces/${encodeURIComponent(id)}`)
+  getNamespace(name: string): Promise<NamespaceConfig> {
+    return http.get(`${adminBase}/namespaces/${encodeURIComponent(name)}`)
   },
   saveNamespace(data: NamespaceConfig, update = false): Promise<NamespaceConfig> {
     if (update) {
-      return http.put(`${adminBase}/namespaces/${encodeURIComponent(data.id)}`, data)
+      return http.put(`${adminBase}/namespaces/${encodeURIComponent(data.name)}`, data)
     }
     return http.post(`${adminBase}/namespaces`, data)
   },

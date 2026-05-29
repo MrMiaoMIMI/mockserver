@@ -128,7 +128,7 @@ func (d *gosharedScenarioTableDAO) UpsertScenarioRule(ctx context.Context, rule 
 	updater := dbhelper.NewUpdater().
 		Set(d.ruleFields.RuleName, rule.RuleName).
 		Set(d.ruleFields.ProtocolName, rule.ProtocolName).
-		Set(d.ruleFields.NamespaceCode, rule.NamespaceCode).
+		Set(d.ruleFields.NamespaceName, rule.NamespaceName).
 		Set(d.ruleFields.Enabled, rule.Enabled).
 		Set(d.ruleFields.Priority, rule.Priority).
 		Set(d.ruleFields.ExpireTime, rule.ExpireTime).
@@ -179,7 +179,7 @@ func (d *gosharedScenarioTableDAO) ListScenarioRules(ctx context.Context, query 
 		conditions = append(conditions, d.ruleFields.ProtocolName.Eq(&query.Protocol))
 	}
 	if query.Namespace != "" {
-		conditions = append(conditions, d.ruleFields.NamespaceCode.Eq(&query.Namespace))
+		conditions = append(conditions, d.ruleFields.NamespaceName.Eq(&query.Namespace))
 	}
 	if query.EnabledOnly {
 		enabled := true

@@ -111,9 +111,9 @@
                 <el-input v-model="form.name" placeholder="Debug API response" clearable />
               </el-form-item>
               <div class="generated-id-card">
-                <span>Generated Rule ID</span>
+                <span>System Rule ID</span>
                 <code :title="form.id">{{ form.id }}</code>
-                <small>Created from the name and checked against this ruleset.</small>
+                <small>Generated once and kept stable for URLs, logs, and diagnostics.</small>
               </div>
             </template>
             <template v-else>
@@ -457,7 +457,7 @@ import {
 import {
   defaultRuleForm,
   formToRule,
-  generateRuleIdFromName,
+  generateRuleId,
   newSequenceStepForm,
   ruleToForm,
   type RuleEditorMode,
@@ -648,14 +648,6 @@ watch(
     }
   },
   { deep: true }
-)
-
-watch(
-  () => [form.name, props.mode, props.ruleSet?.rules.map((rule) => rule.id).join('\u0000') || ''],
-  () => {
-    if (props.mode !== 'create' || activeSection.value === 'advanced') return
-    form.id = generateRuleIdFromName(form.name, props.ruleSet)
-  }
 )
 
 function resetForm() {

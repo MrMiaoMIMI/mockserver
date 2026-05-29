@@ -33,9 +33,9 @@
             >
               <el-option
                 v-for="namespace in namespaceOptions"
-                :key="namespace.id"
+                :key="namespace.name"
                 :label="namespaceLabel(namespace)"
-                :value="namespace.id"
+                :value="namespace.name"
               />
             </el-select>
           </el-form-item>
@@ -231,9 +231,8 @@ const availableSelectorField = computed(() => {
 const namespaceOptions = computed(() => {
   const items = [...store.namespaces]
   const current = form.namespace.trim()
-  if (current && !items.some((item) => item.id === current)) {
+  if (current && !items.some((item) => item.name === current)) {
     items.unshift({
-      id: current,
       name: current,
       policies: {
         [form.protocol || 'http']: {
@@ -499,9 +498,7 @@ function selectorFieldLabel(field: string) {
 }
 
 function namespaceLabel(namespace: NamespaceConfig) {
-  return namespace.name && namespace.name !== namespace.id
-    ? `${namespace.name} (${namespace.id})`
-    : namespace.id
+  return namespace.name
 }
 
 function valueForSpec(spec: ValueInputSpec, currentValue: unknown, previousSpec?: ValueInputSpec): unknown {

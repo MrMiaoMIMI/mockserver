@@ -47,7 +47,7 @@ func (d *gosharedRuleSetTableDAO) UpsertDraft(ctx context.Context, draft modeldo
 	updater := dbhelper.NewUpdater().
 		Set(d.draftFields.RuleSetName, draft.RuleSetName).
 		Set(d.draftFields.ProtocolName, draft.ProtocolName).
-		Set(d.draftFields.NamespaceCode, draft.NamespaceCode).
+		Set(d.draftFields.NamespaceName, draft.NamespaceName).
 		Set(d.draftFields.Version, draft.Version).
 		Set(d.draftFields.RuleSetJSON, draft.RuleSetJSON)
 	query := dbhelper.Q(

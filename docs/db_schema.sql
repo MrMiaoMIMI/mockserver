@@ -13,10 +13,10 @@ USE mockserver_db;
 
 CREATE TABLE IF NOT EXISTS mockserver_rule_set_draft_tab (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Auto increment primary key',
-    ruleset_code VARCHAR(96) NOT NULL COMMENT 'Ruleset business code',
+    ruleset_code VARCHAR(96) NOT NULL COMMENT 'Stable system ruleset id',
     ruleset_name VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'Ruleset display name',
     protocol_name VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'Protocol name',
-    namespace_code VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'Namespace business code',
+    namespace_name VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'Immutable namespace name',
     version INT UNSIGNED NOT NULL DEFAULT 1 COMMENT 'Draft version',
     ruleset_json LONGTEXT NOT NULL COMMENT 'Serialized ruleset JSON',
     creator VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Creator',
@@ -26,13 +26,13 @@ CREATE TABLE IF NOT EXISTS mockserver_rule_set_draft_tab (
     deleted TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Soft delete flag',
     PRIMARY KEY (id),
     UNIQUE KEY idx_ruleset_code (ruleset_code),
-    UNIQUE KEY idx_namespace_protocol_ruleset_name (namespace_code, protocol_name, ruleset_name),
+    UNIQUE KEY idx_namespace_protocol_ruleset_name (namespace_name, protocol_name, ruleset_name),
     KEY idx_mtime (mtime)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Mockserver ruleset draft table';
 
 CREATE TABLE IF NOT EXISTS mockserver_published_snapshot_tab (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Auto increment primary key',
-    snapshot_code VARCHAR(40) NOT NULL COMMENT 'Snapshot business code',
+    snapshot_code VARCHAR(40) NOT NULL COMMENT 'Stable system snapshot id',
     ruleset_id BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Ruleset primary key',
     ruleset_version INT UNSIGNED NOT NULL COMMENT 'Ruleset version',
     ruleset_json LONGTEXT NOT NULL COMMENT 'Serialized ruleset JSON',
@@ -64,8 +64,7 @@ CREATE TABLE IF NOT EXISTS mockserver_published_rule_set_tab (
 
 CREATE TABLE IF NOT EXISTS mockserver_namespace_tab (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Auto increment primary key',
-    namespace_code VARCHAR(64) NOT NULL COMMENT 'Namespace business code',
-    namespace_name VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'Namespace display name',
+    namespace_name VARCHAR(64) NOT NULL COMMENT 'Immutable namespace name',
     version INT UNSIGNED NOT NULL DEFAULT 1 COMMENT 'Namespace version',
     namespace_json LONGTEXT NOT NULL COMMENT 'Serialized namespace JSON',
     creator VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Creator',
@@ -74,13 +73,12 @@ CREATE TABLE IF NOT EXISTS mockserver_namespace_tab (
     mtime BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Update time in UNIX milliseconds',
     deleted TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Soft delete flag',
     PRIMARY KEY (id),
-    UNIQUE KEY idx_namespace_code (namespace_code),
     UNIQUE KEY idx_namespace_name (namespace_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Mockserver namespace table';
 
 CREATE TABLE IF NOT EXISTS mockserver_scenario_tab (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Auto increment primary key',
-    scenario_code VARCHAR(128) NOT NULL COMMENT 'Scenario business code',
+    scenario_code VARCHAR(128) NOT NULL COMMENT 'Stable system scenario id',
     scenario_name VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'Scenario display name',
     status VARCHAR(32) NOT NULL DEFAULT '' COMMENT 'Scenario status',
     expire_time BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Expire time in UNIX milliseconds',
@@ -100,11 +98,11 @@ CREATE TABLE IF NOT EXISTS mockserver_scenario_tab (
 CREATE TABLE IF NOT EXISTS mockserver_scenario_rule_tab (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Auto increment primary key',
     scenario_id BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Scenario primary key',
-    scenario_code VARCHAR(128) NOT NULL COMMENT 'Scenario business code',
-    rule_code VARCHAR(64) NOT NULL COMMENT 'Scenario rule business code',
+    scenario_code VARCHAR(128) NOT NULL COMMENT 'Stable system scenario id',
+    rule_code VARCHAR(64) NOT NULL COMMENT 'Stable system rule id',
     rule_name VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'Scenario rule display name',
     protocol_name VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'Protocol name',
-    namespace_code VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'Namespace business code',
+    namespace_name VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'Immutable namespace name',
     enabled TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT 'Whether rule is enabled',
     priority INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Rule priority',
     expire_time BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Expire time in UNIX milliseconds',
@@ -117,28 +115,28 @@ CREATE TABLE IF NOT EXISTS mockserver_scenario_rule_tab (
     deleted TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Soft delete flag',
     PRIMARY KEY (id),
     UNIQUE KEY idx_scenario_rule_code (scenario_code, rule_code),
-    KEY idx_scenario_protocol_namespace (scenario_code, protocol_name, namespace_code, enabled, expire_time),
+    KEY idx_scenario_protocol_namespace (scenario_code, protocol_name, namespace_name, enabled, expire_time),
     KEY idx_scenario_id (scenario_id),
     KEY idx_expire_time (expire_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Mockserver scenario rule table';
 
 CREATE TABLE IF NOT EXISTS mockserver_traffic_event_tab (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Auto increment primary key',
-    event_code VARCHAR(48) NOT NULL COMMENT 'Traffic event business code',
+    event_code VARCHAR(48) NOT NULL COMMENT 'Stable system traffic event id',
     trace_id VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'SDK trace id',
-    scenario_code VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'Scenario business code',
+    scenario_code VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'Stable system scenario id',
     traffic_source VARCHAR(32) NOT NULL DEFAULT '' COMMENT 'Traffic source',
     protocol_name VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'Protocol name',
     namespace_id BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Namespace primary key',
-    namespace_code VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'Namespace business code',
+    namespace_name VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'Immutable namespace name',
     operation_name VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'Protocol operation name',
     outcome VARCHAR(32) NOT NULL DEFAULT '' COMMENT 'Decision outcome',
     decision_kind VARCHAR(32) NOT NULL DEFAULT '' COMMENT 'Decision action kind',
     ruleset_id BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Matched ruleset primary key',
-    ruleset_code VARCHAR(96) NOT NULL DEFAULT '' COMMENT 'Matched ruleset business code',
-    rule_code VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'Matched rule business code',
+    ruleset_code VARCHAR(96) NOT NULL DEFAULT '' COMMENT 'Matched stable system ruleset id',
+    rule_code VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'Matched stable system rule id',
     snapshot_id BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Published snapshot primary key',
-    snapshot_code VARCHAR(40) NOT NULL DEFAULT '' COMMENT 'Published snapshot business code',
+    snapshot_code VARCHAR(40) NOT NULL DEFAULT '' COMMENT 'Published stable system snapshot id',
     fallback_reason VARCHAR(128) NOT NULL DEFAULT '' COMMENT 'Fallback reason',
     duration_ms INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Decision latency in milliseconds',
     event_time BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Event time in UNIX seconds',

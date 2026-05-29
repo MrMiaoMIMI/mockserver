@@ -367,7 +367,7 @@ function buildSectionReadiness(
 }
 
 function readyDetail(section: RuleFormError['section']) {
-  if (section === 'identity') return 'Rule Name, generated Rule ID, priority, and enabled state are valid.'
+  if (section === 'identity') return 'Rule Name, system Rule ID, priority, and enabled state are valid.'
   if (section === 'condition') return 'Condition can be converted to a rule payload.'
   if (section === 'action') return 'Action can be converted to a rule payload.'
   return 'Raw JSON is available for advanced edits.'

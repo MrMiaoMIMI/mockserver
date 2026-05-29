@@ -155,5 +155,5 @@ milliseconds.
 
 SDK traffic stores the matched scenario in
 `mockserver_traffic_event_tab.scenario_code`. Scenario rules no longer use
-`namespace_code`; event namespace remains the fallback-policy selector. See
+`namespace_name`; event namespace remains the fallback-policy selector. See
 `docs/db_schema.sql` for DDL.

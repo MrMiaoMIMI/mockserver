@@ -73,7 +73,7 @@ func TestTrafficRepositoryUsesExactStatsAndPreservesRulesetCodeFilter(t *testing
 		t.Fatalf("expected exact stats with total from count, got %+v", list)
 	}
 	if table.statsQuery.RuleSetDBID != 7 || table.statsQuery.RuleSetID != "rs-api" {
-		t.Fatalf("expected stats query to preserve db id and business code, got %+v", table.statsQuery)
+		t.Fatalf("expected stats query to preserve db id and stable system id, got %+v", table.statsQuery)
 	}
 }
 
@@ -86,7 +86,7 @@ func TestGosharedTrafficWhereSQLUsesCodeOrDBIDForHistoricalQueries(t *testing.T)
 		RuleSetDBID:   7,
 	}, nil)
 
-	if !strings.Contains(where, "(namespace_id = ? OR namespace_code = ?)") || !strings.Contains(where, "(ruleset_id = ? OR ruleset_code = ?)") {
+	if !strings.Contains(where, "(namespace_id = ? OR namespace_name = ?)") || !strings.Contains(where, "(ruleset_id = ? OR ruleset_code = ?)") {
 		t.Fatalf("expected db id or code filters, where=%s", where)
 	}
 	if len(args) != 4 {
