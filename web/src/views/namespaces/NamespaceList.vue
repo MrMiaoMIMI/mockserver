@@ -106,7 +106,6 @@
           <div class="namespace-cell identity-cell">
             <div class="namespace-title">
               <strong :title="row.displayName">{{ row.displayName }}</strong>
-              <code :title="row.namespace.name">{{ row.namespace.name }}</code>
             </div>
             <p v-if="row.namespace.description" class="namespace-description">
               {{ row.namespace.description }}
